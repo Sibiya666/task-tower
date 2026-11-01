@@ -342,7 +342,6 @@ class PipelineJournal:
             if any(type(row[k]) is not type(v) or row[k]!=v for k,v in expected.items()): raise ValueError('Stale pipeline CAS')
             edges={'preparing':{'preparing','executing','ready','needs_input','cancelled','timed_out','unknown'},'executing':{'ready','needs_input','cancelled','timed_out','unknown'},'reviewing':{'ready','needs_input','cancelled','timed_out','unknown'},'checking':{'ready','needs_input','cancelled','timed_out','unknown'},'ready':{'executing','reviewing','checking','publishing','ready_for_pr','needs_input','cancelled','timed_out','unknown','ready'},'publishing':{'ready','awaiting_pr','ready_for_pr','needs_input','unknown','cancelled','timed_out'}}
             if state not in edges.get(row['state'],set()): raise ValueError('Illegal state transition')
-            self._history_gate(db,row,state,transition)
             if state!='unknown' and self._unresolved(db,run_id): raise ValueError('Unresolved pipeline intent')
             if state in {'needs_input','cancelled','timed_out','ready_for_pr','awaiting_pr'} and transition.get('evidence',{}).get('cleanup_confirmed') is not True: raise ValueError('Release requires positive cleanup')
             stage=transition.get('stage',row['stage']); generation=transition.get('generation',row['generation'])
@@ -368,6 +367,8 @@ class PipelineJournal:
                 values['admission']=_dump(admission)
             if row['cancel_requested'] and state in {'executing','reviewing','checking','publishing'}: raise ValueError('Cancelled before action')
             if state in {'executing','reviewing','checking','publishing'} and (values.get('manifest',row['manifest']) is None or values.get('admission',row['admission']) is None): raise ValueError('Action requires manifest and admission')
+            rework=self._rework_transition(db,row,state,transition)
+            self._history_gate(db,row,state,transition,rework=rework)
             if reason=='stale_input':
                 if transition.get('evidence',{}).get('cleanup_confirmed') is not True or 'manifest' not in transition or generation!=row['generation']+1:
                     raise ValueError('Stale rework requires frozen input and cleanup')
@@ -383,15 +384,23 @@ class PipelineJournal:
             self._validate_db(db); self._event(db,run_id,'transition',row['state'],state,reason)
             return self._run(db.execute('SELECT * FROM runs WHERE run_id=?',(run_id,)).fetchone())
     @staticmethod
-    def _history_gate(db,row,state,transition):
+    def _history_gate(db,row,state,transition,*,rework=False):
         def finished(role):
-            return db.execute("SELECT 1 FROM attempts WHERE run_id=? AND generation<=? AND role=? AND state='completed'",(row['run_id'],row['generation'],role)).fetchone() is not None
+            attempt=db.execute("SELECT * FROM attempts WHERE run_id=? AND generation<=? AND role=? ORDER BY rowid DESC LIMIT 1",(row['run_id'],row['generation'],role)).fetchone()
+            if attempt is None or attempt['state']!='completed': return False
+            try: PipelineJournal._contribution_floor(db,row,attempt)
+            except ValueError: return False
+            return True
         def accepted(stage):
             return db.execute("SELECT 1 FROM verdicts WHERE run_id=? AND stage=? AND decision='approve' AND superseded=0",(row['run_id'],stage)).fetchone() is not None
         stage=transition.get('stage',row['stage'])
-        if state=='ready' and row['state']=='executing' and not finished(row['stage']+'_executor'): raise ValueError('Executor completion proof missing')
+        if state=='ready' and row['state']=='executing' and not rework and not finished(row['stage']+'_executor'): raise ValueError('Executor completion proof missing')
         if state=='ready' and row['state']=='reviewing' and transition.get('reason')!='stale_input' and not db.execute('SELECT 1 FROM verdicts WHERE run_id=? AND stage=? AND generation=?',(row['run_id'],row['stage'],row['generation'])).fetchone(): raise ValueError('Reviewer receipt missing')
-        if state=='ready' and row['state']=='preparing' and not db.execute("SELECT 1 FROM effects WHERE run_id=? AND kind='commit' AND status='completed'",(row['run_id'],)).fetchone(): raise ValueError('Checkpoint completion proof missing')
+        if state=='ready' and row['state']=='preparing':
+            binding=transition.get('manifest')
+            checkpoint=None if binding is None else binding['checkpoint_sha']
+            completed_commit=any(_json(e['observation']).get('commit_sha')==checkpoint==row['checkpoint_sha'] for e in db.execute("SELECT observation FROM effects WHERE run_id=? AND kind='commit' AND status='completed'",(row['run_id'],)))
+            if not completed_commit and not PipelineJournal._initial_ready(db,row,transition): raise ValueError('Checkpoint completion proof missing')
         if state=='reviewing' and not finished(stage+'_executor'): raise ValueError('Reviewer needs completed executor')
         if state=='executing' and row['state']=='ready':
             executor=db.execute('SELECT * FROM attempts WHERE run_id=? AND role=? ORDER BY rowid DESC LIMIT 1',(row['run_id'],stage+'_executor')).fetchone()
@@ -403,10 +412,10 @@ class PipelineJournal:
             for prior in STAGES[:STAGES.index(stage)]:
                 if not accepted(prior): raise ValueError('Prior accepted stage missing')
         if state=='checking' and (stage!='test' or not finished('test_executor') or not all(accepted(s) for s in ('spec','development'))): raise ValueError('Host checks prerequisites missing')
-        if state=='ready' and row['state']=='checking':
+        if state=='ready' and row['state']=='checking' and not rework:
             checks=list(db.execute("SELECT state,evidence FROM attempts WHERE run_id=? AND role='host_check' AND generation=?",(row['run_id'],row['generation'])))
             if not checks or any(c['state']!='completed' or _json(c['evidence']).get('source_unchanged') is not True for c in checks): raise ValueError('Completed unchanged host checks missing')
-        if state=='ready' and row['state']=='checking' and not (transition.get('evidence',{}).get('cleanup_confirmed') is True and transition.get('evidence',{}).get('checks_sha256')): raise ValueError('Host checks proof missing')
+        if state=='ready' and row['state']=='checking' and not rework and not (transition.get('evidence',{}).get('cleanup_confirmed') is True and transition.get('evidence',{}).get('checks_sha256')): raise ValueError('Host checks proof missing')
         if state in {'publishing','ready_for_pr','awaiting_pr'} and not all(accepted(s) for s in STAGES): raise ValueError('Publication requires three accepted stages')
         if state in {'publishing','ready_for_pr','awaiting_pr'}:
             verdict=db.execute("SELECT input_sha256,generation FROM verdicts WHERE run_id=? AND stage='test' AND decision='approve' AND superseded=0 ORDER BY rowid DESC LIMIT 1",(row['run_id'],)).fetchone()
@@ -505,14 +514,77 @@ class PipelineJournal:
                 raise ValueError('Executor precedes applied rework')
 
     @staticmethod
+    def _initial_ready(db,row,transition):
+        manifest=transition.get('manifest')
+        if (row['stage']!='spec' or row['generation']!=1 or row['admission'] is None
+                or transition.get('stage','spec')!='spec' or transition.get('generation',1)!=1
+                or manifest is None or manifest['checkpoint_sha']!=row['source_sha']
+                or manifest['source_sha']!=row['source_sha'] or manifest['base_sha']!=row['base_sha']
+                or manifest['prior_verdict_sha256'] is not None or manifest['checks_sha256'] is not None
+                or db.execute('SELECT 1 FROM attempts WHERE run_id=?',(row['run_id'],)).fetchone()
+                or db.execute('SELECT 1 FROM verdicts WHERE run_id=?',(row['run_id'],)).fetchone()
+                or PipelineJournal._unresolved(db,row['run_id'])):
+            return False
+        for effect in db.execute("SELECT * FROM effects WHERE run_id=? AND kind='worktree_create' AND status='completed' ORDER BY ordinal DESC",(row['run_id'],)):
+            intent=_json(effect['intent']); observation=_json(effect['observation'])
+            if (effect['owner_id']==row['owner_id'] and observation.get('source_sha')==row['source_sha']
+                    and all(intent[key]==row[key] for key in ('source_sha','branch','worktree','git_dir'))): return True
+        return False
+
+    @staticmethod
+    def _failed_mutation(db,row,attempt_id):
+        _uuid(attempt_id)
+        roles={'executing':row['stage']+'_executor','reviewing':row['stage']+'_reviewer','checking':'host_check'}
+        attempt=db.execute('SELECT * FROM attempts WHERE attempt_id=?',(attempt_id,)).fetchone()
+        if (row['state'] not in roles or attempt is None or attempt['run_id']!=row['run_id']
+                or attempt['owner_id']!=row['owner_id'] or attempt['role']!=roles[row['state']]
+                or attempt['stage']!=row['stage'] or attempt['generation']!=row['generation']
+                or attempt['input_sha256']!=row['input_sha256'] or attempt['state']!='failed'
+                or attempt['evidence'] is None):
+            raise ValueError('Rework requires current failed mutation proof')
+        evidence=_json(attempt['evidence'])
+        if evidence.get('cleanup_confirmed') is not True or evidence.get('source_unchanged') is not False or evidence.get('started') is not True:
+            raise ValueError('Rework requires positively cleaned actual mutation')
+        return dict(attempt)
+
+    def _rework_proof(self,run_id,owner_id,attempt_id):
+        with self._db() as db:
+            if db is None: raise ValueError('Pipeline run not found')
+            row=self._owned(db,run_id,owner_id)
+            if self._unresolved(db,run_id): raise ValueError('Unresolved pipeline intent')
+            return self._failed_mutation(db,row,attempt_id)
+
+    @staticmethod
+    def _rework_transition(db,row,state,transition):
+        if state!='ready' or row['state'] not in {'executing','checking','reviewing'}: return False
+        failed=db.execute("SELECT * FROM attempts WHERE run_id=? AND owner_id=? AND input_sha256=? AND generation=? AND state='failed' ORDER BY rowid DESC LIMIT 1",(row['run_id'],row['owner_id'],row['input_sha256'],row['generation'])).fetchone()
+        if failed is None: return False
+        PipelineJournal._failed_mutation(db,row,failed['attempt_id'])
+        manifest=transition.get('manifest')
+        target='development' if row['stage']=='test' else row['stage']
+        if (transition.get('reason')!='stale_input' or transition.get('evidence',{}).get('cleanup_confirmed') is not True
+                or transition.get('stage',row['stage'])!=target or transition.get('generation')!=row['generation']+1
+                or manifest is None or manifest['checkpoint_sha']!=row['checkpoint_sha'] or manifest['checks_sha256'] is not None):
+            raise ValueError('Failed mutation requires frozen bounded rework')
+        effect=db.execute("SELECT * FROM effects WHERE run_id=? AND kind='rework_commit' AND status='completed' ORDER BY ordinal DESC LIMIT 1",(row['run_id'],)).fetchone()
+        if (effect is None or effect['owner_id']!=row['owner_id'] or _json(effect['intent'])['failed_attempt_id']!=failed['attempt_id']
+                or _json(effect['observation']).get('commit_sha')!=manifest['checkpoint_sha']):
+            raise ValueError('Completed linked rework checkpoint missing')
+        return True
+
+    @staticmethod
     def _intent(intent):
         if not isinstance(intent,dict) or len(canonical_json(intent))>65536: raise ValueError('Invalid effect intent')
         schemas={'commit':{'kind','parent','tree','message','branch','contributing_executor_attempt_id','evidence_manifest_sha256'},'worktree_create':{'kind','source_sha','branch','worktree','git_dir'},'push':{'kind','repository','head_sha','base_sha','remote','branch'},'pr_create':{'kind','repository','issue','issue_id','task_id','run_id','head_sha','base_sha','branch','title_sha256','body_sha256','marker','publisher_account'}}
+        schemas['rework_commit']=schemas['commit']|{'failed_attempt_id'}
         kind=intent.get('kind')
         if kind not in schemas or set(intent)!=schemas[kind]: raise ValueError('Invalid effect schema')
-        if kind=='commit':
+        if kind in {'commit','rework_commit'}:
             _sha(intent['parent'],40); _sha(intent['tree'],40)
             if intent['contributing_executor_attempt_id'] is not None: _uuid(intent['contributing_executor_attempt_id'])
+            if kind=='rework_commit':
+                _uuid(intent['failed_attempt_id'])
+                if intent['contributing_executor_attempt_id'] is not None or intent['evidence_manifest_sha256'] is not None: raise ValueError('Rework is not accepted contribution/publication')
             if intent['message']!='Task Tower checkpoint' and not re.fullmatch(r'Task Tower (checkpoint|publication) [0-9a-f-]{36}',intent['message']): raise ValueError('Non-host commit message')
         for key,value in intent.items():
             if key.endswith('_sha'): _sha(value,40)
@@ -526,7 +598,8 @@ class PipelineJournal:
         self._intent(intent)
         with self._db(True) as db:
             row=self._owned(db,run_id,owner_id)
-            if row['state'] not in {'preparing','executing','ready','publishing'} or row['cancel_requested'] or self._unresolved(db,run_id): raise ValueError('Effect cannot start')
+            allowed_states={'executing','checking','reviewing'} if intent['kind']=='rework_commit' else {'preparing','executing','ready','publishing'}
+            if row['state'] not in allowed_states or row['cancel_requested'] or self._unresolved(db,run_id): raise ValueError('Effect cannot start')
             if intent.get('branch')!=row['branch']: raise ValueError('Foreign effect branch')
             if intent['kind'] in {'push','pr_create'}:
                 if row['state']!='publishing': raise ValueError('Publication effect requires publication state')
@@ -539,7 +612,13 @@ class PipelineJournal:
             if intent['kind']=='commit' and intent['evidence_manifest_sha256'] is not None:
                 if row['state']!='publishing': raise ValueError('Evidence commit requires publication')
                 self._history_gate(db,row,'publishing',{})
-            if intent['kind']=='commit' and intent['parent']!=(row['checkpoint_sha'] or row['source_sha']): raise ValueError('Unexpected commit parent')
+            if intent['kind']=='rework_commit':
+                self._failed_mutation(db,row,intent['failed_attempt_id'])
+                for prior in db.execute("SELECT intent FROM effects WHERE run_id=? AND kind='rework_commit'",(run_id,)):
+                    if _json(prior['intent'])['failed_attempt_id']==intent['failed_attempt_id']: raise ValueError('Rework checkpoint already recorded')
+            if intent['kind'] in {'commit','rework_commit'} and intent['parent']!=(row['checkpoint_sha'] or row['source_sha']): raise ValueError('Unexpected commit parent')
+            if intent['kind']=='commit' and row['state']=='executing' and intent['contributing_executor_attempt_id'] is None:
+                raise ValueError('Executor checkpoint requires successful contribution')
             if intent['kind']=='commit' and intent['contributing_executor_attempt_id'] is not None:
                 contributor=db.execute("SELECT * FROM attempts WHERE run_id=? AND role=? ORDER BY rowid DESC LIMIT 1",(run_id,row['stage']+'_executor')).fetchone()
                 if contributor is None or contributor['attempt_id']!=intent['contributing_executor_attempt_id'] or contributor['state']!='completed': raise ValueError('Checkpoint contributor is not latest completed executor')
@@ -555,7 +634,8 @@ class PipelineJournal:
             effect=db.execute('SELECT * FROM effects WHERE effect_id=?',(effect_id,)).fetchone()
             if effect is None or effect['owner_id']!=owner_id or effect['status']!='intent': raise ValueError('Effect already observed or foreign')
             row=self._owned(db,effect['run_id'],owner_id); status=observation['status']
-            if effect['kind']=='commit' and status=='completed':
+            if effect['kind']=='rework_commit': self._failed_mutation(db,row,_json(effect['intent'])['failed_attempt_id'])
+            if effect['kind'] in {'commit','rework_commit'} and status=='completed':
                 _sha(observation.get('commit_sha'),40); _sha(observation.get('tree_sha'),40)
                 if observation['tree_sha']!=_json(effect['intent'])['tree']: raise ValueError('Wrong checkpoint tree')
                 db.execute('UPDATE runs SET checkpoint_sha=? WHERE run_id=?',(observation['commit_sha'],row['run_id']))

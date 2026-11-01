@@ -265,7 +265,20 @@ def validate_stage_manifest(value):
 
 
 def freeze_checkpoint(run: dict, task_policy: dict, journal, owner_id: str) -> dict:
-    """One commit intent and compare-and-swap ref; unresolved intents never replay."""
+    """One normal output commit; unresolved intents never replay."""
+    return _freeze_checkpoint(run,task_policy,journal,owner_id)
+
+
+def freeze_rework_checkpoint(run: dict, task_policy: dict, journal, owner_id: str,
+                             failed_attempt_id: str) -> dict:
+    """Preserve actual dirty failed output as rework, never as accepted output."""
+    journal._rework_proof(run['run_id'],owner_id,failed_attempt_id)
+    if '_host_evidence' in task_policy: raise ValueError('Rework cannot publish evidence')
+    return _freeze_checkpoint(run,task_policy,journal,owner_id,failed_attempt_id)
+
+
+def _freeze_checkpoint(run,task_policy,journal,owner_id,failed_attempt_id=None):
+    """Shared private-index implementation for host-owned checkpoint effects."""
     saved=journal.status(run['run_id'])
     for key in ('state','stage','generation','input_sha256','source_sha','base_sha','checkpoint_sha','worktree','git_dir'):
         if type(saved[key]) is not type(run.get(key)) or saved[key]!=run.get(key): raise ValueError('Stale checkpoint run binding')
@@ -321,9 +334,11 @@ def freeze_checkpoint(run: dict, task_policy: dict, journal, owner_id: str) -> d
         contributors=[a for a in journal.history(run['run_id'])['attempts']
             if a['stage']==run['stage'] and a['role']==run['stage']+'_executor']
         contributing = contributors[-1]['attempt_id'] if contributors and contributors[-1]['state']=='completed' else None
-        effect = journal.begin_effect(run['run_id'],owner_id,
-            dict(kind='commit',parent=parent,tree=tree,message=message,branch=branch,
-                 contributing_executor_attempt_id=contributing,evidence_manifest_sha256=evidence_digest))
+        intent=dict(kind='commit',parent=parent,tree=tree,message=message,branch=branch,
+            contributing_executor_attempt_id=contributing,evidence_manifest_sha256=evidence_digest)
+        if failed_attempt_id is not None:
+            intent.update(kind='rework_commit',failed_attempt_id=failed_attempt_id,contributing_executor_attempt_id=None)
+        effect = journal.begin_effect(run['run_id'],owner_id,intent)
         # Every effect below is fenced by the committed intent above. Exceptions
         # intentionally leave it unresolved for observation-only recovery.
         commit = _git(root,*prefix,'commit-tree',tree,'-p',parent,env=env,data=(message+'\n').encode()).decode().strip()

@@ -404,3 +404,77 @@ class ReviewRegressionTests(AttemptFixture, unittest.TestCase):
         for evidence in ({'owner_id':'-'*36},{'generation':True},{'process_count':True},{'stdout_bytes':-1},{'result_sha256':'a'*40}):
             with self.subTest(evidence=evidence), self.assertRaises(ValueError):
                 self.journal.record(run['run_id'],owner,expected,dict(state='preparing',evidence=evidence))
+
+class ReworkProofTests(AttemptFixture, unittest.TestCase):
+    def test_rework_rejects_forged_owner_or_nonmutation_attempt(self):
+        cases=[('completed',True,False),('failed',False,False),('failed',True,True),('failed',True,None)]
+        for status,cleanup,unchanged in cases:
+            other=ReworkProofTests(); other.setUp()
+            try:
+                owner,run,manifest=other.bound_run()
+                attempt=other.journal.begin_attempt(run['run_id'],owner,dict(role='spec_executor',manifest=manifest,artifact_names={}))
+                evidence=dict(status=status,started=True,cleanup_confirmed=cleanup,exit_code=0 if status=='completed' else 1,result_sha256='f'*64)
+                if unchanged is not None: evidence['source_unchanged']=unchanged
+                other.journal.finish_attempt(attempt['attempt_id'],owner,evidence)
+                intent=dict(kind='rework_commit',parent=run['source_sha'],tree='b'*40,message='Task Tower checkpoint '+run['run_id'],branch=run['branch'],contributing_executor_attempt_id=None,evidence_manifest_sha256=None,failed_attempt_id=attempt['attempt_id'])
+                with self.subTest(status=status,cleanup=cleanup,unchanged=unchanged), self.assertRaises(ValueError): other.journal.begin_effect(run['run_id'],owner,intent)
+                with self.assertRaises(ValueError): other.journal.begin_effect(run['run_id'],uid(),intent)
+                with self.assertRaises(ValueError): other.journal.begin_effect(run['run_id'],owner,dict(intent,failed_attempt_id=uid()))
+                self.assertEqual(other.journal.history(run['run_id'])['effects'],[])
+            finally: other.doCleanups()
+
+    def test_rework_kind_cannot_claim_normal_contributor_or_evidence(self):
+        owner,run,manifest=self.bound_run()
+        attempt=self.journal.begin_attempt(run['run_id'],owner,dict(role='spec_executor',manifest=manifest,artifact_names={}))
+        self.journal.finish_attempt(attempt['attempt_id'],owner,dict(status='failed',started=True,cleanup_confirmed=True,exit_code=1,result_sha256='f'*64,source_unchanged=False))
+        intent=dict(kind='rework_commit',parent=run['source_sha'],tree='b'*40,message='Task Tower checkpoint '+run['run_id'],branch=run['branch'],contributing_executor_attempt_id=None,evidence_manifest_sha256=None,failed_attempt_id=attempt['attempt_id'])
+        for bad in (dict(intent,contributing_executor_attempt_id=attempt['attempt_id']),dict(intent,evidence_manifest_sha256='a'*64)):
+            with self.assertRaises(ValueError): self.journal.begin_effect(run['run_id'],owner,bad)
+
+class InitialReadyProofTests(JournalFixture, unittest.TestCase):
+    def prepared(self):
+        from task_tower.pipeline_inputs import digest_manifest,stage_manifest
+        self.journal.submit(request(),policy()); owner=uid(); run=self.journal.claim(owner,2)
+        criteria={'issue_id':123}
+        admission=dict(version=1,repository=run['repository'],issue=run['issue'],issue_id=123,task_id=run['task_id'],runner_label=run['runner_label'],criteria=criteria,criteria_sha256=digest_manifest(criteria),policy_sha256=run['policy_sha256'],profile_id=run['profile_id'],profile_fingerprint=run['profile_fingerprint'],source_sha='a'*40,base_sha='a'*40)
+        transition=dict(state='preparing',admission=admission,issue_id=123,criteria_sha256=admission['criteria_sha256'],source_sha='a'*40,base_sha='a'*40,superpowers_sha256='d'*64,worktree=str(self.path.parent/'worktree'),git_dir=str(self.path.parent/'gitdir'))
+        run=self.journal.record(run['run_id'],owner,{k:run[k] for k in ('state','stage','generation','input_sha256')},transition)
+        manifest=stage_manifest(run,dict(checkpoint_sha='a'*40,product_sha256='e'*64),stage='spec',generation=1,prior_receipt=None,checks=None)
+        return owner,run,manifest
+
+    def test_initial_ready_needs_matching_completed_creation_and_initial_binding(self):
+        owner,run,manifest=self.prepared(); expected={k:run[k] for k in ('state','stage','generation','input_sha256')}
+        with self.assertRaises(ValueError): self.journal.record(run['run_id'],owner,expected,dict(state='ready',manifest=manifest))
+        intent=dict(kind='worktree_create',source_sha=run['source_sha'],branch=run['branch'],worktree=run['worktree'],git_dir=run['git_dir'])
+        with self.assertRaises(ValueError): self.journal.begin_effect(run['run_id'],owner,dict(intent,worktree=str(self.path.parent/'foreign')))
+        effect=self.journal.begin_effect(run['run_id'],owner,intent)
+        with self.assertRaises(ValueError): self.journal.record(run['run_id'],owner,expected,dict(state='ready',manifest=manifest))
+        self.journal.finish_effect(effect['effect_id'],owner,dict(status='completed',source_sha=run['source_sha']))
+        for bad in (dict(manifest,checkpoint_sha='b'*40),dict(manifest,generation=2),dict(manifest,prior_verdict_sha256='a'*64),dict(manifest,checks_sha256='a'*64)):
+            with self.subTest(binding=bad), self.assertRaises(ValueError): self.journal.record(run['run_id'],owner,expected,dict(state='ready',generation=bad['generation'],manifest=bad))
+        run=self.journal.record(run['run_id'],owner,expected,dict(state='ready',manifest=manifest))
+        expected={k:run[k] for k in ('state','stage','generation','input_sha256')}
+        with self.assertRaises(ValueError): self.journal.record(run['run_id'],owner,expected,dict(state='reviewing'))
+        with self.assertRaises(ValueError): self.journal.record(run['run_id'],owner,expected,dict(state='publishing'))
+
+    def test_initial_ready_wrong_source_observation_is_not_creation_proof(self):
+        owner,run,manifest=self.prepared()
+        effect=self.journal.begin_effect(run['run_id'],owner,dict(kind='worktree_create',source_sha=run['source_sha'],branch=run['branch'],worktree=run['worktree'],git_dir=run['git_dir']))
+        self.journal.finish_effect(effect['effect_id'],owner,dict(status='completed',source_sha='b'*40))
+        with self.assertRaises(ValueError): self.journal.record(run['run_id'],owner,{k:run[k] for k in ('state','stage','generation','input_sha256')},dict(state='ready',manifest=manifest))
+
+class CrossRunReworkProofTests(AttemptFixture, unittest.TestCase):
+    def test_same_owner_cannot_reuse_another_runs_failed_attempt(self):
+        from task_tower.pipeline_inputs import digest_manifest,stage_manifest
+        owner,first,manifest=self.bound_run()
+        attempt=self.journal.begin_attempt(first['run_id'],owner,dict(role='spec_executor',manifest=manifest,artifact_names={}))
+        self.journal.finish_attempt(attempt['attempt_id'],owner,dict(status='failed',started=True,cleanup_confirmed=True,exit_code=1,result_sha256='f'*64,source_unchanged=False))
+        self.journal.submit(request(2),policy(['other'])); second=self.journal.claim(owner,2)
+        criteria={'issue_id':124}
+        admission=dict(first['admission'],issue=second['issue'],issue_id=124,task_id=second['task_id'],criteria=criteria,criteria_sha256=digest_manifest(criteria))
+        second=self.journal.record(second['run_id'],owner,{k:second[k] for k in ('state','stage','generation','input_sha256')},dict(state='preparing',admission=admission,issue_id=124,criteria_sha256=admission['criteria_sha256'],source_sha='a'*40,base_sha='a'*40,superpowers_sha256='d'*64))
+        binding=stage_manifest(second,dict(checkpoint_sha='a'*40,product_sha256='e'*64),stage='spec',generation=1,prior_receipt=None,checks=None)
+        second=self.journal.record(second['run_id'],owner,{k:second[k] for k in ('state','stage','generation','input_sha256')},dict(state='executing',manifest=binding))
+        intent=dict(kind='rework_commit',parent='a'*40,tree='b'*40,message='Task Tower checkpoint '+second['run_id'],branch=second['branch'],contributing_executor_attempt_id=None,evidence_manifest_sha256=None,failed_attempt_id=attempt['attempt_id'])
+        with self.assertRaisesRegex(ValueError,'current failed mutation proof'): self.journal.begin_effect(second['run_id'],owner,intent)
+        self.assertEqual(self.journal.history(second['run_id'])['effects'],[])

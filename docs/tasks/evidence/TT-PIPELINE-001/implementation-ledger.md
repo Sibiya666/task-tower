@@ -57,3 +57,19 @@ The host check manifest binds version 1, checkpoint_sha, product_sha256, policy_
 ## Ruling 11 — existing CI authority
 
 CI substitution requires the existing authoritative GitHubSource verified merged bundle for the exact checkpoint and every configured required platform. A flag, invented check-run validator or model claim cannot grant success. An unpublished checkpoint normally has no qualifying bundle. Preserve the closed journal reason schema by recording environment_unavailable with ci_unavailable detail. Any accepted substitution remains host-validated, provenance-bound evidence with execution_local false; Task4 must still revalidate freshness. Never turn a reviewer's needs_input into approval.
+
+## Ruling 12 — genuine mutation rework checkpoints
+
+Task4 integration exposed a Task2 gap: a failed test executor or host check that changed product source cannot satisfy normal successful-contributor checkpoint and ready gates. Parking every such failure would omit the specified bounded development rework. A normal checkpoint or accepted receipt must not be fabricated to bypass this gap.
+
+The additive host-only freeze_rework_checkpoint(run, task_policy, journal, owner_id, failed_attempt_id) captures actual changed source through the same private Git index and durable commit/ref protocol. Its effect kind is rework_commit, with normal commit intent fields plus failed_attempt_id and a null contributing_executor_attempt_id. It requires a real same-run, same-owner, current-input failed attempt, positive cleanup and source_unchanged false, no unresolved intent, and an executing/checking/reviewing source state. It cannot count as normal executor contribution, reviewer approval or publication acceptance.
+
+Only the positively completed linked rework commit permits the corresponding failed executing/checking action to transition through strict stale_input rework: actual bound manifest, generation plus one, cleanup, target-stage allowance and applied rework event remain mandatory. Normal successful-action gates stay unchanged. A fresh target executor is required; old downstream approvals remain superseded. Unknown effects stay fenced. Externally dirty source without an eligible actual failed attempt parks safely rather than pairing a dirty product digest with an unrelated old checkpoint.
+
+Task4 owns initial worktree preparation and its durable intent, verifies an absent private run-derived worktree/branch/admin path before creation and compares the actual resulting Git identity. A configured host-check batch is one bounded action, while each child retains its own durable launch, budget and freshness gates. Reload run state after every checkpoint effect before a compare-and-swap transition. These are integration contracts requiring fresh Task2/Task4 review, not claims that the extension is already implemented or accepted.
+
+## Ruling 13 — ready after initial preparation
+
+Initial worktree preparation is one action and must end ready before a later work --once process launches the spec executor. Leaving an unlaunched action as executing would turn a normal process exit into an unknown owner and prevent safe continuation.
+
+The additional preparing-to-ready gate is restricted to initial spec generation 1 with no attempts or verdicts, a positively completed worktree_create effect matching the immutable owned worktree, Git directory and source, and a genuine bound manifest whose checkpoint equals the initial source. Admission/base identities and absence of unresolved intents remain required. Task4 verifies actual source/product and external freshness before the transition. This grants no stage acceptance. Existing genuinely completed initial checkpoint evidence is not weakened. Fresh Task2/Task4 tests must prove normal ready handoff, actual identity checks and rejection of later-generation or fabricated preparation evidence.
