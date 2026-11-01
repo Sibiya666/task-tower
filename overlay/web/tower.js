@@ -7,6 +7,7 @@ const sessions=p=>(p?.rooms||[]).slice().sort((a,b)=>String(a.id).localeCompare(
 const images={};
 let overviewScenes=[];
 const towerAgentIds=new Map(),towerArrivals=new Map();
+const expandedTowers=new Set();
 let highlightedFloor=null;
 let towerSlots=new Map();
 try{towerSlots=new Map(Object.entries(JSON.parse(localStorage.getItem('tower-slots')||'{}')).filter(([,v])=>Number.isInteger(v)&&v>=0))}catch{}
@@ -164,15 +165,17 @@ district.style.gridTemplateColumns='repeat('+columns+',220px)';district.style.wi
 const allRooms=data.projects.flatMap(p=>p.rooms),lit=allRooms.filter(r=>occupants(r).some(a=>state(a)==='active')).length,total=allRooms.reduce((n,r)=>n+occupants(r).filter(a=>state(a)==='active').length,0);
 const liveProjects=new Set(data.projects.map(p=>p.id));for(const node of [...district.children])if(!liveProjects.has(node.dataset.project))node.remove();
 for(const p of data.projects){
-const ordered=sessions(p),signature=ordered.map(r=>r.id).join('|'),previous=[...district.children].find(n=>n.dataset.project===p.id);
+const ordered=sessions(p),detail=WorldPolicy.towerDetail(ordered.length,expandedTowers.has(p.id)),signature=ordered.map(r=>r.id).join('|')+':'+detail.levels,previous=[...district.children].find(n=>n.dataset.project===p.id);
 if(previous&&previous.dataset.signature===signature){previous.style.gridColumn=String(columns-slotFor(p.id)%3);previous.querySelector('.project-tower-name').textContent=p.name;overviewScenes.push({canvas:previous.querySelector('.tower-art-canvas'),ordered});continue}
 const wrapper=document.createElement('section');wrapper.className='project-tower';wrapper.dataset.project=p.id;wrapper.dataset.signature=signature;wrapper.setAttribute('aria-label','Башня проекта '+p.name);
+wrapper.dataset.detailLevels=detail.levels;wrapper.dataset.floorCount=ordered.length;
 const arrivals=document.createElement('canvas');arrivals.className='tower-arrivals';arrivals.width=220;arrivals.height=90;arrivals.setAttribute('aria-hidden','true');wrapper.append(arrivals);
 const slot=slotFor(p.id);wrapper.style.gridColumn=String(columns-slot%3);wrapper.style.gridRow=String(Math.floor(slot/3)+1);
 wrapper.style.setProperty('--tower-ratio',Math.max(1,ordered.length)/Math.max(1,...data.projects.map(p=>p.rooms.length)));
 wrapper.style.setProperty('--floor-count',Math.max(1,ordered.length));
 const heading=document.createElement('button');heading.className='project-tower-name';heading.textContent=p.name;heading.title=p.name+' · сессий: '+ordered.length;heading.onclick=()=>{viewMode='rooms';projectId=p.id;selectedId=ordered.at(-1)?.id;scrollToSession=selectedId;render()};
-const tower=document.createElement('div');tower.className='overview-tower'+(ordered.length>5?' dense':'');tower.style.setProperty('--floors',Math.max(1,ordered.length));const roof=document.createElement('div');roof.className='overview-roof';roof.title='Вершина · '+p.name;tower.append(roof);
+const tower=document.createElement('div');tower.className='overview-tower'+(ordered.length>5?' dense':'');tower.style.setProperty('--floors',detail.levels);const roof=document.createElement('div');roof.className='overview-roof';roof.title='Вершина · '+p.name;tower.append(roof);
+if(detail.far){const badge=document.createElement('button');badge.className='tower-capacity';badge.textContent=ordered.length+' этажей';badge.title='Компактный силуэт · выбрать настоящую сессию';badge.onclick=e=>WorldView.floorMenu(p,e);wrapper.append(badge)}
 const art=document.createElement('canvas');art.className='tower-art-canvas';art.setAttribute('aria-label','Башня '+p.name+' с подсветкой работающих сессий');tower.append(art);overviewScenes.push({canvas:art,ordered});
 ordered.map((room,i)=>({room,number:i+1})).reverse().forEach(({room,number})=>{
 const active=occupants(room).filter(a=>state(a)==='active').length;
@@ -181,15 +184,18 @@ const highlight=()=>{highlightedFloor=room.id;drawOverview()};
 const unhighlight=()=>{if(highlightedFloor===room.id){highlightedFloor=null;drawOverview()}};
 floor.onpointerenter=highlight;floor.onpointerleave=unhighlight;floor.onfocus=highlight;floor.onblur=unhighlight;
 floor.dataset.floorNumber=number;
+const metrics=getComputedStyle(document.documentElement),fh=parseFloat(metrics.getPropertyValue('--tower-floor-h')),rh=parseFloat(metrics.getPropertyValue('--tower-roof-h'));
+const band=WorldPolicy.floorBand(ordered.length-number,ordered.length,detail.levels);
+floor.style.position='absolute';floor.style.top=(rh+band.top*fh)+'px';floor.style.height=(fh*band.height)+'px';floor.style.left='0';
 floor.setAttribute('aria-label',p.name+' · этаж '+number+' · '+room.title+' · '+(sourceBad?'Статус неизвестен':active?'Работают: '+active:'Сейчас не работают'));floor.title=floor.getAttribute('aria-label');
 const label=document.createElement('span');label.className='overview-floor-name';label.textContent=number+' · '+room.title;const count=document.createElement('span');count.className='overview-floor-count';count.textContent=sourceBad?'Нет данных':active?'Работают: '+active:'Тихий этаж';label.append(count);
 const windows=document.createElement('span');windows.className='overview-windows';windows.setAttribute('aria-hidden','true');for(let i=0;i<3;i++){const w=document.createElement('span');w.className='overview-window';windows.append(w)}floor.append(label,windows);
 floor.onclick=()=>{viewMode='rooms';projectId=p.id;selectedId=room.id;scrollToSession=room.id;render()};tower.append(floor);
 });
 if(!ordered.length){const empty=document.createElement('div');empty.className='empty';empty.textContent='Нет сессий';tower.append(empty)}
-const base=document.createElement('div');base.className='overview-foundation';base.title='Основание · '+p.name;const door=document.createElement('div');door.className='base-door';base.append(door);tower.append(base);wrapper.append(heading,tower);if(previous)previous.replaceWith(wrapper);else district.append(wrapper);
+const base=document.createElement('div');base.className='overview-foundation';base.style.position='absolute';base.style.bottom='0';base.title='Основание · '+p.name;const door=document.createElement('div');door.className='base-door';base.append(door);tower.append(base);wrapper.append(heading,tower);if(previous)previous.replaceWith(wrapper);else district.append(wrapper);
 }
-for(const p of data.projects){const wrapper=[...district.children].find(n=>n.dataset.project===p.id),byId=new Map(p.rooms.map(r=>[r.id,r]));for(const button of wrapper.querySelectorAll('.overview-floor')){const room=byId.get(button.dataset.session),active=occupants(room).filter(a=>state(a)==='active').length;button.classList.toggle('is-active',active>0);button.classList.toggle('source-unknown',sourceBad);button.dataset.activeCount=active;button.title=p.name+' · '+room.title+' · '+(sourceBad?'Нет данных':active?'Работают: '+active:room.label);button.setAttribute('aria-label',button.title);const count=button.querySelector('.overview-floor-count');if(count)count.textContent=sourceBad?'Нет данных':active?'Работают: '+active:'Тихий этаж'}}
+for(const p of data.projects){const wrapper=[...district.children].find(n=>n.dataset.project===p.id),byId=new Map(p.rooms.map(r=>[r.id,r]));const wasHidden=wrapper.hidden;wrapper.hidden=WorldView.hidden(p,!sourceBad);if(wasHidden&&!wrapper.hidden){wrapper.classList.remove('tower-wake');void wrapper.offsetWidth;wrapper.classList.add('tower-wake')}for(const button of wrapper.querySelectorAll('.overview-floor')){const room=byId.get(button.dataset.session),active=occupants(room).filter(a=>state(a)==='active').length;button.classList.toggle('is-active',active>0);button.classList.toggle('source-unknown',sourceBad);button.dataset.activeCount=active;button.title=p.name+' · '+room.title+' · '+(sourceBad?'Нет данных':active?'Работают: '+active:room.label);button.setAttribute('aria-label',button.title);const count=button.querySelector('.overview-floor-count');if(count)count.textContent=sourceBad?'Нет данных':active?'Работают: '+active:'Тихий этаж'}}
 drawOverview();layoutTowerArt();
 if(viewMode==='overview'&&!returning)root.scrollLeft=Math.max(0,oldFieldScroll+district.offsetWidth-oldFieldWidth);
 if(returning){const restore=()=>{if(viewMode==='overview'){$('overview').scrollLeft=overviewPosition.left;$('overview').scrollTop=overviewPosition.top}};restore();requestAnimationFrame(restore)}
@@ -198,16 +204,16 @@ if(viewMode==='overview'){title($('task-title'),'Башни проектов');t
 function drawOverview(){
 const style=getComputedStyle(document.documentElement),roof=parseFloat(style.getPropertyValue('--tower-roof-h')),floor=parseFloat(style.getPropertyValue('--tower-floor-h')),base=parseFloat(style.getPropertyValue('--tower-base-h'));
 for(const {canvas,ordered} of overviewScenes){
-const n=Math.max(1,ordered.length),h=roof+n*floor+base,dpr=Math.min(2,window.devicePixelRatio||1);
-const drawingKey=ordered.map(r=>r.id+':'+occupants(r).some(a=>state(a)==='active')+':'+(r.id===highlightedFloor)).join('|')+':'+dpr;
+const n=Number(canvas.closest('.project-tower').dataset.detailLevels),h=roof+n*floor+base,dpr=Math.min(2,window.devicePixelRatio||1);
+const drawingKey=ordered.map(r=>r.id+':'+occupants(r).some(a=>state(a)==='active')+':'+(r.id===highlightedFloor)).join('|')+':'+dpr+':'+n;
 if(canvas.dataset.drawingKey===drawingKey)continue;canvas.dataset.drawingKey=drawingKey;
 canvas.width=Math.ceil(134*dpr);canvas.height=Math.ceil(h*dpr);canvas.style.height=h+'px';
 const ctx=canvas.getContext('2d');ctx.scale(dpr,dpr);ctx.imageSmoothingEnabled=false;
 ctx.drawImage(images['tower-aligned-roof'],0,0,134,roof);
 for(let i=0;i<n;i++){
- const y=roof+i*floor,room=ordered[ordered.length-1-i];
- ctx.save();ctx.filter=room&&room.id===highlightedFloor?'brightness(1.16)':'none';ctx.drawImage(images['tower-aligned-floor'],0,y,134,floor);ctx.restore();
- if(room&&occupants(room).some(a=>state(a)==='active')){ctx.save();ctx.shadowColor='#eeb96e';ctx.shadowBlur=7;ctx.drawImage(images['lit-windows'],0,y,134,floor);ctx.restore();}
+ const y=roof+i*floor,group=ordered.slice(ordered.length-Math.floor((i+1)*ordered.length/n),ordered.length-Math.floor(i*ordered.length/n));
+ ctx.save();ctx.filter=group.some(room=>room.id===highlightedFloor)?'brightness(1.16)':'none';ctx.drawImage(images['tower-aligned-floor'],0,y,134,floor);ctx.restore();
+ if(group.some(room=>occupants(room).some(a=>state(a)==='active'))){ctx.save();ctx.shadowColor='#eeb96e';ctx.shadowBlur=7;ctx.drawImage(images['lit-windows'],0,y,134,floor);ctx.restore();}
 }
 ctx.drawImage(images['tower-aligned-base'],0,roof+n*floor,134,base);
 }
@@ -216,17 +222,20 @@ function layoutTowerArt(){
 if(viewMode!=='overview')return;
 document.querySelectorAll('.project-tower').forEach(wrapper=>{
 const n=Math.max(1,wrapper.querySelectorAll('.overview-floor').length);
+const levels=Number(wrapper.dataset.detailLevels)||n;
 const artStyle=getComputedStyle(document.documentElement);
-const naturalHeight=parseFloat(artStyle.getPropertyValue('--tower-roof-h'))+n*parseFloat(artStyle.getPropertyValue('--tower-floor-h'))+parseFloat(artStyle.getPropertyValue('--tower-base-h'));
+const naturalHeight=parseFloat(artStyle.getPropertyValue('--tower-roof-h'))+levels*parseFloat(artStyle.getPropertyValue('--tower-floor-h'))+parseFloat(artStyle.getPropertyValue('--tower-base-h'));
 const available=Math.max(80,wrapper.clientHeight-32);
 let scale=Math.min(1,(wrapper.clientWidth-42)/134,available/naturalHeight);
 const distance=Math.round((1-scale)*22);
 scale=Math.min(scale,(available-distance)/naturalHeight);
+if(n>8){scale=Math.min(scale,.46);wrapper.style.setProperty('--depth-lift','48px')}else wrapper.style.setProperty('--depth-lift','0px');
+wrapper.querySelector('.overview-tower').style.height=naturalHeight+'px';
 wrapper.style.setProperty('--tower-scale',scale);
 wrapper.style.setProperty('--inverse-scale',1/scale);
-wrapper.style.setProperty('--distance',distance+'px');
+wrapper.style.setProperty('--distance',(distance+(n>8?48:0))+'px');
 wrapper.style.setProperty('--ground-scale',Math.max(.42,scale));
-wrapper.dataset.distance=scale<.6?'far':'near';
+wrapper.dataset.distance=n>8||scale<.6?'far':'near';
 });
 }
 function render(){
@@ -281,6 +290,7 @@ $('back-to-tower').onclick=()=>{viewMode='overview';render()};
 $('back-icon').onclick=$('back-to-tower').onclick;
 $('pin').onclick=()=>{const on=$('pin').getAttribute('aria-pressed')!=='true';$('pin').setAttribute('aria-pressed',String(on));$('pin').textContent=on?'◆':'◇';bridge('pin')};$('close').onclick=()=>bridge('close');$('collapse').onclick=()=>{collapsed=!collapsed;document.body.classList.toggle('collapsed',collapsed);$('collapse').textContent=collapsed?'+':'−';bridge('collapse')};$('titlebar').onpointerdown=e=>{if(e.button===0&&!e.target.closest('button'))bridge('drag')};
 window.Tower={ready:false,acceptSnapshot};
+WorldView.connect({refresh:()=>{if(window.Tower.ready)render()},isExpanded:id=>expandedTowers.has(id),expand:id=>{expandedTowers.has(id)?expandedTowers.delete(id):expandedTowers.add(id);render()},open:(pid,rid)=>{projectId=pid;selectedId=rid;viewMode='rooms';render()}});
 new ResizeObserver(layoutTowerArt).observe($('overview'));
 window.chrome?.webview?.addEventListener('message',e=>acceptSnapshot(e.data));
 Promise.all([...Object.keys(window.RoomSkins).flatMap(id=>['room-'+id,'room-'+id+'-glass']),'ambient-clouds','ambient-candle','ambient-glass-mask','book','forge','map','hero-book','hero-forge','hero-map','gothic-interior','employee-scholar','employee-smith','employee-ranger','employee-mage',...['scholar','smith','ranger'].flatMap(group=>[1,2,3].map(n=>'employee-'+group+'-'+n)),'tower-aligned-roof','tower-aligned-floor','tower-aligned-base','tower-aligned-window-mask'].map(name=>new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>{images[name]=img;resolve()};img.onerror=reject;img.src='assets/'+name+'.png'}))).then(()=>{

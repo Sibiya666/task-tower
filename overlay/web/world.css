@@ -1,0 +1,12 @@
+#world-sky,#world-weather{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;image-rendering:pixelated;background:transparent}
+#world-sky{z-index:0}#world-weather{z-index:5}body>main{position:relative;z-index:1}
+.project-tower{filter:brightness(var(--world-brightness,1)) saturate(var(--world-saturation,1));transition:filter 2s}
+.project-tower[hidden]{display:none!important}
+.tower-capacity{position:absolute;right:3px;bottom:calc(var(--distance,0px) - 24px);z-index:4;border:1px solid #74664c;background:#1c252cdd;color:#d8c69b;padding:3px 6px;font:11px/16px monospace;min-width:82px;min-height:24px;cursor:pointer}
+#world-menu{position:fixed;z-index:100;width:250px;max-width:calc(100vw - 8px);max-height:calc(100vh - 8px);overflow:auto;background:#15212bf5;border:1px solid #6a6c58;border-radius:5px;color:#d8d4c5;padding:12px;box-sizing:border-box;box-shadow:0 5px 18px #0008;font:12px sans-serif}
+#world-menu[hidden]{display:none}#world-menu strong{display:block;margin-bottom:10px;color:#e2c58d}
+#world-menu label{display:block;margin:9px 0}#world-menu select{display:block;width:100%;margin-top:4px;background:#253641;color:#ddd7c7;border:1px solid #56646b;padding:4px}
+#world-menu button{display:block;width:100%;background:#233540;color:#d8d4c5;border:1px solid #56646b;padding:6px;margin:5px 0;text-align:left;cursor:pointer}
+#world-menu button:hover,#world-menu button:focus-visible{background:#394c54}
+.tower-wake{animation:tower-wake .8s ease-out}@keyframes tower-wake{from{opacity:0}to{opacity:1}}
+@media(prefers-reduced-motion:reduce){.project-tower{transition:none}.tower-wake{animation:none}}
