@@ -24,7 +24,9 @@ class ProjectFixture(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        # macOS temp paths may use /var -> /private/var; create fixtures at
+        # their canonical location without weakening production link checks.
+        self.root = Path(self.temp.name).resolve()
         self.git("init", "-b", "main")
         (self.root / "AGENTS.md").write_text("Use Superpowers", encoding="utf-8")
         skill = self.root / "skills/using-superpowers/SKILL.md"
