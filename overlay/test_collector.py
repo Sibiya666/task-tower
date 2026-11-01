@@ -27,7 +27,7 @@ class JournalTests(unittest.TestCase):
         self.event('task_started')
         self.assertEqual(self.journal.read(self.path)['status'], 'active')
         self.event('task_complete')
-        self.assertEqual(self.journal.read(self.path)['status'], 'idle')
+        self.assertEqual(self.journal.read(self.path)['status'], 'completed')
         self.event('task_started')
         self.assertEqual(self.journal.read(self.path)['status'], 'active')
         self.event('turn_aborted')
@@ -39,6 +39,60 @@ class JournalTests(unittest.TestCase):
         with self.path.open('ab') as f:
             f.write(b'\n')
         self.assertEqual(self.journal.read(self.path)['status'], 'active')
+
+    def test_explicit_decision_wait_survives_completion_until_user_reply(self):
+        self.event('task_started')
+        self.response({'type':'function_call','name':'functions.request_user_input_async','call_id':'q'})
+        self.response({'type':'function_call_output','call_id':'q','output':'{"accepted":true}'})
+        self.event('task_complete')
+        self.assertEqual(self.journal.read(self.path)['status'],'waiting')
+        self.event('task_started')
+        self.assertEqual(self.journal.read(self.path)['status'],'waiting')
+        self.event('user_message')
+        self.assertEqual(self.journal.read(self.path)['status'],'idle')
+
+    def response(self,payload):
+        with self.path.open('a',encoding='utf-8') as f:
+            f.write(json.dumps({'type':'response_item','payload':payload})+'\n')
+
+    def test_sync_input_is_resolved_by_its_own_output_only(self):
+        self.event('task_started')
+        self.response({'type':'function_call','name':'functions.request_user_input','call_id':'q'})
+        self.response({'type':'function_call_output','call_id':'other'})
+        self.assertEqual(self.journal.read(self.path)['status'],'waiting')
+        self.response({'type':'function_call_output','call_id':'q'})
+        self.assertEqual(self.journal.read(self.path)['status'],'active')
+
+    def test_real_user_response_item_clears_old_async_wait_without_hiding_active_turn(self):
+        self.event('task_started')
+        self.response({'type':'function_call','name':'functions.request_user_input_async','call_id':'q'})
+        self.event('task_complete')
+        self.event('task_started')
+        self.response({'type':'message','role':'assistant','content':[]})
+        self.assertEqual(self.journal.read(self.path)['status'],'waiting')
+        self.response({'type':'message','role':'user','content':[]})
+        self.assertEqual(self.journal.read(self.path)['status'],'active')
+        self.assertEqual(Journal().read(self.path)['status'],'active')
+
+    def test_backscan_recognizes_user_response_item_boundary(self):
+        self.event('task_started')
+        self.response({'type':'function_call','name':'functions.request_user_input_async','call_id':'q'})
+        self.event('task_complete')
+        self.event('task_started')
+        self.response({'type':'message','role':'user','content':[]})
+        with self.path.open('ab') as f:
+            f.write(b'{"type":"noise"}\n' * 300000)
+        self.assertEqual(Journal().read(self.path)['status'],'active')
+
+    def test_restart_keeps_pending_input_before_large_tail(self):
+        self.event('task_started')
+        self.response({'type':'function_call','name':'functions.request_user_input_async','call_id':'q'})
+        self.event('task_complete')
+        self.event('task_started')
+        with self.path.open('ab') as f:
+            f.write(b'{"type":"noise"}\n' * 300000)
+        self.event('task_complete')
+        self.assertEqual(Journal().read(self.path)['status'],'waiting')
 
     def test_missing_or_stale_is_not_reported_as_working(self):
         self.assertEqual(self.journal.read(self.path)['status'], 'unknown')
@@ -60,6 +114,15 @@ class JournalTests(unittest.TestCase):
 
 
 class GroupTests(unittest.TestCase):
+    def test_headless_exec_without_user_messages_is_not_a_chat_floor(self):
+        projects=[{'id':'p','name':'P','roots':['C:/game']}]
+        chats=[{'id':'chat1','cwd':'C:/game','source':'vscode'}, {'id':'chat2','cwd':'C:/game','source':'vscode'}]
+        execution={'id':'review','cwd':'C:/game','source':'exec','has_user_event':0}
+        result=group_threads(projects,[*chats,execution],{}, {})
+        self.assertEqual([r['id'] for r in result[0]['rooms']],['chat1','chat2'])
+        attached=group_threads(projects,[*chats,execution],{'review':'chat2'}, {})
+        self.assertEqual([a['id'] for a in attached[0]['rooms'][1]['agents']],['review'])
+
     def test_confirmed_assignment_survives_missing_worktree(self):
         projects=[{'id':'p','name':'Dialoid','roots':['C:/game']}]
         result=group_threads(projects,[{'id':'a','cwd':'C:/deleted-worktree'}],{}, {'a':'p'})

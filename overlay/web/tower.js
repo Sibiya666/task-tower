@@ -1,20 +1,25 @@
 (()=>{'use strict';
 const $=id=>document.getElementById(id);
-const palette={active:'#88b4c8',idle:'#d6b67d',stopped:'#c59082',error:'#e37d68',unknown:'#9aa7a9',stale:'#c39e67'};
+const palette={active:'#88b4c8',waiting:'#d6b67d',completed:'#819887',idle:'#81959d',stopped:'#c59082',error:'#e37d68',unknown:'#9aa7a9',stale:'#c39e67'};
 const glyphs={active:['001111100','001111110','001111100','000110000','001100000','011000000','110000000','100000000','000000000'],idle:['111111111','010000010','001000100','000101000','000010000','000101000','001010100','011111110','111111111'],stopped:['000000000','011111110','011111110','011111110','011111110','011111110','011111110','011111110','000000000'],error:['000111000','000111000','000111000','000111000','000111000','000000000','000111000','000111000','000000000'],unknown:['001111100','011000110','000000110','000001100','000111000','000110000','000000000','000110000','000110000'],stale:['001111100','010000010','100010001','100010001','100011101','100000001','010000010','001111100','000000000']};
 let data={projects:[]},projectId=null,selectedId=null,scenes=[],lastFrame=0,sourceBad=true,collapsed=false;
 const sessions=p=>(p?.rooms||[]).slice().sort((a,b)=>String(a.id).localeCompare(String(b.id)));
 const images={};
 let overviewScenes=[];
+const towerAgentIds=new Map(),towerArrivals=new Map();
 let highlightedFloor=null;
 let towerSlots=new Map();
 try{towerSlots=new Map(Object.entries(JSON.parse(localStorage.getItem('tower-slots')||'{}')).filter(([,v])=>Number.isInteger(v)&&v>=0))}catch{}
 function slotFor(id){if(!towerSlots.has(id)){const used=new Set(towerSlots.values());let slot=0;while(used.has(slot))slot++;towerSlots.set(id,slot);try{localStorage.setItem('tower-slots',JSON.stringify(Object.fromEntries(towerSlots)))}catch{}}return towerSlots.get(id)}
 let viewMode='overview',scrollToSession=null;
 let sentViewMode=null;
+let overviewPosition={left:0,top:0};
 let enteredSkin=null;
+glyphs.waiting=glyphs.idle;glyphs.idle=['000000000','000000000','000000000','000000000','001010100','000000000','000000000','000000000','000000000'];glyphs.completed=glyphs.stopped;
+const presence=new window.AgentPresence();
+const reducedMotion=()=>window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 function chooseSkin(room){
- const count=occupants(room).length,panels=count<=4?1:count<=8?2:count<=16?3:4;
+ const count=occupants(room).filter(a=>a.status!=='completed').length,panels=count<=4?1:count<=8?2:count<=16?3:4;
  const name=['cabinet','workshop','hall','wings'][panels-1],variant=roomSeed(room)%3,id=name+'-'+variant;
  return {roomId:room.id,name,id,variant,columns:[4,6,8,12][panels-1],...window.RoomSkins[id]};
 }
@@ -39,7 +44,7 @@ function badge(ctx,status,x,y,frame){
   const angles=[-.45,-.45,-.3,-.15,0,.25,.5,.5,.25,0,0,0,0,0,0,0];
   ctx.save();ctx.translate(5,14);ctx.rotate(reduced?0:angles[step]);ctx.translate(-5,-14);glyph();ctx.restore();
   if(!reduced&&step>=6&&step<=9){const d=step-6;pixel(14+d,13-d,'#ffe1a0');if(d<3)pixel(12-d,16+d,'#d9a65e')}
- }else if(status==='idle'&&!reduced){
+ }else if(status==='waiting'&&!reduced){
   // Keep the glass outline fixed while the two sand piles exchange pixels.
   ['111111111','010000010','001000100','000101000','000010000','000101000','001000100','010000010','111111111'].forEach((line,row)=>[...line].forEach((p,col)=>{if(p==='1')pixel(col*2,row*2)}));
   const fill=Math.floor(step/4);
@@ -100,31 +105,41 @@ const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 for(const {canvas,room} of scenes){
  const skin=skinFor(room),ctx=canvas.getContext('2d');ctx.imageSmoothingEnabled=false;ctx.clearRect(0,0,canvas.width,canvas.height);
  ctx.drawImage(images['room-'+skin.id],0,0);atmosphere(ctx,frame,reduce,skin);
- const people=occupants(room);people.map((agent,j)=>({agent,j,...employeeLayout(j,people.length,room)})).sort((a,b)=>a.y-b.y).forEach(({agent,j,x,y,w,h})=>{
+ const people=presence.frame(room.id,performance.now(),reduce);
+ for(const marker of canvas.parentElement.querySelectorAll('.employee-marker')){
+  const item=people.find(v=>String(v.agent.id)===marker.dataset.agentId);
+  if(!item){marker.remove();continue}marker.dataset.motion=item.motion;marker.style.opacity=item.motion==='exiting'?String(1-item.progress):'1';marker.style.pointerEvents=item.motion==='present'?'':'none';
+ }
+ people.map((item,j)=>({...item,j,...employeeLayout(j,people.length,room)})).sort((a,b)=>a.y-b.y).forEach(({agent,index,j,motion,progress,x,y,w,h})=>{
   const s=state(agent),phase=(frame+j*7)*Math.PI/12;
-  const active=!reduce&&s==='active',idle=!reduce&&s==='idle';
+  const walking=!reduce&&motion!=='present',active=!reduce&&s==='active',idle=!reduce&&(s==='idle'||s==='waiting');
   const breathe=active?Math.sin(phase)*.025:idle?Math.sin(phase*.5)*.018:0;
   const lift=active?Math.round(Math.sin(phase*2)*1.3):0;
-  ctx.save();ctx.filter='brightness(1.08) contrast(1.06)';ctx.shadowColor='#071015';ctx.shadowBlur=2;ctx.shadowOffsetY=1;
+  ctx.save();
+  if(walking){const p=progress*progress*(3-2*progress),k=motion==='entering'?1-p:p;ctx.translate((skin.width*.5-x)*k,(skin.height*.91-y-h)*k);ctx.globalAlpha=motion==='entering'?progress:1-progress;ctx.translate(0,Math.sin(frame*2)*1.4)}
+  ctx.filter='brightness(1.08) contrast(1.06)';ctx.shadowColor='#071015';ctx.shadowBlur=2;ctx.shadowOffsetY=1;
   ctx.translate(x+w/2,y+h-lift);ctx.rotate(active?Math.sin(phase)*.02:0);ctx.scale(1,1+breathe);
-  ctx.drawImage(images['employee-'+employeeModel(agent,j)],-w/2,-h,w,h);ctx.restore();
-  const bs=Math.min(1,h/32);ctx.save();ctx.translate(x+w/2-9*bs,y-22*bs);ctx.scale(bs,bs);badge(ctx,s,0,0,frame);ctx.restore();
+  ctx.drawImage(images['employee-'+employeeModel(agent,index)],-w/2,-h,w,h);ctx.restore();
+  if(motion==='present'){const bs=Math.min(1,h/32);ctx.save();ctx.translate(x+w/2-9*bs,y-22*bs);ctx.scale(bs,bs);badge(ctx,s,0,0,frame);ctx.restore()}
  });
+ canvas.parentElement._positionMarkers?.();
 }
 }
 function makeRoom(room,i,p){
 const button=document.createElement('button');button.type='button';button.className='room';button.setAttribute('aria-pressed',String(room.id===selectedId));button.setAttribute('data-agent-states',occupants(room).map(a=>state(a)).join(','));
 button.dataset.session=room.id;
 const skin=skinFor(room),scene=document.createElement('div');scene.className='scene';scene.dataset.skin=skin.name;scene.dataset.skinId=skin.id;const canvas=document.createElement('canvas');canvas.width=skin.width;canvas.height=skin.height;canvas.setAttribute('aria-label','Агенты и значки состояния');scene.append(canvas);
-const markers=[];occupants(room).forEach((agent,j)=>{
+const roster=presence.sync(room.id,occupants(room),performance.now(),reducedMotion());
+const markers=[];roster.forEach(({agent,index,motion},j)=>{
  const marker=document.createElement('span');marker.className='employee-marker';marker.tabIndex=0;marker.setAttribute('role','img');
- marker.dataset.character=employeeCharacter(agent,j);
- marker.dataset.model=employeeModel(agent,j);
- const who=agent.agent_nickname||(j===0?'Основной агент':'Субагент');
- marker.title=who+'\nРоль: '+(agent.agent_role||(j===0?'Основной агент':'Субагент'))+'\nСтатус: '+(sourceBad?'Статус неизвестен':agent.label);
+ marker.dataset.character=employeeCharacter(agent,index);
+ marker.dataset.model=employeeModel(agent,index);marker.dataset.agentId=String(agent.id);marker.dataset.status=state(agent);marker.dataset.motion=motion;
+ const who=agent.agent_nickname||(index===0?'Основной агент':'Субагент');
+ marker.title=who+'\nРоль: '+(agent.agent_role||(index===0?'Основной агент':'Субагент'))+'\nСтатус: '+(motion==='exiting'?'Выходит с этажа':sourceBad?'Статус неизвестен':agent.label);
  marker.setAttribute('aria-label',marker.title);marker.onclick=e=>e.stopPropagation();markers.push(marker);scene.append(marker);
 });
-const positionMarkers=()=>{const w=scene.clientWidth,h=scene.clientHeight,s=Math.min(w/skin.width,h/skin.height),ox=(w-skin.width*s)/2,oy=(h-skin.height*s)/2;markers.forEach((marker,j)=>{const {x,y,w:sw,h:sh}=employeeLayout(j,markers.length,room);marker.style.left=ox+(x-2)*s+'px';marker.style.top=oy+(y-25)*s+'px';marker.style.width=Math.max(26,sw+4)*s+'px';marker.style.height=(sh+26)*s+'px';marker.style.zIndex=String(Math.round(y))})};
+const positionMarkers=()=>{const current=presence.frame(room.id,performance.now(),reducedMotion()),w=scene.clientWidth,h=scene.clientHeight,s=Math.min(w/skin.width,h/skin.height),ox=(w-skin.width*s)/2,oy=(h-skin.height*s)/2;markers.forEach(marker=>{const j=current.findIndex(item=>String(item.agent.id)===marker.dataset.agentId);if(j<0)return;const {x,y,w:sw,h:sh}=employeeLayout(j,current.length,room);marker.style.left=ox+(x-2)*s+'px';marker.style.top=oy+(y-25)*s+'px';marker.style.width=Math.max(26,sw+4)*s+'px';marker.style.height=(sh+26)*s+'px';marker.style.zIndex=String(Math.round(y))})};
+scene._positionMarkers=positionMarkers;
 const observer=new ResizeObserver(positionMarkers);observer.observe(scene);scene._markerObserver=observer;
 button.append(scene);button.onclick=()=>{projectId=p.id;selectedId=room.id;render()};scenes.push({canvas,room,kind:['book','forge','map'][i]});return button;
 }
@@ -137,17 +152,23 @@ const atTop=view.scrollTop<8,atBase=view.scrollTop+view.clientHeight>=view.scrol
 const label=$('tower-map').querySelector('.map-position');if(label)label.textContent=atTop?'Верх\nбашни':atBase?'У\nоснования':'Этаж\n'+nearest.dataset.number;
 }
 function renderOverview(){
+const returning=sentViewMode==='rooms'&&viewMode==='overview';
+if(sentViewMode==='overview'&&viewMode==='rooms')overviewPosition={left:$('overview').scrollLeft,top:$('overview').scrollTop};
 document.body.classList.toggle('overview-mode',viewMode==='overview');
 if(sentViewMode!==viewMode){sentViewMode=viewMode;bridge(viewMode==='overview'?'overview-view':'floor-view')}
 overviewScenes=[];
 const root=$('overview');let district=root.querySelector('#overview-towers');if(!district){district=document.createElement('div');district.id='overview-towers';root.append(district)}
+const oldFieldWidth=district.offsetWidth,oldFieldScroll=root.scrollLeft;
+const columns=Math.max(1,...data.projects.map(p=>slotFor(p.id)%3+1));
+district.style.gridTemplateColumns='repeat('+columns+',220px)';district.style.width='max(100%,'+(columns*220+(columns-1)*25+30)+'px)';district.style.justifyContent='end';
 const allRooms=data.projects.flatMap(p=>p.rooms),lit=allRooms.filter(r=>occupants(r).some(a=>state(a)==='active')).length,total=allRooms.reduce((n,r)=>n+occupants(r).filter(a=>state(a)==='active').length,0);
 const liveProjects=new Set(data.projects.map(p=>p.id));for(const node of [...district.children])if(!liveProjects.has(node.dataset.project))node.remove();
 for(const p of data.projects){
 const ordered=sessions(p),signature=ordered.map(r=>r.id).join('|'),previous=[...district.children].find(n=>n.dataset.project===p.id);
-if(previous&&previous.dataset.signature===signature){previous.querySelector('.project-tower-name').textContent=p.name;overviewScenes.push({canvas:previous.querySelector('canvas'),ordered});continue}
+if(previous&&previous.dataset.signature===signature){previous.style.gridColumn=String(columns-slotFor(p.id)%3);previous.querySelector('.project-tower-name').textContent=p.name;overviewScenes.push({canvas:previous.querySelector('.tower-art-canvas'),ordered});continue}
 const wrapper=document.createElement('section');wrapper.className='project-tower';wrapper.dataset.project=p.id;wrapper.dataset.signature=signature;wrapper.setAttribute('aria-label','Башня проекта '+p.name);
-const slot=slotFor(p.id);wrapper.style.gridColumn=String(slot%3+1);wrapper.style.gridRow=String(Math.floor(slot/3)+1);
+const arrivals=document.createElement('canvas');arrivals.className='tower-arrivals';arrivals.width=220;arrivals.height=90;arrivals.setAttribute('aria-hidden','true');wrapper.append(arrivals);
+const slot=slotFor(p.id);wrapper.style.gridColumn=String(columns-slot%3);wrapper.style.gridRow=String(Math.floor(slot/3)+1);
 wrapper.style.setProperty('--tower-ratio',Math.max(1,ordered.length)/Math.max(1,...data.projects.map(p=>p.rooms.length)));
 wrapper.style.setProperty('--floor-count',Math.max(1,ordered.length));
 const heading=document.createElement('button');heading.className='project-tower-name';heading.textContent=p.name;heading.title=p.name+' · сессий: '+ordered.length;heading.onclick=()=>{viewMode='rooms';projectId=p.id;selectedId=ordered.at(-1)?.id;scrollToSession=selectedId;render()};
@@ -170,6 +191,8 @@ const base=document.createElement('div');base.className='overview-foundation';ba
 }
 for(const p of data.projects){const wrapper=[...district.children].find(n=>n.dataset.project===p.id),byId=new Map(p.rooms.map(r=>[r.id,r]));for(const button of wrapper.querySelectorAll('.overview-floor')){const room=byId.get(button.dataset.session),active=occupants(room).filter(a=>state(a)==='active').length;button.classList.toggle('is-active',active>0);button.classList.toggle('source-unknown',sourceBad);button.dataset.activeCount=active;button.title=p.name+' · '+room.title+' · '+(sourceBad?'Нет данных':active?'Работают: '+active:room.label);button.setAttribute('aria-label',button.title);const count=button.querySelector('.overview-floor-count');if(count)count.textContent=sourceBad?'Нет данных':active?'Работают: '+active:'Тихий этаж'}}
 drawOverview();layoutTowerArt();
+if(viewMode==='overview'&&!returning)root.scrollLeft=Math.max(0,oldFieldScroll+district.offsetWidth-oldFieldWidth);
+if(returning){const restore=()=>{if(viewMode==='overview'){$('overview').scrollLeft=overviewPosition.left;$('overview').scrollTop=overviewPosition.top}};restore();requestAnimationFrame(restore)}
 if(viewMode==='overview'){title($('task-title'),'Башни проектов');title($('task-status'),sourceBad?'Источник недоступен · свет не показывает активность':data.projects.length+' башен · '+lit+' этажей со светом · агентов работают: '+total);$('task-status').style.color=palette[sourceBad?'unknown':'active'];title($('agent-names'),'Башня — проект. Этаж — сессия. Свет в окнах — идёт работа. Нажми на этаж, чтобы войти.')}
 }
 function drawOverview(){
@@ -207,7 +230,7 @@ wrapper.dataset.distance=scale<.6?'far':'near';
 });
 }
 function render(){
-if(viewMode==='overview')enteredSkin=null;else if(selected()&&enteredSkin?.roomId!==selectedId)enteredSkin=chooseSkin(selected());
+if(viewMode==='overview'){enteredSkin=null;presence.rooms.clear()}else if(selected()&&enteredSkin?.roomId!==selectedId)enteredSkin=chooseSkin(selected());
 if(!window.Tower.ready)return;const view=$('room-grid'),scroll=view.scrollTop;for(const scene of view.querySelectorAll('.scene'))scene._markerObserver?.disconnect();scenes=[];view.replaceChildren();$('tower-map').replaceChildren();
 if(!selected()){const p=data.projects.at(-1);projectId=p?.id;selectedId=p?.rooms[0]?.id}
 const p=project();
@@ -219,7 +242,34 @@ const rooms=document.createElement('div');rooms.className='floor-rooms';rooms.ap
 view.scrollTop=scroll;details(selected());draw(lastFrame);renderOverview();
 if(scrollToSession){const floor=[...view.querySelectorAll('.tower-floor')].find(f=>f.dataset.session===scrollToSession);if(floor)view.scrollTop=floor.offsetTop-5;scrollToSession=null}trackPosition();
 }
-function acceptSnapshot(value){if(!value||!Array.isArray(value.projects))return;data=value;freshness();render()}
+function trackTowerArrivals(value){
+ const fresh=!value.error&&Date.now()/1000-value.updatedAt<=12;
+ if(!fresh){towerAgentIds.clear();towerArrivals.clear();return}
+ const live=new Set(value.projects.map(p=>p.id));
+ for(const id of towerAgentIds.keys())if(!live.has(id)){towerAgentIds.delete(id);towerArrivals.delete(id)}
+ for(const p of value.projects){
+  const before=towerAgentIds.get(p.id),current=new Set(),queue=towerArrivals.get(p.id)||[];
+  for(const room of p.rooms)occupants(room).forEach((agent,index)=>{
+   if(agent.status==='completed')return;current.add(agent.id);
+   if(before&&!before.has(agent.id)&&agent.status==='active'&&viewMode==='overview'&&!reducedMotion())queue.push({agent,index,since:performance.now()+queue.length*130});
+  });
+  towerAgentIds.set(p.id,current);towerArrivals.set(p.id,queue);
+ }
+}
+function drawTowerArrivals(frame){
+ const now=performance.now();
+ for(const wrapper of $('overview').querySelectorAll('.project-tower')){
+  const canvas=wrapper.querySelector('.tower-arrivals'),ctx=canvas.getContext('2d');ctx.clearRect(0,0,220,90);ctx.imageSmoothingEnabled=false;
+  const queue=(towerArrivals.get(wrapper.dataset.project)||[]).filter(a=>now-a.since<1500&&!reducedMotion());towerArrivals.set(wrapper.dataset.project,queue);canvas.dataset.arrivals=queue.length;
+  const scale=Math.max(.4,parseFloat(wrapper.style.getPropertyValue('--tower-scale'))||1);
+  for(const item of queue){const t=Math.max(0,(now-item.since)/1500);if(now<item.since)continue;
+   const x=25+85*t,y=85-(7+8*scale)*t,w=20*scale,h=28*scale;
+   ctx.save();ctx.globalAlpha=t>.8?(1-t)/.2:Math.min(1,t*8);ctx.translate(x,y+Math.sin(frame*2)*scale);
+   ctx.drawImage(images['employee-'+employeeModel(item.agent,item.index)],-w/2,-h,w,h);ctx.restore();
+  }
+ }
+}
+function acceptSnapshot(value){if(!value||!Array.isArray(value.projects))return;trackTowerArrivals(value);data=value;freshness();render()}
 $('room-grid').onscroll=trackPosition;
 let dragStart=null,dragged=false;
 $('tower-view').addEventListener('pointerdown',e=>{if(e.button===0){dragStart={x:e.clientX,y:e.clientY};dragged=false}});
@@ -237,5 +287,5 @@ Promise.all([...Object.keys(window.RoomSkins).flatMap(id=>['room-'+id,'room-'+id
 images['ambient-layer']=document.createElement('canvas');images['ambient-layer'].width=193;images['ambient-layer'].height=224;
 const mask=images['tower-aligned-window-mask'],lit=document.createElement('canvas');lit.width=mask.width;lit.height=mask.height;const ctx=lit.getContext('2d');ctx.drawImage(mask,0,0);ctx.globalCompositeOperation='source-in';ctx.fillStyle='#efbf6a';ctx.fillRect(0,0,lit.width,lit.height);images['lit-windows']=lit;
 window.Tower.ready=true;render();bridge('ready')}).catch(()=>{$('source').textContent='Не удалось загрузить рисунки комнат'});
-setInterval(()=>{lastFrame++;if(lastFrame%7===0)freshness();if(window.Tower.ready&&viewMode==='rooms')draw(lastFrame)},140);
+setInterval(()=>{lastFrame++;if(lastFrame%7===0)freshness();if(window.Tower.ready){if(viewMode==='rooms')draw(lastFrame);else drawTowerArrivals(lastFrame)}},140);
 })();

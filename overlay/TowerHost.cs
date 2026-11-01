@@ -26,7 +26,9 @@ public sealed class TowerHost : Window
     Process collector;
     bool ready, collapsed;
     bool floorView;
-    double overviewWidth=650;
+    Rect overviewBounds;
+    IntPtr overviewMonitor;
+    NativeRect overviewMonitorWork;
     string lastData;
     int result;
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern IntPtr FindWindow(string c,string t);
@@ -34,6 +36,40 @@ public sealed class TowerHost : Window
     [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
     [DllImport("user32.dll")] static extern bool ReleaseCapture();
     [DllImport("user32.dll")] static extern IntPtr SendMessage(IntPtr h,uint m,IntPtr w,IntPtr l);
+    [StructLayout(LayoutKind.Sequential)] struct NativeRect {public int Left,Top,Right,Bottom;}
+    [StructLayout(LayoutKind.Sequential)] struct MonitorInfo {public int Size;public NativeRect Monitor,Work;public uint Flags;}
+    [DllImport("user32.dll")] static extern IntPtr MonitorFromWindow(IntPtr h,uint flags);
+    [DllImport("user32.dll",CharSet=CharSet.Auto)] static extern bool GetMonitorInfo(IntPtr monitor,ref MonitorInfo info);
+
+    static Point ClampPosition(Rect bounds,Rect work)
+    {
+        return new Point(Math.Max(work.Left,Math.Min(bounds.Left,work.Right-bounds.Width)),
+                         Math.Max(work.Top,Math.Min(bounds.Top,work.Bottom-bounds.Height)));
+    }
+    Rect MonitorWorkArea()
+    {
+        var info=new MonitorInfo();info.Size=Marshal.SizeOf(typeof(MonitorInfo));
+        var monitor=MonitorFromWindow(new WindowInteropHelper(this).Handle,2);
+        if(!GetMonitorInfo(monitor,ref info))return SystemParameters.WorkArea;
+        // PointFromScreen accounts for the window's current DPI and screen origin.
+        Point a=PointFromScreen(new Point(info.Work.Left,info.Work.Top));
+        Point b=PointFromScreen(new Point(info.Work.Right,info.Work.Bottom));
+        return new Rect(new Point(Left+a.X,Top+a.Y),new Point(Left+b.X,Top+b.Y));
+    }
+    void KeepInsideMonitor()
+    {
+        var point=ClampPosition(new Rect(Left,Top,Width,Height),MonitorWorkArea());
+        Left=point.X;Top=point.Y;
+    }
+    void RestoreOverviewVisibility()
+    {
+        if(floorView)return;
+        var info=new MonitorInfo();info.Size=Marshal.SizeOf(typeof(MonitorInfo));
+        bool unchanged=GetMonitorInfo(overviewMonitor,ref info)
+            && info.Work.Left==overviewMonitorWork.Left && info.Work.Top==overviewMonitorWork.Top
+            && info.Work.Right==overviewMonitorWork.Right && info.Work.Bottom==overviewMonitorWork.Bottom;
+        if(!unchanged)KeepInsideMonitor();
+    }
 
     public static int Run(string folder, string python, bool smoke)
     {
@@ -97,10 +133,24 @@ public sealed class TowerHost : Window
                         case "close":Close();break;
                         case "pin":Topmost=!Topmost;break;
                         case "floor-view":
-                            if(!floorView){double right=Left+Width;overviewWidth=Width;MinWidth=300;MaxWidth=500;Width=340;SetHeight(300);Left=Math.Max(0,right-Width);floorView=true;}
+                            if(!floorView){
+                                overviewBounds=new Rect(Left,Top,Width,Height);
+                                overviewMonitor=MonitorFromWindow(new WindowInteropHelper(this).Handle,2);
+                                var savedMonitor=new MonitorInfo();savedMonitor.Size=Marshal.SizeOf(typeof(MonitorInfo));
+                                if(GetMonitorInfo(overviewMonitor,ref savedMonitor))overviewMonitorWork=savedMonitor.Work;
+                                var work=MonitorWorkArea();double right=Left+Width;
+                                MinWidth=300;MaxWidth=500;Width=340;SetHeight(300);
+                                var point=ClampPosition(new Rect(right-Width,Top,Width,Height),work);
+                                Left=point.X;Top=point.Y;floorView=true;
+                                Dispatcher.BeginInvoke(new Action(KeepInsideMonitor),DispatcherPriority.Loaded);
+                            }
                             break;
                         case "overview-view":
-                            if(floorView){double right=Left+Width;MaxWidth=1000;Width=Math.Max(470,overviewWidth);MinWidth=470;SetHeight(560);Left=Math.Max(0,right-Width);floorView=false;}
+                            if(floorView){
+                                MaxWidth=1000;Width=Math.Max(470,overviewBounds.Width);MinWidth=470;SetHeight(overviewBounds.Height);
+                                Left=overviewBounds.Left;Top=overviewBounds.Top;floorView=false;
+                                Dispatcher.BeginInvoke(new Action(RestoreOverviewVisibility),DispatcherPriority.Loaded);
+                            }
                             break;
                         case "collapse":collapsed=!collapsed;SetHeight(collapsed?40:560);break;
                         case "drag":ReleaseCapture();SendMessage(new WindowInteropHelper(this).Handle,0xA1,new IntPtr(2),IntPtr.Zero);break;
@@ -138,8 +188,8 @@ public sealed class TowerHost : Window
             await Task.Delay(150);
             string ok=await web.CoreWebView2.ExecuteScriptAsync("Boolean(window.Tower && window.Tower.ready && document.querySelectorAll('.room').length)");
             if(ok!="true")throw new Exception("HTML did not render live project rooms");
-            string tower=await web.CoreWebView2.ExecuteScriptAsync("document.querySelectorAll('.tower-floor').length === 1 && document.querySelectorAll('.employee-marker').length > 0");
-            if(tower!="true")throw new Exception("Selected floor or individual employee markers missing");
+            string tower=await web.CoreWebView2.ExecuteScriptAsync("document.querySelectorAll('.tower-floor').length === 1 && Boolean(document.querySelector('.scene canvas')) && [...document.querySelectorAll('.employee-marker')].every(m => m.dataset.agentId && m.dataset.status !== 'completed')");
+            if(tower!="true")throw new Exception("Selected floor or truthful employee presence missing");
             string overview=await web.CoreWebView2.ExecuteScriptAsync("Boolean(document.body.classList.contains('overview-mode') && document.querySelectorAll('.overview-floor').length)");
             if(overview!="true")throw new Exception("Whole tower home screen missing");
             if(!AllowsTransparency || web.DefaultBackgroundColor.A!=0)throw new Exception("Native overlay is not transparent");
@@ -151,14 +201,30 @@ public sealed class TowerHost : Window
             await web.CoreWebView2.ExecuteScriptAsync("document.getElementById('pin').click()");
             await Task.Delay(100);
             if(!Topmost)throw new Exception("Pin control did not restore topmost");
+            var negative=ClampPosition(new Rect(-2100,900,340,300),new Rect(-1920,0,1920,1040));
+            if(negative.X!=-1920 || negative.Y!=740)throw new Exception("Negative monitor work-area clamp failed");
+            var rightEdge=ClampPosition(new Rect(1900,1040,340,300),new Rect(0,0,1920,1040));
+            if(rightEdge.X!=1580 || rightEdge.Y!=740)throw new Exception("Right/bottom clamp failed");
+            var savedOverview=new Point(Left,Top);
             await web.CoreWebView2.ExecuteScriptAsync("document.querySelector('.overview-floor').click()");
             await Task.Delay(200);
             if(Math.Abs(Width-340)>1 || Math.Abs(Height-300)>1)throw new Exception("Compact floor window size failed");
+            if(!MonitorWorkArea().Contains(new Rect(Left,Top,Width,Height)))throw new Exception("Room extends outside monitor work area");
             using(var stream=File.Create(Path.Combine(folder,"runtime/compact-floor-smoke.png")))
                 await web.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png,stream);
+            Left+=31;Top+=19;
             await web.CoreWebView2.ExecuteScriptAsync("document.getElementById('back-icon').click()");
             await Task.Delay(200);
             if(Math.Abs(Width-650)>1 || Math.Abs(Height-560)>1)throw new Exception("Back icon did not restore overview size");
+            if(Math.Abs(Left-savedOverview.X)>1 || Math.Abs(Top-savedOverview.Y)>1)throw new Exception("Room movement changed saved overview position");
+            Left=MonitorWorkArea().Left-25;
+            double partialLeft=Left;
+            await web.CoreWebView2.ExecuteScriptAsync("document.querySelector('.overview-floor').click()");
+            await Task.Delay(150);
+            await web.CoreWebView2.ExecuteScriptAsync("document.getElementById('back-icon').click()");
+            await Task.Delay(150);
+            if(Math.Abs(Left-partialLeft)>1)throw new Exception("Partially offscreen overview was not restored exactly");
+            Left=savedOverview.X;
             Width=1000;await Task.Delay(150);
             string overflow=await web.CoreWebView2.ExecuteScriptAsync("document.documentElement.scrollWidth > innerWidth || document.documentElement.scrollHeight > innerHeight");
             if(overflow!="false")throw new Exception("HTML overflow in wide window");

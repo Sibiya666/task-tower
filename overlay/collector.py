@@ -10,14 +10,55 @@ from pathlib import Path
 
 BASE = Path(__file__).resolve().parent
 HOME = Path(os.environ.get('CODEX_HOME', Path.home() / '.codex'))
-LABELS = {'active': 'Работает', 'idle': 'Ожидает задачи', 'stopped': 'Остановлен',
+LABELS = {'active': 'Работает', 'idle': 'Свободен', 'completed': 'Завершил задачу', 'waiting': 'Ждёт вашего решения', 'stopped': 'Остановлен',
           'unknown': 'Статус неизвестен', 'stale': 'Нет свежих событий', 'error': 'Ошибка'}
-LIFECYCLE = {'task_started':'active','turn_started':'active','task_complete':'idle','turn_complete':'idle',
+LIFECYCLE = {'task_started':'active','turn_started':'active','task_complete':'completed','turn_complete':'completed',
              'turn_aborted':'stopped','task_aborted':'stopped','error':'error','turn_failed':'error'}
+
+
+def apply_event(state, event):
+    """Track explicit decision requests without retaining prompts or message bodies."""
+    payload = event.get('payload', {})
+    pending = state.setdefault('pending_requests', {})
+    kind = payload.get('type')
+    if event.get('type') == 'response_item':
+        if kind == 'message' and payload.get('role') == 'user':
+            pending.clear()
+            if state.get('status') != 'active':
+                state['status'] = 'idle'
+        elif kind in ('function_call', 'custom_tool_call'):
+            name = str(payload.get('name', '')).split('.')[-1]
+            if name in ('request_user_input', 'request_user_input_async'):
+                pending[payload.get('call_id', name)] = name.endswith('_async')
+        elif kind in ('function_call_output', 'custom_tool_call_output'):
+            call_id = payload.get('call_id')
+            if call_id in pending and not pending[call_id]:
+                pending.pop(call_id)
+        return
+    if event.get('type') != 'event_msg':
+        return
+    if kind == 'user_message':
+        pending.clear()
+    if kind in LIFECYCLE:
+        state['status'] = LIFECYCLE[kind]
+        if state['status'] in ('error', 'stopped'):
+            pending.clear()
+    elif kind == 'user_message':
+        state['status'] = 'idle'
+    elif kind == 'approval_requested':
+        pending[str(payload.get('request_id', 'approval'))] = True
+    elif kind in ('approval_resolved', 'approval_response'):
+        pending.pop(str(payload.get('request_id', 'approval')), None)
+    try:
+        state['seen'] = datetime.fromisoformat(event['timestamp'].replace('Z', '+00:00')).timestamp()
+    except (KeyError, ValueError, TypeError, AttributeError):
+        pass
 
 
 def earlier_lifecycle(path, end):
     """Backscan complete event lines when the current turn began before the tail."""
+    events = []
+    saw_user_reply = False
     with path.open('rb') as stream:
         while end > 0:
             start=max(0,end-1024*1024)
@@ -26,23 +67,35 @@ def earlier_lifecycle(path, end):
             if start:
                 start+=len(lines.pop(0))+1
             for line in reversed(lines):
-                if b'event_msg' not in line:
+                if b'event_msg' not in line and b'response_item' not in line:
                     continue
                 try:
                     event=json.loads(line)
-                    if event.get('type')=='event_msg' and event.get('payload',{}).get('type') in LIFECYCLE:
-                        try:
-                            seen=datetime.fromisoformat(event['timestamp'].replace('Z','+00:00')).timestamp()
-                        except (KeyError,ValueError,TypeError):
-                            seen=0
-                        return {'status':LIFECYCLE[event['payload']['type']], 'seen':seen}
+                    payload = event.get('payload', {})
+                    kind = payload.get('type')
+                    if event.get('type') == 'event_msg' and kind not in {*LIFECYCLE, 'user_message', 'approval_requested', 'approval_resolved', 'approval_response'}:
+                        continue
+                    user_reply = event.get('type') == 'response_item' and kind == 'message' and payload.get('role') == 'user'
+                    if event.get('type') == 'response_item' and not user_reply and kind not in ('function_call', 'custom_tool_call', 'function_call_output', 'custom_tool_call_output'):
+                        continue
+                    events.append({'type':event.get('type'), 'timestamp':event.get('timestamp'),
+                                   'payload':{key:payload[key] for key in ('type','role','name','call_id','request_id') if key in payload}})
+                    saw_user_reply = saw_user_reply or user_reply
+                    if event.get('type')=='event_msg' and (kind == 'user_message' or (saw_user_reply and kind in ('task_started', 'turn_started'))):
+                        state = {'status':'unknown','seen':0}
+                        for value in reversed(events):
+                            apply_event(state, value)
+                        return state
                 except (ValueError,UnicodeDecodeError):
                     pass
             if start>=end:
                 end=max(0,end-1024*1024)
             else:
                 end=start
-    return {'status':'unknown','seen':0}
+    state = {'status':'unknown','seen':0}
+    for value in reversed(events):
+        apply_event(state, value)
+    return state
 
 
 class Journal:
@@ -56,7 +109,7 @@ class Journal:
         try:
             size = path.stat().st_size
             if size < state['offset']:
-                state.update(offset=0, pending=b'', status='unknown', seen=0)
+                state.update(offset=0, pending=b'', status='unknown', seen=0, pending_requests={})
             with path.open('rb') as f:
                 if not state['offset'] and size > 4 * 1024 * 1024:
                     f.seek(size - 4 * 1024 * 1024)
@@ -72,23 +125,8 @@ class Journal:
                     event = json.loads(line)
                 except (ValueError, UnicodeDecodeError):
                     continue
-                if event.get('type') != 'event_msg':
-                    continue
-                payload = event.get('payload', {})
-                kind = payload.get('type')
-                if kind in ('task_started', 'turn_started'):
-                    state['status'] = 'active'
-                elif kind in ('task_complete', 'turn_complete'):
-                    state['status'] = 'idle'
-                elif kind in ('turn_aborted', 'task_aborted'):
-                    state['status'] = 'stopped'
-                elif kind in ('error', 'turn_failed'):
-                    state['status'] = 'error'
-                try:
-                    state['seen'] = datetime.fromisoformat(event['timestamp'].replace('Z', '+00:00')).timestamp()
-                except (KeyError, ValueError, TypeError):
-                    pass
-            status = state['status']
+                apply_event(state, event)
+            status = 'waiting' if state.get('pending_requests') else state['status']
             if status == 'active' and now - state['seen'] > 180:
                 status = 'stale'
             return {'status': status, 'label': LABELS[status], 'lastEvent': state['seen']}
@@ -143,6 +181,10 @@ def group_threads(projects, threads, parents, assignments):
     for tid, t in valid.items():
         if owners[tid] != tid:
             continue
+        # Non-interactive tool/review executions are not user chat floors.
+        # Keep them as employees when an explicit parent relationship exists.
+        if t.get('source') in ('exec', '"exec"') and t.get('has_user_event') == 0:
+            continue
         pid = t.get('project_id') if t.get('project_id') in by_id else assignments.get(tid)
         project = by_id.get(pid)
         if project is None:
@@ -179,8 +221,10 @@ def snapshot(home, journal, known_assignments=None):
         for row in connection.execute('SELECT project_id,path FROM project_roots'):
             if row['project_id'] in by_id:
                 by_id[row['project_id']]['roots'].append(row['path'])
+        columns = {r[1] for r in connection.execute('PRAGMA table_info(threads)')}
+        user_event = 'has_user_event' if 'has_user_event' in columns else '1 AS has_user_event'
         threads = [dict(r) for r in connection.execute(
-            "SELECT id,COALESCE(NULLIF(name,''),title) AS title,cwd,project_id,rollout_path,updated_at,archived,agent_nickname,agent_role,attached_thread_parent_id,source "
+            "SELECT id,COALESCE(NULLIF(name,''),title) AS title,cwd,project_id,rollout_path,updated_at,archived,agent_nickname,agent_role,attached_thread_parent_id,source," + user_event + " "
             'FROM threads WHERE archived=0 ORDER BY updated_at DESC')]
         parents = {r['child_thread_id']: r['parent_thread_id'] for r in connection.execute('SELECT * FROM thread_spawn_edges')}
     threads = [t for t in threads if not is_guardian(t.get('source', ''))]
