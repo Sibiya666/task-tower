@@ -1,0 +1,31 @@
+{
+  "task_id": "TT-MERGE-HOOK-001",
+  "commit": "aab8fb56d693b5da48a4a01f01dfa499e4659bcc",
+  "bundle": {
+    "repository": "Sibiya666/task-tower",
+    "pr_number": 4,
+    "merge_commit": "aab8fb56d693b5da48a4a01f01dfa499e4659bcc",
+    "task_ids": [
+      "TT-MERGE-HOOK-001"
+    ],
+    "run_url": "https://github.com/Sibiya666/task-tower/actions/runs/41300158093",
+    "run_id": "41300158093",
+    "attempt": "1",
+    "platforms": {
+      "linux": "passed",
+      "windows": "passed",
+      "macos": "passed"
+    },
+    "delivery_key": "0f45a68bde8de1070cfc4d042568f7ee4541849bf545b46ae5c75515889c18b5"
+  },
+  "review": {
+    "task_id": "TT-MERGE-HOOK-001",
+    "commit": "aab8fb56d693b5da48a4a01f01dfa499e4659bcc",
+    "verdict": "approve",
+    "summary": "Approve the scoped merge-event exporter based on inspected implementation, matching prior acceptance hashes, independent fixture review, and the supplied verified CI bundle reporting Linux, Windows and macOS passed for this exact commit. No blocking findings.",
+    "findings": [
+      "Local full-suite execution was attempted but could not verify results: the read-only sandbox provides no writable temporary directory (69 tests, 72 errors). Approval relies on the supplied verified CI results for runtime verification.",
+      "Automatic importing, task synchronization, pilot readiness and night readiness remain outside this increment. No files were changed."
+    ]
+  }
+}

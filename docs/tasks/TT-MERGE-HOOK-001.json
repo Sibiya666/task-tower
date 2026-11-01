@@ -5,7 +5,7 @@
   "project_root": "../..",
   "executor": "merge-hook-implementation-team",
   "mode": "assisted",
-  "status": "awaiting_merge",
+  "status": "done",
   "spec": "../superpowers/specs/2026-11-01-merge-event-design.md",
   "plan": "../superpowers/plans/2026-11-01-merge-event.md",
   "stages": {
@@ -31,7 +31,17 @@
       "hash_scheme": "sha256-utf8-lf-v1"
     },
     "postmerge": {
-      "status": "pending"
+      "status": "accepted",
+      "reviewer": "postmerge-agent",
+      "evidence": "evidence/TT-MERGE-HOOK-001/postmerge-aab8fb56d693b5da48a4a01f01dfa499e4659bcc.json",
+      "sha256": "63ca154d6432e0e05cd6d2c12b79e34cb49496c02009a3108879a01f2516e010",
+      "hash_scheme": "sha256-utf8-lf-v1",
+      "commit": "aab8fb56d693b5da48a4a01f01dfa499e4659bcc",
+      "main_ref": "refs/remotes/origin/main"
     }
+  },
+  "postmerge_state": {
+    "status": "accepted",
+    "commit": "aab8fb56d693b5da48a4a01f01dfa499e4659bcc"
   }
 }

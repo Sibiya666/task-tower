@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "TT-POSTMERGE-WORKER-001",
+  "title": "Автоматическое получение merge-событий, приёмщик и статус задачи",
+  "executor": "postmerge-worker-implementation-team",
+  "project_root": "../..",
+  "mode": "assisted",
+  "status": "awaiting_merge",
+  "spec": "../superpowers/specs/2026-11-01-postmerge-worker-design.md",
+  "plan": "../superpowers/plans/2026-11-01-postmerge-worker.md",
+  "acceptance_criteria": [
+    "Проверенное событие GitHub и все обязательные платформы запускают отдельного приёмщика",
+    "Approve закрывает только ту же задачу и SHA с актуальными prior evidence",
+    "Повторная доставка и рестарт не создают повторного вызова модели",
+    "Неуспех, неопределённый исход, stale или конфликт задания не дают done",
+    "Секреты не сохраняются и не передаются приёмщику"
+  ],
+  "stages": {
+    "spec": {
+      "status": "accepted",
+      "reviewer": "postmerge-worker-reviewer",
+      "evidence": "evidence/TT-POSTMERGE-WORKER-001/review.md",
+      "sha256": "fee1eb192dcfc3cc7225f2ee5c7ae787600125d2df9a71dc435c65551a85667f",
+      "hash_scheme": "sha256-utf8-lf-v1"
+    },
+    "development": {
+      "status": "accepted",
+      "reviewer": "postmerge-worker-reviewer",
+      "evidence": "evidence/TT-POSTMERGE-WORKER-001/review.md",
+      "sha256": "fee1eb192dcfc3cc7225f2ee5c7ae787600125d2df9a71dc435c65551a85667f",
+      "hash_scheme": "sha256-utf8-lf-v1"
+    },
+    "test": {
+      "status": "accepted",
+      "reviewer": "postmerge-worker-test-acceptance",
+      "evidence": "evidence/TT-POSTMERGE-WORKER-001/test-acceptance.md",
+      "sha256": "0f7b04163e19f82bfc9b58798cff62dc4a5ddb121ad6f0281548287a5c55b3de",
+      "hash_scheme": "sha256-utf8-lf-v1"
+    },
+    "postmerge": {
+      "status": "pending"
+    }
+  }
+}

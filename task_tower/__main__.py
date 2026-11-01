@@ -38,6 +38,9 @@ def main(argv=None):
     if supplied and supplied[0] == "bootstrap":
         from .bootstrap import main as bootstrap_main
         return bootstrap_main(supplied[1:])
+    if supplied and supplied[0] == "worker":
+        from .postmerge_worker import main as worker_main
+        return worker_main(supplied[1:])
     parser = argparse.ArgumentParser(description="Task Tower project readiness")
     commands = parser.add_subparsers(dest="command", required=True)
     command = commands.add_parser("audit", help="Inspect a project environment")
