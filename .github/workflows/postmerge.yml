@@ -1,0 +1,70 @@
+name: Task Tower postmerge
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  verify-merge:
+    if: github.event.pull_request.merged == true
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            platform: linux
+          - runner: macos-latest
+            platform: macos
+          - runner: windows-latest
+            platform: windows
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        id: source
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: '3.11'
+      - name: Test exact merged revision
+        id: tests
+        continue-on-error: true
+        run: python -m unittest discover -s tests -v
+      - name: Export task-manager event
+        if: always() && steps.source.outcome == 'success' && steps.python.outcome == 'success'
+        id: event
+        shell: python
+        env:
+          TASK_REPOSITORY: ${{ github.repository }}
+          TASK_PLATFORM: ${{ matrix.platform }}
+          TEST_OUTCOME: ${{ steps.tests.outcome }}
+        run: |
+          import os, subprocess, sys
+          subprocess.run([
+              sys.executable, '-m', 'task_tower.merge_events',
+              '--event', os.environ['GITHUB_EVENT_PATH'],
+              '--repository', os.environ['TASK_REPOSITORY'],
+              '--platform', os.environ['TASK_PLATFORM'],
+              '--checks', 'passed' if os.environ['TEST_OUTCOME'] == 'success' else 'failed',
+              '--run-id', os.environ['GITHUB_RUN_ID'],
+              '--attempt', os.environ['GITHUB_RUN_ATTEMPT'],
+              '--output', '.task-tower/merge-event.json',
+          ], check=True)
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.event.outcome == 'success'
+        with:
+          name: task-tower-merge-${{ github.event.pull_request.number }}-${{ matrix.platform }}
+          path: .task-tower/merge-event.json
+          include-hidden-files: true
+          if-no-files-found: error
+          overwrite: true
+      - name: Fail if postmerge tests failed
+        if: always() && steps.tests.outcome != 'success'
+        run: python -c "raise SystemExit(1)"

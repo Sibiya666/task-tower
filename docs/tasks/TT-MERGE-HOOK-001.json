@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "id": "TT-MERGE-HOOK-001",
+  "title": "События слияния PR и переносимость свидетельств приёмки",
+  "project_root": "../..",
+  "executor": "merge-hook-implementation-team",
+  "mode": "assisted",
+  "status": "awaiting_merge",
+  "spec": "../superpowers/specs/2026-11-01-merge-event-design.md",
+  "plan": "../superpowers/plans/2026-11-01-merge-event.md",
+  "stages": {
+    "spec": {
+      "status": "accepted",
+      "reviewer": "merge-hook-reviewer",
+      "evidence": "evidence/TT-MERGE-HOOK-001/review.md",
+      "sha256": "ba0d1caa319cb8f42eb34031492f1c29adb719dd2bbf02594c32a0c46df0764c",
+      "hash_scheme": "sha256-utf8-lf-v1"
+    },
+    "development": {
+      "status": "accepted",
+      "reviewer": "merge-hook-reviewer",
+      "evidence": "evidence/TT-MERGE-HOOK-001/review.md",
+      "sha256": "ba0d1caa319cb8f42eb34031492f1c29adb719dd2bbf02594c32a0c46df0764c",
+      "hash_scheme": "sha256-utf8-lf-v1"
+    },
+    "test": {
+      "status": "accepted",
+      "reviewer": "merge-hook-test-acceptance",
+      "evidence": "evidence/TT-MERGE-HOOK-001/test-acceptance.md",
+      "sha256": "2de8cf290cedf69d2a9bfd9edbbdfba6b7aa3e41bc24a4699172bb0c77e0158f",
+      "hash_scheme": "sha256-utf8-lf-v1"
+    },
+    "postmerge": {
+      "status": "pending"
+    }
+  }
+}

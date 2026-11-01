@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -37,6 +38,57 @@ class TaskTests(unittest.TestCase):
         self.assertEqual(result['stages']['spec']['status'], 'accepted')
         self.assertEqual(len(result['stages']['spec']['sha256']), 64)
         self.assertEqual(tasks.load_task(self.card), result)
+
+    def test_text_acceptance_survives_git_crlf_checkout_but_rejects_edits(self):
+        self.git('config', 'core.autocrlf', 'false')
+        self.evidence.write_bytes(b'reviewed\nsecond line\n')
+        accepted = self.accept('spec')
+        self.git('add', '.')
+        self.git('commit', '-m', 'accepted LF evidence')
+        self.git('config', 'core.autocrlf', 'true')
+        self.evidence.unlink()
+        self.git('checkout', '--', 'evidence.txt')
+        self.assertEqual(self.evidence.read_bytes(), b'reviewed\r\nsecond line\r\n')
+        self.assertEqual(tasks.load_task(self.card), accepted)
+        self.evidence.write_bytes(b'reviewed\r\nchanged line\r\n')
+        with self.assertRaisesRegex(ValueError, 'stale'):
+            tasks.load_task(self.card)
+
+    def test_new_text_acceptance_records_versioned_normalized_digest(self):
+        self.evidence.write_bytes(b'reviewed\r\n')
+        record = self.accept('spec')['stages']['spec']
+        self.assertEqual(record['hash_scheme'], 'sha256-utf8-lf-v1')
+        self.assertEqual(record['sha256'], hashlib.sha256(b'reviewed\n').hexdigest())
+
+    def test_legacy_acceptance_remains_byte_strict(self):
+        self.evidence.write_bytes(b'reviewed\n')
+        card = self.accept('spec')
+        record = card['stages']['spec']
+        record.pop('hash_scheme', None)
+        record['sha256'] = hashlib.sha256(self.evidence.read_bytes()).hexdigest()
+        self.card.write_text(json.dumps(card))
+        tasks.load_task(self.card)
+        self.evidence.write_bytes(b'reviewed\r\n')
+        with self.assertRaisesRegex(ValueError, 'stale'):
+            tasks.load_task(self.card)
+
+    def test_binary_acceptance_preserves_bytes(self):
+        for content in (b'\xff\r\n', b'\x00binary\r\n'):
+            with self.subTest(content=content):
+                self.evidence.write_bytes(content)
+                record = self.accept('spec')['stages']['spec']
+                self.assertEqual(record['hash_scheme'], 'sha256')
+                self.assertEqual(record['sha256'], hashlib.sha256(content).hexdigest())
+                self.evidence.write_bytes(content.replace(b'\r\n', b'\n'))
+                with self.assertRaisesRegex(ValueError, 'stale'):
+                    tasks.load_task(self.card)
+
+    def test_unknown_hash_scheme_fails_closed(self):
+        card = self.accept('spec')
+        card['stages']['spec']['hash_scheme'] = 'unknown-v99'
+        self.card.write_text(json.dumps(card))
+        with self.assertRaises(ValueError):
+            tasks.load_task(self.card)
 
     @unittest.skipUnless(os.name == 'nt', 'Windows junction')
     def test_rejects_junction_card_without_pathlib312_detector(self):
