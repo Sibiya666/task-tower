@@ -1,0 +1,264 @@
+{
+  "provenance": {
+    "kind": "synthetic fixture shaped against official GitHub examples; no live account data",
+    "checked": "2026-11-02",
+    "sources": [
+      "https://docs.github.com/en/rest/branches/branch-protection#get-branch-protection",
+      "https://docs.github.com/en/rest/repos/rules#get-rules-for-a-branch",
+      "https://docs.github.com/en/rest/pulls/pulls#get-the-result-of-an-asynchronous-merge",
+      "https://docs.github.com/en/graphql/reference/objects#pullrequestreviewthread",
+      "https://docs.github.com/en/rest/actions/workflow-runs",
+      "https://docs.github.com/en/rest/actions/workflow-jobs",
+      "https://docs.github.com/en/actions/reference/runners/github-hosted-runners"
+    ],
+    "live_shape_observation": {
+      "kind": "coordinator reported sanitized field-shape observation, not a full raw response archive",
+      "repository": "Sibiya666/task-tower",
+      "run_id": 41338616169,
+      "attempt": 1,
+      "head_sha": "078648c1efff357fe122522934b02906336e0a11",
+      "job_ids": [
+        124943645854,
+        124943646084,
+        124943646088
+      ],
+      "runner_group_id": 0,
+      "runner_group_name": "GitHub Actions",
+      "labels": [
+        "ubuntu-latest",
+        "macos-latest",
+        "windows-latest"
+      ],
+      "endpoint": "GET /repos/Sibiya666/task-tower/actions/runs/41338616169/attempts/1/jobs"
+    }
+  },
+  "classic": {
+    "required_status_checks": {
+      "strict": true,
+      "contexts": [
+        "test"
+      ],
+      "checks": [
+        {
+          "context": "test",
+          "app_id": 7
+        }
+      ]
+    },
+    "enforce_admins": {
+      "enabled": true
+    },
+    "required_pull_request_reviews": null,
+    "restrictions": null,
+    "required_linear_history": {
+      "enabled": false
+    },
+    "allow_force_pushes": {
+      "enabled": false
+    },
+    "allow_deletions": {
+      "enabled": false
+    },
+    "block_creations": {
+      "enabled": false
+    },
+    "required_conversation_resolution": {
+      "enabled": true
+    },
+    "lock_branch": {
+      "enabled": false
+    },
+    "allow_fork_syncing": {
+      "enabled": false
+    }
+  },
+  "rule": {
+    "type": "non_fast_forward",
+    "ruleset_id": 42,
+    "ruleset_source_type": "Repository",
+    "ruleset_source": "owner/repo"
+  },
+  "ruleset": {
+    "id": 42,
+    "name": "main",
+    "target": "branch",
+    "source_type": "Repository",
+    "source": "owner/repo",
+    "enforcement": "active",
+    "bypass_actors": [],
+    "rules": [
+      {
+        "type": "non_fast_forward"
+      }
+    ]
+  },
+  "async_pending": {
+    "status": "pending",
+    "details": {
+      "message": "Merge request is in progress.",
+      "uuid": "630b9d5e-3f2a-4f7e-8b0c-2d5f9a8c1e42",
+      "merge_method": "merge",
+      "merge_action": "direct_merge",
+      "expected_head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "bypass_rules": false
+    }
+  },
+  "actions": {
+    "checks": [
+      {
+        "id": 1,
+        "name": "test-linux",
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "check_suite": {
+          "id": 42
+        }
+      },
+      {
+        "id": 2,
+        "name": "test-windows",
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "check_suite": {
+          "id": 42
+        }
+      },
+      {
+        "id": 3,
+        "name": "test-macos",
+        "app": {
+          "id": 15368,
+          "slug": "github-actions"
+        },
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "check_suite": {
+          "id": 42
+        }
+      }
+    ],
+    "jobs": [
+      {
+        "id": 101,
+        "run_id": 9,
+        "run_url": "https://api.github.com/repos/owner/repo/actions/runs/9",
+        "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "status": "completed",
+        "conclusion": "success",
+        "name": "intentionally-unrelated-name",
+        "check_run_url": "https://api.github.com/repos/owner/repo/check-runs/1",
+        "labels": [
+          "ubuntu-latest"
+        ],
+        "runner_id": 1001,
+        "runner_name": "GitHub Actions 1",
+        "runner_group_id": 0,
+        "runner_group_name": "GitHub Actions"
+      },
+      {
+        "id": 102,
+        "run_id": 9,
+        "run_url": "https://api.github.com/repos/owner/repo/actions/runs/9",
+        "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "status": "completed",
+        "conclusion": "success",
+        "name": "intentionally-unrelated-name",
+        "check_run_url": "https://api.github.com/repos/owner/repo/check-runs/2",
+        "labels": [
+          "windows-2025"
+        ],
+        "runner_id": 1002,
+        "runner_name": "GitHub Actions 2",
+        "runner_group_id": 0,
+        "runner_group_name": "GitHub Actions"
+      },
+      {
+        "id": 103,
+        "run_id": 9,
+        "run_url": "https://api.github.com/repos/owner/repo/actions/runs/9",
+        "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "status": "completed",
+        "conclusion": "success",
+        "name": "intentionally-unrelated-name",
+        "check_run_url": "https://api.github.com/repos/owner/repo/check-runs/3",
+        "labels": [
+          "macos-15"
+        ],
+        "runner_id": 1003,
+        "runner_name": "GitHub Actions 3",
+        "runner_group_id": 0,
+        "runner_group_name": "GitHub Actions"
+      }
+    ],
+    "suite": {
+      "id": 42,
+      "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "app": {
+        "id": 15368,
+        "slug": "github-actions"
+      },
+      "status": "completed",
+      "conclusion": "success",
+      "pull_requests": [
+        {
+          "number": 1,
+          "head": {
+            "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "repo": {
+              "url": "https://api.github.com/repos/owner/repo"
+            }
+          },
+          "base": {
+            "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "repo": {
+              "url": "https://api.github.com/repos/owner/repo"
+            }
+          }
+        }
+      ]
+    },
+    "run": {
+      "id": 9,
+      "check_suite_id": 42,
+      "head_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "event": "pull_request",
+      "status": "completed",
+      "conclusion": "success",
+      "run_attempt": 2,
+      "repository": {
+        "full_name": "owner/repo"
+      },
+      "head_repository": {
+        "full_name": "owner/repo"
+      },
+      "pull_requests": [
+        {
+          "number": 1,
+          "head": {
+            "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "repo": {
+              "url": "https://api.github.com/repos/owner/repo"
+            }
+          },
+          "base": {
+            "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "repo": {
+              "url": "https://api.github.com/repos/owner/repo"
+            }
+          }
+        }
+      ]
+    }
+  }
+}
