@@ -19,20 +19,29 @@ LIFECYCLE = '<!-- task-tower:lifecycle:v1\n'
 
 def issue_lifecycle(store, issue):
     metadata = dict(store.metadata(issue) or {})
+    metadata.pop('_lifecycle_author', None)
+    metadata['_lifecycle_history'] = []
+    history = []
     latest = None
     for page in range(1,21):
         comments = store.request('GET', f"/issues/{issue['number']}/comments?per_page=100&page={page}")
-        if not isinstance(comments,list): raise ValueError('Invalid lifecycle comments')
+        if not isinstance(comments,list) or len(comments) > 100: raise ValueError('Invalid lifecycle comments')
         for comment in comments:
+            if not isinstance(comment, dict) or not isinstance(comment.get('body', ''), str): raise ValueError('Invalid lifecycle comment')
             body = comment.get('body','')
-            if body.startswith(LIFECYCLE) and body.endswith('\n-->'):
+            if body.startswith(LIFECYCLE):
+                if not body.endswith('\n-->'): raise ValueError('Invalid lifecycle')
                 data = json.loads(body[len(LIFECYCLE):-4])
                 if not isinstance(data,dict) or set(data) - {'remote_attempt','status'}: raise ValueError('Invalid lifecycle')
-                if type(comment.get('id')) is not int: raise ValueError('Invalid lifecycle identity')
-                if latest is None or comment['id'] > latest[0]: latest=(comment['id'],data)
+                if type(comment.get('id')) is not int or comment['id'] < 1: raise ValueError('Invalid lifecycle identity')
+                history.append((comment['id'], data))
+                if latest is None or comment['id'] > latest[0]: latest=(comment['id'],data,comment.get('user', {}).get('login'))
         if len(comments)<100: break
     else: raise ValueError('Lifecycle pagination exceeded')
-    if latest: metadata.update(latest[1])
+    metadata['_lifecycle_history'] = [data for _, data in sorted(history, key=lambda item: item[0])]
+    if latest:
+        metadata.update(latest[1])
+        metadata['_lifecycle_author'] = latest[2]
     return metadata
 
 
@@ -82,12 +91,90 @@ def verified_receipt(connection, store, source, number, attempt):
     return receipt
 
 
+def verified_local_receipt(connection, store, source, issue, metadata):
+    """A configured GitHub account attests local review; APIs attest CI/ancestry."""
+    author = metadata.get('_lifecycle_author')
+    trusted = getattr(connection, 'trusted_publishers', [])
+    if not isinstance(author, str) or author.casefold() not in [a.casefold() for a in trusted]: return False
+    attempt = metadata['remote_attempt']
+    receipt = attempt.get('receipt', {})
+    def digest(value):
+        return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=False).encode()).hexdigest()
+    def sha(value, size=64):
+        return isinstance(value, str) and re.fullmatch('[0-9a-f]{' + str(size) + '}', value) is not None
+    if (receipt.get('version') != 1 or receipt.get('kind') != 'local-postmerge'
+        or receipt.get('repository') != connection.repository or type(receipt.get('issue')) is not int
+        or receipt.get('issue') != issue['number'] or type(receipt.get('issue_id')) is not int
+        or receipt['issue_id'] != issue.get('id') or attempt.get('publication_id') != digest(receipt)
+        or not sha(receipt.get('input_snapshot')) or not sha(receipt.get('commit'), 40)
+        or attempt.get('commit') != receipt['commit']): return False
+    task_id = receipt.get('task_id')
+    if (not isinstance(task_id, str) or not re.fullmatch(r'TT-[A-Z0-9-]+', task_id)
+        or metadata.get('kind') != 'task' or task_id not in (metadata.get('legacy_id'), metadata.get('task_id'), metadata.get('id'))): return False
+    bundle, review, evidence, policy = (receipt.get(k, {}) for k in ('bundle', 'review', 'evidence', 'policy'))
+    required = receipt.get('required_platforms')
+    if (not isinstance(required, list) or not required or len(set(required)) != len(required)
+        or any(p not in ('windows', 'macos', 'linux') for p in required)): return False
+    if (bundle.get('repository') != connection.repository or bundle.get('merge_commit') != receipt['commit']
+        or task_id not in bundle.get('task_ids', [])
+        or any(bundle.get('platforms', {}).get(p) != 'passed' for p in required)
+        ): return False
+    bundles = source.poll()
+    if bundle not in bundles: return False
+    def order(value):
+        return int(value['run_id']), int(value['attempt'])
+    if any(task_id in b.get('task_ids', []) and order(b) > order(bundle) for b in bundles): return False
+    for lifecycle in metadata.get('_lifecycle_history', []):
+        other = lifecycle.get('remote_attempt', {})
+        if other.get('publication_id') == attempt.get('publication_id'):
+            if other != attempt or lifecycle.get('status') != 'done': return False
+            continue
+        # Cross-mode identities cannot be safely ordered by comment posting time.
+        # Prior rejection or workflow history requires explicit reconciliation.
+        if other.get('kind') != 'local-postmerge' or other.get('status') != 'done': return False
+        previous = other.get('receipt', {}).get('bundle', {})
+        if previous not in bundles or order(previous) >= order(bundle): return False
+    if store.request('GET', '/compare/' + receipt['commit'] + '...main').get('status') not in ('ahead', 'identical'): return False
+    if (review.get('verdict') != 'approve' or review.get('task_id') != task_id or review.get('commit') != receipt['commit']
+        or not isinstance(review.get('summary'), str) or not review['summary'].strip()
+        or not isinstance(review.get('findings'), list) or any(not isinstance(f, str) for f in review['findings'])): return False
+    if (not isinstance(evidence, dict) or set(evidence) != {'spec', 'development', 'test', 'postmerge'}
+        or receipt.get('evidence_digest') != digest(evidence)
+        or not isinstance(policy.get('executor'), str) or not policy['executor'].strip()): return False
+    for record in evidence.values():
+        if (not isinstance(record, dict) or not sha(record.get('sha256'))
+            or not isinstance(record.get('evidence'), str) or not record['evidence'].strip()
+            or record['evidence'].startswith(('/', '\\')) or ':' in record['evidence']
+            or record.get('hash_scheme', 'sha256') not in ('sha256', 'sha256-utf8-lf-v1')
+            or not isinstance(record.get('reviewer'), str) or not record['reviewer'].strip()
+            or record['reviewer'] == policy['executor']): return False
+    return policy.get('reviewer') == evidence['postmerge']['reviewer']
+
+
 def verified_done(connection, store, source, issue):
     try:
         meta = issue_lifecycle(store, issue)
         if meta.get('remote_attempt', {}).get('status') != 'done': return False
-        return verified_receipt(connection, store, source, issue['number'], meta['remote_attempt']) is not None
-    except (OSError, ValueError, KeyError, TypeError, RuntimeError, zipfile.BadZipFile):
+        if meta['remote_attempt'].get('kind') == 'local-postmerge':
+            return verified_local_receipt(connection, store, source, issue, meta)
+        attempt = meta['remote_attempt']
+        # Artifact provenance proves this approval, but cannot erase conflicting history.
+        # Preserve normal progress within one Actions run/attempt; other identities
+        # and any rejection require explicit reconciliation in either receipt mode.
+        identity = (str(attempt.get('run_id', '')), str(attempt.get('run_attempt', '1')))
+        saw_done = False
+        for lifecycle in meta['_lifecycle_history']:
+            other = lifecycle.get('remote_attempt', {})
+            if saw_done and (other.get('status') == 'running' or
+                             (other.get('status') == 'reviewed' and other.get('review', {}).get('verdict') != 'approve')): return False
+            if other.get('status') == 'done': saw_done = True
+            if (other.get('kind') not in (None, 'actions')
+                or other.get('status') not in ('running', 'reviewed', 'done')
+                or lifecycle.get('status') in ('needs_input', 'failed', 'rejected')
+                or ('review' in other and other['review'].get('verdict') != 'approve')
+                or (str(other.get('run_id', '')), str(other.get('run_attempt', '1'))) != identity): return False
+        return verified_receipt(connection, store, source, issue['number'], attempt) is not None
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, RuntimeError, zipfile.BadZipFile):
         return False
 
 

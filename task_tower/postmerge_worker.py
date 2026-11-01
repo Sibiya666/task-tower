@@ -25,7 +25,7 @@ def _write_json(path, value):
 
 
 class Worker:
-    def __init__(self, config, source, reviewer, refresh=None):
+    def __init__(self, config, source, reviewer, refresh=None, publisher=None):
         self.project = Path(config['project']).resolve()
         self.repository = config['repository']
         if not re.fullmatch(r'[A-Za-z0-9-]+/[A-Za-z0-9_.-]+', self.repository):
@@ -44,6 +44,10 @@ class Worker:
         self.journal = Journal(self.state / 'postmerge.sqlite')
         self.source, self.reviewer = source, reviewer
         self.refresh = refresh or self._refresh
+        self.publisher = publisher
+        if self.publisher is None and config.get('github_publication') is not None:
+            from .github_publication import GitHubPublisher
+            self.publisher = GitHubPublisher(self.repository, config['github_publication'], token=resolve_token())
 
     def _refresh(self):
         remote = tasks._git(self.project, 'remote', 'get-url', 'origin')
@@ -163,8 +167,25 @@ class Worker:
                     self._mark(path, 'needs_input', bundle, str(error))
                 except (OSError, ValueError):
                     pass  # Stale/missing cards are not rewritten to bypass validation.
-        return [dict(row, active=(row['task_id'], row['commit']) in active)
+        rows = [dict(row, active=(row['task_id'], row['commit']) in active)
                 for row in self.journal.rows()]
+        if self.publisher:
+            for row in rows:
+                mapping = getattr(self.publisher, 'mapping', None)
+                if mapping is not None and row['task_id'] not in mapping:
+                    row.pop('publication', None)
+                    continue
+                if row['status'] != 'done' or not row['active']:
+                    continue
+                path = self.project / 'docs/tasks' / (row['task_id'] + '.json')
+                bundle = selected[row['task_id']][1]
+                try:
+                    if hasattr(self.publisher, 'verify_source'):
+                        self.publisher.verify_source = self.source.poll
+                    row['publication'] = self.publisher.publish(path, bundle, row, self.required, self.journal)
+                except Exception:
+                    row['publication'] = {'status': 'failed', 'detail': 'Publication proof unavailable or rejected'}
+        return rows
 
 
 def main(argv=None):
@@ -218,14 +239,14 @@ def main(argv=None):
                     last = text
                 time.sleep(interval)
                 continue
-            summary = [{k: row[k] for k in ('task_id', 'commit', 'status', 'detail', 'active')} for row in rows]
+            summary = [{k: row[k] for k in ('task_id', 'commit', 'status', 'detail', 'active', 'publication') if k in row} for row in rows]
             source_errors = getattr(worker.source, 'errors', [])
             text = json.dumps({'tasks': summary, 'source_errors': source_errors}, ensure_ascii=False, sort_keys=True)
             if text != last:
                 print(text, flush=True)
                 last = text
             if args.once:
-                return 1 if source_errors or any(row['active'] and row['status'] in ('needs_input', 'blocked') for row in rows) else 0
+                return 1 if source_errors or any(row['active'] and (row['status'] in ('needs_input', 'blocked') or row.get('publication', {}).get('status') in ('failed', 'publishing', 'pending')) for row in rows) else 0
             time.sleep(interval)
     except KeyboardInterrupt:
         return 130

@@ -1,0 +1,11 @@
+# Independent PR acceptance blocked merge
+
+PR 12, base `a788cfd5e507e9fa75abc119a6c2c099a519c497`, head `9c7de8fbd5abafea10fc4d159b34ccfba998c4e9`, fresh reviewer `pr12_acceptance`: REJECT.
+
+Despite 214 passing tests and successful Windows/Linux/macOS CI, the reviewer reproduced a P1 using real artifact ZIP, digest, workflow and source verification: an old Actions approval, followed by a local rejection, followed by a repost of the old approval yielded `verified_done=True`. The Actions branch ignored lifecycle history, while the local-publisher branch checked it. The result was published as a commit-bound GitHub review and failed `task-tower/pr-acceptance` status. This head was not merged.
+
+The fix applies conservative lifecycle conflict checks to Actions receipts too. Different modes, run identities, attempts and explicit rejections fail closed. History is ordered by actual GitHub comment ID. A new running state after done or an ambiguous reviewed state invalidates replay; normal first progress and explicit approved publication retries remain valid. Regressions use the complete artifact verifier instead of mocking its verdict.
+
+This document records a rejected historical head and the remediation; it is not acceptance of the replacement head. The new head requires a new head/base-bound PR decision and fresh CI. Acceptance artifacts live in GitHub reviews/statuses and private installation records so writing the decision does not change the reviewed head.
+
+The next independent whole-PR review (`pr12_acceptance_v2`) rejected head `00820e041b2a22a336b5cd4291d9783f1ba9be3c` despite 220 passing tests. A matching receipt retry ignored an older discussion comment edited into a lifecycle rejection after a failed close. The publisher could then close the Issue while books correctly refused done. The retry and immediate pre-close checks now require the sole expected lifecycle receipt; ordinary discussion remains allowed. Two production-client regressions reproduce edited history on retry and between receipt POST and the final check. They assert no extra model call or forbidden close. This second rejected head also remained unmerged and received a failed GitHub acceptance status; replacement acceptance is a separate artifact.
