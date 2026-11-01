@@ -20,7 +20,7 @@
 - Designated spec/plan/criteria/MD-evidence artifacts are at most 1 MiB each; other ordinary product blobs, text or binary, are at most 16 MiB each. Product manifest is at most 100,000 paths and 16 MiB. Size failures are explicit; no asset is silently excluded.
 - Every role invocation has a fresh process/instance UUID; fresh reviewers differ from every contributing executor. Process completion alone never accepts a stage.
 - Unknown launch/cleanup/effect retains fencing, execution slot and component locks. No lease expiry, unknown replay, destructive reset or automatic migration.
-- Private state stays outside connected checkouts and rejects alias/link collisions; all children strip GH_TOKEN/GITHUB_TOKEN case-insensitively.
+- Private state stays outside connected checkouts and rejects alias/link collisions. Model/custom/check children strip GH_TOKEN/GITHUB_TOKEN case-insensitively; only fixed trusted contained host CLI worker/dispatcher helpers may inherit existing host credentials as specified in Task6. Git child filtering is unchanged; credentials never enter arguments, JSON, configuration, logs or artifacts.
 - User delegated routine choices and continuous two-Issue execution; no extra per-task chat approval. Independent stage acceptance remains mandatory.
 
 ## Review Focus
@@ -122,16 +122,19 @@ Tasks 1–3 establish contracts; Task 4 joins them into stages; Task 5 adds publ
 
 ### Task 6: CLI, local watch/refill and end-to-end fault tests
 
-**Files:** Create pipeline.py, tests/test_pipeline_integration.py; modify __main__.py command dispatch and pipeline_worker.py watch controller.
+**Files:** Create pipeline.py and tests/test_pipeline_integration.py (focused CLI/watch test modules or fixtures may be split); modify __main__.py command dispatch and pipeline_worker.py watch controller. Add narrowly scoped journal-owned controller ownership/heartbeat/health APIs and their tests to pipeline_journal.py; preserve existing run ownership and state gates.
 
 **Interfaces:**
 - `pipeline.main(argv:list[str]|None=None) -> int`: exact CLI forms/exit codes from spec; adapter v1 wire response unchanged.
 - `watch_tick(config:dict, journal:PipelineJournal, *, dispatch_tick=dispatcher.tick) -> dict`: one bounded source refresh/recovery/refill pass, at most one genuine dispatcher tick.
 - `watch(config:dict, journal:PipelineJournal) -> int`: local controller loop, bounded workers, cleanup and backoff; one controller owner per journal.
 - `adapter(request:dict, config:dict, journal:PipelineJournal) -> dict`: exact six-field request and durable pipeline receipt, no executor queue row.
+- Journal-owned controller context/claim, heartbeat, release and read-only health accessors use actual owner UUID/PID and advisory-lock proof; no caller SQL, unknown-run reset or arbitrary takeover. Choose focused helper names consistently with the existing controller schema, and expose only validated fixed health counters/reasons.
+- Fixed trusted host worker/dispatcher helper invocations use the existing contained runner and may inherit existing host GH_TOKEN/GITHUB_TOKEN for API authentication. Model/custom/check children keep child_environment stripping; Git transport filtering is unchanged. Helpers never persist or print secrets. Run genuine dispatcher.tick in a cancellable helper so slow source reads do not block watch cancellation/refill observation.
 
 - [ ] Write RED cases `test_real_dispatch_adapter_to_six_roles_and_host_tests`, `test_duplicate_delivery_and_ticks_do_not_rerun`, `test_two_slots_refill_and_conflicting_keys_skip`, `test_clean_blocked_task_does_not_stall_unrelated_task`, `test_second_watch_and_multiple_workers_cannot_steal`, `test_unknown_retains_slot_and_components`, `test_preintent_transport_backoff_not_delivery_resubmit`, `test_restart_at_every_intent_boundary`, `test_status_cancel_inspect_after_profile_revocation`, `test_sigint_cleanup_and_fixed_public_json`.
 - [ ] Run `python -m unittest tests.test_pipeline_integration -v`; verify RED. Integration substitutes only GitHub transport; genuine selection/dependency verifiers must consume well-formed fixtures instead of a true-returning predicate.
+- [ ] Add real-process regressions for environment-only host API authentication versus stripped role/check environments, a slow genuine source helper interrupted within the cleanup budget, duplicate controller claims and controller exit retaining unknown run locks. Assert no credentials in any arguments/result/log/config artifact and no backend resubmit after a committed delivery intent.
 - [ ] Implement parser/routing and existing dispatcher integration with separate private journal; validate backend identity and no overlapping legacy ownership. Spawn at most two local bounded task workers; process groups/Jobs come from existing runner, not naked uncontained Popen. Persist controller heartbeat/health, poll completion, skip conflicts and refill without chat intervention. Preserve unknown locks and terminal parked identity. Implement read-only inspect and status/cancel without requiring executable pins. Backoff exact 5/10/20/40/60 seconds only for pre-intent read failures.
 - [ ] Run full `python -m unittest discover -s tests -v`; require PASS, then current three-OS CI on exact integration head. Independent task reviewer checks actual watch lifecycle and no implicit distributed claims.
 - [ ] Commit with `feat: operate durable local pipeline watch and automatic refill`.

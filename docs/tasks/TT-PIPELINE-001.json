@@ -20,9 +20,9 @@
   "stages": {
     "spec": {
       "status": "accepted",
-      "reviewer": "pipeline_spec_acceptance",
-      "evidence": "evidence/TT-PIPELINE-001/spec-review.md",
-      "sha256": "07920c16697004c1cde8a17a58a3c826faaa1038c73573e3fa8b39ea04e0f01d",
+      "reviewer": "pipeline_task6_spec_review",
+      "evidence": "evidence/TT-PIPELINE-001/task6-spec-review.md",
+      "sha256": "364328bd9340cffadfdf437ce72e1f302b5363dfe38368daa30d5649f3193441",
       "hash_scheme": "sha256-utf8-lf-v1"
     },
     "development": {
