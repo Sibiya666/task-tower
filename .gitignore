@@ -2,6 +2,7 @@ __pycache__/
 *.py[cod]
 runtime/
 .superpowers/
+.task-tower/
 node_modules/
 overlay/runtime/
 overlay/project-map.json

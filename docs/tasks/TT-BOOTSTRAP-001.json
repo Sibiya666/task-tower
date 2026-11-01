@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "id": "TT-BOOTSTRAP-001",
+  "title": "Bootstrap после clone с выбором harness и Superpowers",
+  "project_root": "../..",
+  "executor": "bootstrap-implementation-team",
+  "mode": "assisted",
+  "status": "awaiting_merge",
+  "spec": "../superpowers/specs/2026-11-01-bootstrap-harness-design.md",
+  "plan": "../superpowers/plans/2026-11-01-bootstrap-harness.md",
+  "acceptance_criteria": [
+    "Определение ОС и выбор codex/claude/opencode/custom",
+    "Локальная настройка и проверка pin Superpowers без чтения авторизации",
+    "Shell-free запуск в проекте с передачей инструкций",
+    "Проверяемые независимые приёмки; done только после main и postmerge"
+  ],
+  "stages": {
+    "spec": {
+      "status": "accepted",
+      "reviewer": "bootstrap-spec-reviewer",
+      "evidence": "evidence/TT-BOOTSTRAP-001/spec-review.md",
+      "sha256": "2045f4266d7fa792948e10f3dd7d20824e274cd42614f610b8cc90f6da2afbd4"
+    },
+    "development": {
+      "status": "accepted",
+      "reviewer": "bootstrap-final-reviewer",
+      "evidence": "evidence/TT-BOOTSTRAP-001/development-review.md",
+      "sha256": "e7ef4a50e8250dd16b91dba20ba80c8d35e86c0c97bc6df0eafcd33efa4f062a"
+    },
+    "test": {
+      "status": "accepted",
+      "reviewer": "bootstrap-test-acceptance",
+      "evidence": "evidence/TT-BOOTSTRAP-001/test-acceptance.md",
+      "sha256": "38014c4e26db1ba4c5e168b551f2aa0acf425ff855b96761f2536cde2b66ba95"
+    },
+    "postmerge": {
+      "status": "pending"
+    }
+  }
+}

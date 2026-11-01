@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "id": "my-harness",
+  "launch_argv": ["my-harness", "--project", "{project}", "--instructions", "{instructions}"],
+  "capabilities": {"interactive_launch": true}
+}
