@@ -40,6 +40,8 @@ Windows, Windows PowerShell 5.1 с WPF, WebView2 Runtime и Python 3.11+.
 
 Нажмите этаж, чтобы войти. ← возвращает к башням, ◆ закрепляет окно, × закрывает. Оба экрана перетаскиваются за рисунок; движение от 5 пикселей считается перетаскиванием. Поле башен прокручивается колёсиком.
 
+Открытая комната сдвигается внутрь рабочей области текущего монитора с учётом панели задач и DPI. При возврате восстанавливаются прежние координаты и размер обзора, а также прокрутка поля башен. Перемещение комнаты не меняет сохранённое положение обзора; при недоступности прежнего места окно сдвигается в доступную рабочую область.
+
 ## Интерьеры и агенты
 
 - Четыре размерности: кабинет для 1–4 сотрудников, мастерская для 5–8, зал для 9–16, большое помещение для 17+. По три цельных скина каждой размерности — всего 12.
@@ -85,7 +87,7 @@ python -m task_tower audit --project C:/path/to/project --manifest examples/dial
 python -m unittest discover -s tests -v
 Push-Location overlay
 python -m unittest -v
-node --test test-web.cjs test-room-skins.cjs test-presence.cjs test-presence-browser.cjs
+node --test test-web.cjs test-room-skins.cjs test-presence.cjs test-presence-browser.cjs test-scene-position.cjs
 powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File overlay.ps1 -SmokeTest
 Pop-Location
 ```
