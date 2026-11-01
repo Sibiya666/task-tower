@@ -108,8 +108,12 @@ class ProjectsTests(unittest.TestCase):
                 parse_metadata(replace_metadata('', dict(version=1, kind='task', executor='same', stages=stages)))
 
     def test_import_is_idempotent_and_preserves_unverified_evidence(self):
+        from tests.test_project_onboarding import API
+        from task_tower.project_onboarding import ensure_project_connection
+        api=API('owner/one')
         issues = []
         def transport(method, url, headers, payload, limit):
+            if url.endswith('/graphql'): return api.transport(method,url,headers,payload,limit)
             if '/comments?' in url: return b'[]'
             if method == 'POST':
                 issues.append(dict(payload, number=1))
@@ -118,7 +122,8 @@ class ProjectsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             card = Path(directory) / 'card.json'
             card.write_text(json.dumps(dict(version=1, id='OLD-1', status='done', stages={}, description='Preserved prose', evidence='old.md')), encoding='utf-8')
-            store = GitHubTasks(self.connection(), transport=transport)
+            connection=ensure_project_connection(Path(directory)/'connections.json','one','owner/one',Path(directory).resolve(),'tower',transport=api.transport)
+            store = GitHubTasks(connection, transport=transport)
             self.assertEqual(store.import_card(card)['number'], 1)
             self.assertEqual(store.import_card(card)['number'], 1)
             self.assertEqual(len(issues), 1)

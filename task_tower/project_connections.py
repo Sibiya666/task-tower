@@ -8,6 +8,9 @@ from pathlib import Path
 import re
 import sys
 import tempfile
+import sqlite3
+import stat
+from contextlib import closing
 
 REPOSITORY = r'[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9_][A-Za-z0-9_.-]*'
 
@@ -63,6 +66,54 @@ def load_connections(path):
         raise ValueError('Invalid project connections configuration') from None
 
 
+def safe_config_path(path):
+    """Reject links before resolution, including Windows directory junctions."""
+    path = Path(os.path.abspath(path))
+    for part in (path, *path.parents):
+        try:
+            info = part.lstat()
+        except FileNotFoundError:
+            continue
+        if stat.S_ISLNK(info.st_mode) or getattr(info, 'st_file_attributes', 0) & 0x400:
+            raise ValueError('Unsafe connections path')
+    if path.exists() and not path.is_file(): raise ValueError('Unsafe connections path')
+    return path
+
+
+def connection_snapshot(path):
+    path = safe_config_path(path)
+    if not path.exists(): return None, []
+    before = path.read_bytes()
+    connections = load_connections(path)
+    if path.read_bytes() != before: raise ValueError('Connections changed; rerun setup')
+    return before, connections
+
+
+def write_connections(path, connections, *, expected):
+    """Serialize cooperating writers, then compare and atomically replace bytes."""
+    path = safe_config_path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock = safe_config_path(path.with_name(path.name + '.lock.sqlite3'))
+    with closing(sqlite3.connect(lock, timeout=10)) as database, database:
+        database.execute('BEGIN IMMEDIATE')
+        safe_config_path(path)
+        current = path.read_bytes() if path.exists() else None
+        if current != expected: raise ValueError('Connections changed; rerun setup')
+        value = dict(version=1, projects=[dict(asdict(c), checkout=str(c.checkout)) for c in connections])
+        descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix='.connections-')
+        try:
+            with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
+                json.dump(value, stream, indent=2)
+                stream.flush()
+                os.fsync(stream.fileno())
+            safe_config_path(path)
+            if (path.read_bytes() if path.exists() else None) != expected:
+                raise ValueError('Connections changed; rerun setup')
+            os.replace(temporary, path)
+        finally:
+            Path(temporary).unlink(missing_ok=True)
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description='Manage private installation project connections')
     parser.add_argument('--config', required=True, type=Path)
@@ -76,13 +127,12 @@ def main(argv=None):
     commands.add_parser('remove').add_argument('id')
     args = parser.parse_args(argv)
     try:
-        path = args.config.resolve()
+        path = safe_config_path(args.config)
         if args.command == 'init':
-            path.parent.mkdir(parents=True, exist_ok=True)
-            with path.open('x', encoding='utf-8') as stream:
-                json.dump(dict(version=1, projects=[]), stream, indent=2)
+            write_connections(path, [], expected=None)
             return 0
-        connections = load_connections(path)
+        before, connections = connection_snapshot(path)
+        if before is None: raise ValueError('Missing configuration')
         if args.command == 'list':
             print(json.dumps([dict(asdict(c), checkout=str(c.checkout)) for c in connections], indent=2))
             return 0
@@ -95,15 +145,7 @@ def main(argv=None):
             remaining = [c for c in connections if c.id != args.id]
             if len(remaining) == len(connections): raise ValueError('Unknown project')
             connections = remaining
-        descriptor, temporary = tempfile.mkstemp(dir=path.parent, prefix='.connections-')
-        try:
-            with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
-                json.dump(dict(version=1, projects=[dict(asdict(c), checkout=str(c.checkout)) for c in connections]), stream, indent=2)
-                stream.flush()
-                os.fsync(stream.fileno())
-            os.replace(temporary, path)
-        finally:
-            Path(temporary).unlink(missing_ok=True)
+        write_connections(path, connections, expected=before)
         return 0
     except (ValueError, OSError):
         print('task-tower: invalid connections operation; existing configuration preserved', file=sys.stderr)

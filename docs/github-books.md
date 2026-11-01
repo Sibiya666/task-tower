@@ -1,5 +1,19 @@
 # Project connections and books
 
+## Target bookshelf hierarchy
+
+The shelf keeps three books, each scoped or filtered by project:
+
+- **Ideas** contains proposals before commitment. Promoting an idea links it to its resulting feature or task; the original idea remains traceable.
+- **Tasks** contains implementation milestones, large features represented by parent Issues, and their native GitHub sub-issues. An Issue may also represent a bug, research or documentation work. A milestone groups work toward a release or stage; it is not a feature or an Issue parent. A feature may span milestones, so grouping by stage must retain its parent link rather than invent a second parent or duplicate task.
+- **Project library** contains specs, research, designs, decisions and acceptance reports linked to the relevant feature, task and implementation stage. Markdown in the repository remains the content source.
+
+Books are containers and projections of these concepts, not separate copies of GitHub records. Native Issue parent/sub-issue relationships supply the feature tree; milestone membership supplies the implementation-stage view; Project supplies the board. Retain repository-qualified identities and source links at every level. Unassigned tasks remain visible, and unavailable relationships must be shown as unavailable rather than inferred from titles or silently treated as absent.
+
+Feature progress shows accepted child work separately from merged or merely closed Issues. A parent is not automatically accepted because its children are closed: its own acceptance criteria and exact-main postmerge acceptance still apply. Completed work and its artifacts remain accessible.
+
+This hierarchy is a target requirement for Issues #22/#23. The current CLI/HTML renderer still produces a flat snapshot with project/book filters and three entries per page; it does not yet render milestone groups or expandable feature trees.
+
 Connections belong to the installation, outside the product checkout (or inside ignored `runtime/`). They contain no credentials. Commands require an explicit path and never save your list in the product source by default. Checkout paths must be existing absolute directories. IDs and repositories are unique; GitHub Project URLs are optional.
 
 ```powershell

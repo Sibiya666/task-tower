@@ -137,6 +137,9 @@ class GitHubTasks:
 
     def import_card(self, path):
         from .tasks import load_task
+        from .project_onboarding import preflight
+        from .projects_board import sync_issue
+        from .creation_journal import CreationJournal
         path = Path(path).resolve()
         raw = json.loads(path.read_text(encoding='utf-8'))
         if not isinstance(raw, dict) or not isinstance(raw.get('id'), str) or not raw['id'].strip(): raise ValueError('Invalid legacy card')
@@ -146,12 +149,64 @@ class GitHubTasks:
             status = verified['status'] if verified['status'] != 'done' else 'needs_input'
         except ValueError:
             status = 'needs_input'
-        for issue in self.list_issues():
-            metadata = self.metadata(issue)
-            if metadata and metadata.get('legacy_id') == raw['id']: return issue
+        # This must succeed before any Issue POST, including retries.
+        repository=preflight(self.connection, self)
+        journal=CreationJournal(self.connection.checkout/'.task-tower'/'create-intents.sqlite3')
+
+        def find_existing():
+            matches=[]
+            for issue in self.list_issues():
+                metadata=self.metadata(issue)
+                if not metadata: continue
+                aliases=[metadata[key] for key in ('task_id','legacy_id','id') if key in metadata]
+                if raw['id'] in aliases:
+                    if any(alias!=raw['id'] for alias in aliases): raise ValueError('Conflicting task identity aliases; repair existing Issue metadata')
+                    matches.append(issue)
+            if len(matches)>1: raise ValueError('Ambiguous task identity; repair duplicate Issues before importing')
+            return matches[0] if matches else None
+
+        def repair(issue):
+            if not isinstance(issue,dict) or type(issue.get('number')) is not int or issue['number']<1:
+                raise ValueError('Issue creation outcome uncertain; inspect repository before retrying')
+            result=dict(issue)
+            try:
+                from .project_worker import issue_lifecycle, verified_done
+                from .github_source import GitHubSource
+                source=GitHubSource(self.repository,transport=lambda url,headers,limit: self.transport('GET',url,dict(self.headers),None,limit))
+                def current_status(current):
+                    metadata=issue_lifecycle(self,current)
+                    if metadata.get('status')=='done' and verified_done(self.connection,self,source,current): return 'done'
+                    return task_status(metadata)
+                result['project_sync']=sync_issue(self.connection,self,issue['number'],verified_status=current_status)
+            except (GitHubSourceError,ValueError,KeyError,TypeError):
+                result['project_sync']=dict(status='unavailable',detail='Project repair unavailable; check access and rerun import')
+            if result['project_sync']['status']!='synced':
+                result['project_sync'].update(stage='membership_or_status',issue_url='https://github.com/'+self.repository+'/issues/'+str(issue['number']),retry='Rerun import to repair the existing Issue')
+            return result
+
+        def reconcile_and_repair(issue):
+            try:
+                journal.reconcile('issue',repository['id'],raw['id'],str(issue['number']))
+            except ValueError:
+                return dict(issue,project_sync=dict(status='unavailable',stage='creation_journal',
+                    issue_url='https://github.com/'+self.repository+'/issues/'+str(issue['number']),
+                    detail='Issue retained; private creation journal could not reconcile',
+                    retry='Preserve the journal, restore access or inspect its existing identity, then retry the same card'))
+            return repair(issue)
+
+        existing=find_existing()
+        if existing: return reconcile_and_repair(existing)
         metadata = dict(version=1, kind='task', legacy_id=raw['id'], status=status, legacy_card=raw)
         body = replace_metadata(raw.get('description', '') if isinstance(raw.get('description', ''), str) else '', metadata)
-        return self.request('POST', '/issues', dict(title=str(raw.get('title') or raw['id'])[:256], body=body))
+        if not journal.reserve('issue',repository['id'],raw['id']):
+            raise ValueError('Issue creation outcome uncertain or previously resolved Issue unavailable; inspect repository task identity. Preserve .task-tower/create-intents.sqlite3; no POST retried')
+        try:
+            issue=self.request('POST', '/issues', dict(title=str(raw.get('title') or raw['id'])[:256], body=body))
+            if not isinstance(issue,dict) or type(issue.get('number')) is not int: raise GitHubRequestError()
+        except GitHubSourceError:
+            issue=find_existing()
+            if issue is None: raise ValueError('Issue creation outcome uncertain; inspect repository task identity before retrying; no POST retried') from None
+        return reconcile_and_repair(issue)
 
     def library(self):
         repository = self.request('GET', '/')
