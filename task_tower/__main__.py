@@ -35,6 +35,9 @@ def run_baseline(root, manifest, report):
 
 def main(argv=None):
     supplied = sys.argv[1:] if argv is None else argv
+    if supplied and supplied[0] == 'capture':
+        from .capture_cli import run as capture_main
+        return capture_main(supplied[1:])
     if supplied and supplied[0] == 'connect':
         from .project_onboarding import main as connect_main
         return connect_main(supplied[1:])

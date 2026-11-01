@@ -1,6 +1,6 @@
 # Foreground Issue dispatcher
 
-The dispatcher selects explicitly allowlisted ready GitHub tasks and delivers only their identities to a trusted installation adapter. It does not run development, mark tasks complete, change GitHub, select models, install tools or register services. #24 is complete; #14 remains current through exact-main acceptance and automatic closure; #15 is next.
+The dispatcher selects explicitly allowlisted ready GitHub tasks and delivers only their identities to a trusted installation adapter. It does not run development, mark tasks complete, change GitHub, select models, install tools or register services. #24 and #14 passed exact-main acceptance and automatic closure; #15 and #22 are the current independent workstreams.
 
 Run `python -m task_tower dispatcher --connections PATH --config PATH --journal PATH --once`. Omit `--once` for foreground polling (Ctrl-C exits cleanly). `--status` reads local journal state without GitHub or adapter calls. `--dry-run` reads GitHub and plans work without creating directories, journal files or adapter processes. Status and dry-run are mutually exclusive.
 
@@ -30,3 +30,9 @@ Each tick permits up to eight new submits and eight unknown lookups. New work fo
 Reports contain sanitized identities and fixed reason codes. Exit 0 means a completed report (ordinary not-ready, disabled and deferred work included), 1 means source/backend/journal operational failure or unresolved outcomes, and 2 means invalid CLI/configuration. The foreground loop continues per-project source errors; invalid global configuration or journal integrity stops it. Delivery acceptance is only adapter acknowledgment, never independent development or postmerge acceptance.
 
 Active-chat authorization continues to the next eligible task after each main/postmerge/Issue-closure cycle without another continue. Foreground polling and that chat authorization are separate from future development execution and daemon orchestration.
+
+Dependency proof reads reuse existing host GitHub authentication, including artifact access. This credential remains in the host reader, not the identity-only backend request. Authentication does not turn an unverifiable dependency into ready work; verified_done requirements remain unchanged.
+
+## Development executor adapter
+
+The optional trusted backend can now call the [executor adapter](executor.md#dispatcher-adapter-and-commands). Accepted means durably queued, not execution or task completion. Start a foreground `executor work --once` separately; dispatcher delivery budgets do not create a persistent developer pool. Continuous stage transitions and automatic slot refill remain #16/#18/#19. Keep the dispatcher journal and executor queue private and preserve uncertain intents across restart.

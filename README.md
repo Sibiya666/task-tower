@@ -2,15 +2,16 @@
 
 Один проект для организации агентной разработки и её визуализации. Проекты представлены фэнтезийными башнями, сессии — этажами, агенты — сотрудниками внутри помещений.
 
-Сейчас работают **прозрачный Windows-оверлей** с локальными данными Codex, **CLI аудита готовности проектов**, bootstrap установленного harness и независимая приёмка после слияния. Подключения GitHub-проектов, три книги в CLI/HTML и очередь приёмки для self-hosted runners настраиваются отдельно; автоматическая разработка и слияния пока не реализованы. Оверлей наблюдает за работой и сам не запускает агентов.
+Сейчас работают **прозрачный Windows-оверлей** с локальными данными Codex, **CLI аудита готовности проектов**, bootstrap установленного harness и независимая приёмка после слияния. Подключения GitHub-проектов, три книги в CLI/HTML и очередь приёмки для self-hosted runners настраиваются отдельно; доступен [foreground-исполнитель Codex/custom](docs/executor.md) с устойчивой локальной очередью; автоматическая смена этапов и слияния пока не реализованы. Оверлей наблюдает за работой и сам не запускает агентов.
 
 У каждого подключённого проекта свои Issues, GitHub Project и Markdown-артефакты. Приватный список подключений принадлежит установке, а не репозиторию продукта. [Подключения и книги](docs/github-books.md), [распределённая приёмка и установка runners](docs/github-projects.md).
 
-[Процесс непрерывной и параллельной разработки](docs/development-process.md): после явной авторизации бэклога менеджер сам поддерживает до двух независимых задач в работе. Ветки, рабочие копии и приёмка раздельны; слияния и приёмка main последовательны. Сейчас этим управляет активный агентный чат; постоянный пул исполнения внедряется в #15/#16/#18/#19.
+[Процесс непрерывной и параллельной разработки](docs/development-process.md): после явной авторизации бэклога менеджер сам поддерживает до двух независимых задач в работе. Ветки, рабочие копии и приёмка раздельны; слияния и приёмка main последовательны. Сейчас этим управляет активный агентный чат; локальный исполнитель описан в [инструкции](docs/executor.md), постоянный пул и контроллер этапов внедряются в #16/#18/#19.
 
-Целевая структура книжной полки: «Идеи» хранит предложения, «Задачи» — этапы Milestone, крупные фичи в родительских Issues и их подзадачи, «Библиотека проекта» — связанные спеки, исследования и результаты. Этап и фича — отдельные связи: фича может проходить через несколько этапов. Сейчас CLI/HTML показывает плоский список; иерархическое представление запланировано в #22/#23.
 
-Для нового подключения сначала настройте GitHub CLI и создайте/подключите Project, затем импортируйте Issues: [пошаговая настройка с чистого clone](docs/github-setup.md). Bootstrap принимает явные GitHub-флаги и останавливает запуск при отказе Projects; локальный запуск без них не доказывает GitHub-готовность. [Roadmap и реальные Issues 13–28](docs/roadmap.md): project-first onboarding #24 завершён; текущая задача — диспетчер #14, следующая — исполнитель #15. Фоновый исполнитель разработки ещё не реализован.
+Целевая структура книжной полки: «Идеи» хранит предложения, «Задачи» — этапы Milestone, крупные фичи в родительских Issues и их подзадачи, «Библиотека проекта» — связанные спеки, исследования и результаты. Этап и фича — отдельные связи: фича может проходить через несколько этапов. Сейчас CLI/HTML показывает плоский список; структурированные связи и provenance захвата доступны в данных; иерархический интерфейс остаётся в #23.
+
+Для нового подключения сначала настройте GitHub CLI и создайте/подключите Project, затем импортируйте Issues: [пошаговая настройка с чистого clone](docs/github-setup.md). Bootstrap принимает явные GitHub-флаги и останавливает запуск при отказе Projects; локальный запуск без них не доказывает GitHub-готовность. [Roadmap и реальные Issues 13–28](docs/roadmap.md): project-first onboarding #24 и диспетчер #14 завершены; #22 находится в main и ожидает независимую postmerge-приёмку/автоматическое закрытие; #15 проходит итоговую приёмку. Исполнитель запускается явно через `executor work --once`; постоянного пула разработки пока нет.
 
 Работающий локальный watcher также может [публиковать успешную приёмку и закрывать связанную Issue](docs/github-publication.md). Для этого в приватной конфигурации явно задаются сопоставления задач и доверенный аккаунт; установка self-hosted runner для этого режима не требуется.
 
@@ -52,6 +53,8 @@ Windows, Windows PowerShell 5.1 с WPF, WebView2 Runtime и Python 3.11+.
 
 Открытая комната сдвигается внутрь рабочей области текущего монитора с учётом панели задач и DPI. При возврате восстанавливаются прежние координаты и размер обзора, а также прокрутка поля башен. Перемещение комнаты не меняет сохранённое положение обзора; при недоступности прежнего места окно сдвигается в доступную рабочую область.
 
+Оверлей также проверяет границы после перетаскивания/изменения размера и перед открытием настроек. Сохранённая позиция за пределами рабочей области корректируется; недоступные части окна и панели не сохраняются намеренно.
+
 ## Интерьеры и агенты
 
 - Четыре размерности: кабинет для 1–4 сотрудников, мастерская для 5–8, зал для 9–16, большое помещение для 17+. По три цельных скина каждой размерности — всего 12.
@@ -62,6 +65,18 @@ Windows, Windows PowerShell 5.1 с WPF, WebView2 Runtime и Python 3.11+.
 - Анимированы дыхание, рабочие движения, инструмент, песочные часы, облака за стеклом и свет свечей. Учитывается системное уменьшение движения.
 - Башни сохраняют участки на поле и занимают несколько рядов. Наведение слегка осветляет камень выбранного этажа.
 - Участки привязаны к правому краю, ближе к управлению, без пустой третьей колонки при двух проектах. При появлении нового работающего агента на открытом обзоре персонаж подходит к двери башни и входит; начальная загрузка и повторные обновления не воспроизводят этот вход.
+
+### Мир, освещение и погода
+
+Правый клик по сцене открывает компактные настройки. Постоянные кнопки управления остаются прежними. Освещение по умолчанию следует местному времени: рассвет 06–08, день 08–18, сумерки 18–20, ночь 20–06. Можно вручную выбрать день или ночь. Переключение плавное, без непрозрачной подложки поверх рабочего стола.
+
+Солнце или луна на сцене показывают фазу освещения. В настройках есть строка «Сейчас: …» с местным временем или пометкой ручного режима. Сетка адаптируется к ширине окна: до трёх колонок, без обрезания башен по горизонтали; следующие ряды доступны вертикальной прокруткой.
+
+Погода выбирается вручную: ясно, облачно, дождь, туман. Используются прозрачные пиксельные эффекты PixelFX; облака находятся за башнями, осадки не перехватывают мышь. Эффекты можно отключить. При системном уменьшении движения показывается статичный кадр.
+
+Башни с более чем восемью сессиями в обзоре имеют компактный дальний силуэт из четырёх декоративных секций. Это уровень детализации обзора, а не удаление/объединение чатов: рядом показано настоящее число этажей. Нажмите плашку «N этажей» для полного списка сессий или переключения на изображение всех этажей. Подсветка декоративной секции означает активность хотя бы одной соответствующей реальной сессии.
+
+Башня скрывается после 30 минут подтверждённого простоя. В настройках доступны 10/30/60 минут или отключение скрытия, а также «Показывать скрытые башни». Активность и ожидание решения возвращают/сохраняют башню; неизвестное состояние, ошибка и устаревший источник не запускают скрытие. Проекты, чаты и их данные не удаляются; участок сохраняется. Настройки и время простоя сохраняются только в локальном профиле WebView2.
 
 ## Данные
 
@@ -100,7 +115,7 @@ python -m task_tower audit --project C:/path/to/project --manifest examples/dial
 python -m unittest discover -s tests -v
 Push-Location overlay
 python -m unittest -v
-node --test test-web.cjs test-room-skins.cjs test-presence.cjs test-presence-browser.cjs test-scene-position.cjs test-session-light.cjs test-tower-arrivals.cjs
+node --test test-web.cjs test-room-skins.cjs test-presence.cjs test-presence-browser.cjs test-scene-position.cjs test-session-light.cjs test-tower-arrivals.cjs test-world-policy.cjs test-world-browser.cjs test-visual-audit.cjs
 powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File overlay.ps1 -SmokeTest
 Pop-Location
 ```
@@ -115,6 +130,10 @@ Pop-Location
 
 ## Foreground Issue dispatcher
 
-`python -m task_tower dispatcher --connections PRIVATE_CONNECTIONS --config PRIVATE_CONFIG --journal PRIVATE_JOURNAL --once` delivers authorized ready identities to a trusted custom adapter. See [configuration, recovery and limits](docs/dispatcher.md). The default command polls in the foreground; delivery is not development execution or accepted task completion. #14 remains current until exact-main independent acceptance and automatic Issue closure; #15 is next.
+`python -m task_tower dispatcher --connections PRIVATE_CONNECTIONS --config PRIVATE_CONFIG --journal PRIVATE_JOURNAL --once` delivers authorized ready identities to a trusted custom adapter. See [configuration, recovery and limits](docs/dispatcher.md). The default command polls in the foreground; delivery is not development execution or accepted task completion. #14 passed exact-main independent acceptance and automatic closure; #15 and #22 are coordinated in parallel with separate worktrees.
 
 Active-chat authorization continues to the next eligible backlog task after every main/postmerge/Issue-closure cycle without another continue. It does not establish a background development daemon.
+
+## Explicit session capture
+
+[Capture, idea promotion and legacy migration](docs/session-capture.md) use explicit input and the selected project. Original text/session provenance and native parent/milestone links are retained. Ideas do not execute implicitly; migration keeps the original card/evidence bytes and exposes drift while GitHub remains canonical. No all-chat scraping or Codex database writes are involved.

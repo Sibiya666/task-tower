@@ -27,8 +27,6 @@ public sealed class TowerHost : Window
     bool ready, collapsed;
     bool floorView;
     Rect overviewBounds;
-    IntPtr overviewMonitor;
-    NativeRect overviewMonitorWork;
     string lastData;
     int result;
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern IntPtr FindWindow(string c,string t);
@@ -58,17 +56,20 @@ public sealed class TowerHost : Window
     }
     void KeepInsideMonitor()
     {
-        var point=ClampPosition(new Rect(Left,Top,Width,Height),MonitorWorkArea());
+        var work=MonitorWorkArea();
+        if(Width>work.Width){MinWidth=Math.Min(MinWidth,work.Width);Width=work.Width;}
+        if(Height>work.Height)SetHeight(work.Height);
+        var point=ClampPosition(new Rect(Left,Top,Width,Height),work);
         Left=point.X;Top=point.Y;
     }
     void RestoreOverviewVisibility()
     {
-        if(floorView)return;
-        var info=new MonitorInfo();info.Size=Marshal.SizeOf(typeof(MonitorInfo));
-        bool unchanged=GetMonitorInfo(overviewMonitor,ref info)
-            && info.Work.Left==overviewMonitorWork.Left && info.Work.Top==overviewMonitorWork.Top
-            && info.Work.Right==overviewMonitorWork.Right && info.Work.Bottom==overviewMonitorWork.Bottom;
-        if(!unchanged)KeepInsideMonitor();
+        if(!floorView)KeepInsideMonitor();
+    }
+    IntPtr WindowMessages(IntPtr hwnd,int message,IntPtr w,IntPtr l,ref bool handled)
+    {
+        if(message==0x0232)Dispatcher.BeginInvoke(new Action(KeepInsideMonitor),DispatcherPriority.Loaded);
+        return IntPtr.Zero;
     }
 
     public static int Run(string folder, string python, bool smoke)
@@ -101,7 +102,8 @@ public sealed class TowerHost : Window
         deadline.Interval=TimeSpan.FromSeconds(30);
         deadline.Tick+=(s,e)=>{deadline.Stop();if(!ready){Log(new Exception("WebView2 startup timed out"));result=1;Close();}};
         Loaded+=async (s,e)=>{deadline.Start();await Initialize();};
-        ContentRendered+=(s,e)=>ShowWindow(new WindowInteropHelper(this).Handle,5);
+        SourceInitialized+=(s,e)=>HwndSource.FromHwnd(new WindowInteropHelper(this).Handle).AddHook(WindowMessages);
+        ContentRendered+=(s,e)=>{ShowWindow(new WindowInteropHelper(this).Handle,5);KeepInsideMonitor();};
         Closed+=(s,e)=>{
             timer.Stop();deadline.Stop();ready=false;
             try{web.Dispose();}catch{}
@@ -135,9 +137,6 @@ public sealed class TowerHost : Window
                         case "floor-view":
                             if(!floorView){
                                 overviewBounds=new Rect(Left,Top,Width,Height);
-                                overviewMonitor=MonitorFromWindow(new WindowInteropHelper(this).Handle,2);
-                                var savedMonitor=new MonitorInfo();savedMonitor.Size=Marshal.SizeOf(typeof(MonitorInfo));
-                                if(GetMonitorInfo(overviewMonitor,ref savedMonitor))overviewMonitorWork=savedMonitor.Work;
                                 var work=MonitorWorkArea();double right=Left+Width;
                                 MinWidth=300;MaxWidth=500;Width=340;SetHeight(300);
                                 var point=ClampPosition(new Rect(right-Width,Top,Width,Height),work);
@@ -153,7 +152,8 @@ public sealed class TowerHost : Window
                             }
                             break;
                         case "collapse":collapsed=!collapsed;SetHeight(collapsed?40:560);break;
-                        case "drag":ReleaseCapture();SendMessage(new WindowInteropHelper(this).Handle,0xA1,new IntPtr(2),IntPtr.Zero);break;
+                        case "fit-window":KeepInsideMonitor();break;
+                        case "drag":ReleaseCapture();SendMessage(new WindowInteropHelper(this).Handle,0xA1,new IntPtr(2),IntPtr.Zero);KeepInsideMonitor();break;
                     }
                 }catch(Exception ex){Log(ex);}
             };
@@ -223,8 +223,13 @@ public sealed class TowerHost : Window
             await Task.Delay(150);
             await web.CoreWebView2.ExecuteScriptAsync("document.getElementById('back-icon').click()");
             await Task.Delay(150);
-            if(Math.Abs(Left-partialLeft)>1)throw new Exception("Partially offscreen overview was not restored exactly");
+            if(!MonitorWorkArea().Contains(new Rect(Left,Top,Width,Height)))throw new Exception("Offscreen overview must be recovered on return");
             Left=savedOverview.X;
+            var popupWork=MonitorWorkArea();Left=popupWork.Right-Width+40;Top=popupWork.Bottom-Height+40;
+            await web.CoreWebView2.ExecuteScriptAsync("window.chrome.webview.postMessage({action:'fit-window'})");
+            await Task.Delay(150);
+            if(!MonitorWorkArea().Contains(new Rect(Left,Top,Width,Height)))throw new Exception("Settings opening left native window outside monitor");
+            Left=savedOverview.X;Top=savedOverview.Y;
             Width=1000;await Task.Delay(150);
             string overflow=await web.CoreWebView2.ExecuteScriptAsync("document.documentElement.scrollWidth > innerWidth || document.documentElement.scrollHeight > innerHeight");
             if(overflow!="false")throw new Exception("HTML overflow in wide window");
