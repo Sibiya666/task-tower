@@ -333,20 +333,26 @@ def _freeze_checkpoint(run,task_policy,journal,owner_id,failed_attempt_id=None):
         message = 'Task Tower ' + ('publication ' if host_evidence else 'checkpoint ') + run['run_id']
         contributors=[a for a in journal.history(run['run_id'])['attempts']
             if a['stage']==run['stage'] and a['role']==run['stage']+'_executor']
-        contributing = contributors[-1]['attempt_id'] if contributors and contributors[-1]['state']=='completed' else None
+        contributing = contributors[-1]['attempt_id'] if not host_evidence and contributors and contributors[-1]['state']=='completed' else None
         intent=dict(kind='commit',parent=parent,tree=tree,message=message,branch=branch,
             contributing_executor_attempt_id=contributing,evidence_manifest_sha256=evidence_digest)
         if failed_attempt_id is not None:
             intent.update(kind='rework_commit',failed_attempt_id=failed_attempt_id,contributing_executor_attempt_id=None)
+        before=task_policy.get('_before_effect')
+        if before is not None:
+            if not host_evidence or not callable(before):raise ValueError('Invalid host effect guard')
+            before()
         effect = journal.begin_effect(run['run_id'],owner_id,intent)
         # Every effect below is fenced by the committed intent above. Exceptions
         # intentionally leave it unresolved for observation-only recovery.
+        if before is not None:before()
         commit = _git(root,*prefix,'commit-tree',tree,'-p',parent,env=env,data=(message+'\n').encode()).decode().strip()
         if _git(root,'rev-parse',commit+'^{tree}').decode().strip()!=tree or _git(root,'rev-parse',commit+'^').decode().strip()!=parent:
             raise ValueError('Unexpected checkpoint object')
         _repository(root,policy)
         if digest_manifest(product_manifest(root,policy)) != product_digest:
             raise ValueError('Checkpoint product changed')
+        if before is not None:before()
         _git(root,*prefix,'update-ref','refs/heads/'+branch,commit,parent,env=env)
         if _git(root,'rev-parse','HEAD').decode().strip()!=commit:
             raise ValueError('Checkpoint ref observation mismatch')

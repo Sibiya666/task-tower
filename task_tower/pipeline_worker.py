@@ -338,7 +338,11 @@ def _step(config,journal,owner):
         if action=='prepare':return _public(_prepare(config,run,journal,owner))
         task=_authority(config,run,journal,owner)
         if action not in ('checkpoint','park'):
-            try:_current(run,task)
+            try:
+                if action=='publish' and run['state']=='publishing' and run['checkpoint_sha']!=run['manifest']['checkpoint_sha']:
+                    from .pipeline_publish import validate_publication_current
+                    validate_publication_current(run,task,journal)
+                else:_current(run,task)
             except ValueError:
                 target='spec' if any(_checkpoint(run,task)[k]!=run['manifest'][k] for k in ('spec_sha256','plan_sha256')) else ('development' if run['stage']=='test' else run['stage'])
                 return _public(_stale(config,run,journal,owner,target))

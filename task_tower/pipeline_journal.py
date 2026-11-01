@@ -1,6 +1,7 @@
 """Durable installation-local pipeline evidence; unknown work is never replayed."""
 from contextlib import contextmanager, closing
 import datetime
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -196,8 +197,14 @@ class PipelineJournal:
                     _uuid(row['owner_id']); _integer(row['ordinal'],1,1000)
                     intent=_json(row['intent']); self._intent(intent)
                     if row['kind']!=intent['kind'] or digest_manifest(intent)!=row['intent_sha256'] or row['status'] not in {'intent','completed','unknown','failed'}: raise ValueError('Invalid effect')
+                    if intent['kind']=='pr_create' and intent['marker']!='<!-- task-tower:pipeline:v1 '+row['run_id']+' '+row['effect_id']+' -->':raise ValueError('PR effect identity mismatch')
+                    if intent['kind']=='pr_create':
+                        host=db.execute('SELECT * FROM runs WHERE run_id=?',(row['run_id'],)).fetchone()
+                        if host is None or any(intent[k]!=host[k] for k in ('repository','issue','issue_id','task_id','run_id','base_sha','branch')) or intent['head_sha']!=host['checkpoint_sha']:
+                            raise ValueError('PR effect host binding mismatch')
                     if row['observation'] is not None:
-                        observation=_json(row['observation']); _neutral(observation)
+                        observation=_json(row['observation']); self._effect_observation(row,intent,observation)
+                        if observation.get('status')!=row['status']:raise ValueError('Effect observation status mismatch')
                         if digest_manifest(observation)!=row['observation_sha256']: raise ValueError('Invalid observation digest')
                 else:
                     _uuid(row['executor_instance_id']); _uuid(row['reviewer_instance_id']); _sha(row['input_sha256']); body=_json(row['body']); self._receipt_body(body)
@@ -596,8 +603,31 @@ class PipelineJournal:
         if 'branch' in intent:
             if not isinstance(intent['branch'],str) or not intent['branch'].startswith('pipeline/'): raise ValueError('Invalid effect branch')
             _uuid(intent['branch'][9:])
+        if kind=='pr_create':
+            from .pipeline_publish import _body
+            _uuid(intent['run_id'])
+            _integer(intent['issue'],1,2**63-1);_integer(intent['issue_id'],1,2**63-1)
+            if not isinstance(intent['repository'],str) or not re.fullmatch(r'[a-z0-9][a-z0-9-]*/[a-z0-9_][a-z0-9_.-]*',intent['repository']):raise ValueError('Invalid PR repository')
+            if not isinstance(intent['task_id'],str) or not re.fullmatch(r'TT-[A-Z0-9-]+',intent['task_id']):raise ValueError('Invalid PR task')
+            if not isinstance(intent['publisher_account'],str) or not re.fullmatch(r'[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?(?:\[bot\])?',intent['publisher_account']) or '--' in intent['publisher_account']:raise ValueError('Invalid PR publisher')
+            marker=re.fullmatch(r'<!-- task-tower:pipeline:v1 ([0-9a-f-]{36}) ([0-9a-f-]{36}) -->',intent['marker'])
+            if marker is None or marker[1]!=intent['run_id']:raise ValueError('Invalid PR marker')
+            _uuid(marker[2])
+            if intent['title_sha256']!=hashlib.sha256(('Task Tower '+intent['task_id']).encode()).hexdigest() or intent['body_sha256']!=hashlib.sha256(_body(intent,intent['marker']).encode()).hexdigest():raise ValueError('Noncanonical PR payload')
         return intent
+    def begin_pr_effect(self,run_id:str,owner_id:str,publisher_account:str)->dict:
+        """Mint a host PR effect identity before hashing its fixed public body."""
+        from .pipeline_publish import _body
+        effect_id=str(uuid.uuid4()); run=self.status(run_id)
+        marker='<!-- task-tower:pipeline:v1 '+run_id+' '+effect_id+' -->';title='Task Tower '+run['task_id']
+        intent=dict(kind='pr_create',repository=run['repository'],issue=run['issue'],issue_id=run['issue_id'],task_id=run['task_id'],run_id=run_id,head_sha=run['checkpoint_sha'],base_sha=run['base_sha'],branch=run['branch'],title_sha256=hashlib.sha256(title.encode()).hexdigest(),body_sha256=hashlib.sha256(_body(run,marker).encode()).hexdigest(),marker=marker,publisher_account=publisher_account)
+        return self._begin_effect(run_id,owner_id,intent,_effect_id=effect_id)
+
     def begin_effect(self,run_id:str,owner_id:str,intent:dict)->dict:
+        if intent.get('kind')=='pr_create':raise ValueError('Use host PR identity mint')
+        return self._begin_effect(run_id,owner_id,intent)
+
+    def _begin_effect(self,run_id:str,owner_id:str,intent:dict,*,_effect_id=None)->dict:
         self._intent(intent)
         with self._db(True) as db:
             row=self._owned(db,run_id,owner_id)
@@ -612,8 +642,11 @@ class PipelineJournal:
                 if intent['kind']=='pr_create' and any(intent[k]!=row[k] for k in ('run_id','issue','issue_id','task_id')): raise ValueError('PR identity mismatch')
             if intent['kind']=='worktree_create':
                 if row['state']!='preparing' or any(intent[k]!=row[k] for k in ('source_sha','worktree','git_dir')): raise ValueError('Worktree effect binding mismatch')
+            if intent['kind']=='commit' and row['state']=='publishing' and intent['evidence_manifest_sha256'] is None:
+                raise ValueError('Publication requires host evidence manifest')
             if intent['kind']=='commit' and intent['evidence_manifest_sha256'] is not None:
                 if row['state']!='publishing': raise ValueError('Evidence commit requires publication')
+                if intent['contributing_executor_attempt_id'] is not None: raise ValueError('Evidence is not executor contribution')
                 self._history_gate(db,row,'publishing',{})
             if intent['kind']=='rework_commit':
                 self._failed_mutation(db,row,intent['failed_attempt_id'])
@@ -626,16 +659,35 @@ class PipelineJournal:
                 contributor=db.execute("SELECT * FROM attempts WHERE run_id=? AND role=? ORDER BY rowid DESC LIMIT 1",(run_id,row['stage']+'_executor')).fetchone()
                 if contributor is None or contributor['attempt_id']!=intent['contributing_executor_attempt_id'] or contributor['state']!='completed': raise ValueError('Checkpoint contributor is not latest completed executor')
                 self._contribution_floor(db,row,contributor)
-            effect_id=str(uuid.uuid4()); ordinal=db.execute('SELECT coalesce(max(ordinal),0)+1 FROM effects WHERE run_id=?',(run_id,)).fetchone()[0]; digest=digest_manifest(intent)
+            effect_id=str(uuid.uuid4()) if _effect_id is None else _effect_id
+            _uuid(effect_id)
+            if _effect_id is not None and intent['kind']!='pr_create':raise ValueError('Reserved PR identity')
+            if intent['kind']=='pr_create' and intent['marker']!='<!-- task-tower:pipeline:v1 '+run_id+' '+effect_id+' -->':raise ValueError('PR effect marker mismatch')
+            ordinal=db.execute('SELECT coalesce(max(ordinal),0)+1 FROM effects WHERE run_id=?',(run_id,)).fetchone()[0]; digest=digest_manifest(intent)
             db.execute('INSERT INTO effects VALUES(?,?,?,?,?,?,?,?,?,?)',(effect_id,run_id,ordinal,intent['kind'],owner_id,digest,_dump(intent),'intent',None,None))
             self._event(db,run_id,'effect_started',row['state'],row['state'],effect_id=effect_id)
             return dict(effect_id=effect_id,ordinal=ordinal,intent_sha256=digest,intent=dict(intent),status='intent')
+    @staticmethod
+    def _effect_observation(effect,intent,observation):
+        """Only the typed host PR observation may carry a public URL."""
+        if intent['kind']!='pr_create' or observation.get('status')!='completed':
+            _neutral(observation);return
+        fields={'status','repository','issue','issue_id','task_id','run_id','head_sha','base_sha','branch','number','url','author','marker'}
+        if set(observation)!=fields:raise ValueError('Invalid PR observation schema')
+        for key in ('repository','issue','issue_id','task_id','run_id','head_sha','base_sha','branch','marker'):
+            if type(observation[key]) is not type(intent[key]) or observation[key]!=intent[key]:raise ValueError('PR observation binding mismatch')
+        _integer(observation['number'],1,2**63-1)
+        if observation['url']!='https://github.com/'+intent['repository']+'/pull/'+str(observation['number']):raise ValueError('Invalid PR URL')
+        if observation['author']!=intent['publisher_account']:raise ValueError('PR author mismatch')
+        if observation['marker']!='<!-- task-tower:pipeline:v1 '+intent['run_id']+' '+effect['effect_id']+' -->':raise ValueError('PR host effect mismatch')
+
     def finish_effect(self,effect_id:str,owner_id:str,observation:dict)->dict:
-        _uuid(effect_id); _uuid(owner_id); _neutral(observation)
+        _uuid(effect_id); _uuid(owner_id)
         if observation.get('status') not in {'completed','failed','unknown'}: raise ValueError('Invalid effect observation')
         with self._db(True) as db:
             effect=db.execute('SELECT * FROM effects WHERE effect_id=?',(effect_id,)).fetchone()
             if effect is None or effect['owner_id']!=owner_id or effect['status']!='intent': raise ValueError('Effect already observed or foreign')
+            self._effect_observation(effect,_json(effect['intent']),observation)
             row=self._owned(db,effect['run_id'],owner_id); status=observation['status']
             if effect['kind']=='rework_commit': self._failed_mutation(db,row,_json(effect['intent'])['failed_attempt_id'])
             if effect['kind'] in {'commit','rework_commit'} and status=='completed':
