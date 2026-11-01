@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "id": "TT-EXECUTOR-001",
+  "title": "Execute durable authorized noninteractive development attempts",
+  "executor": "noninteractive-executor-implementation-team",
+  "project_root": "../..",
+  "mode": "autonomous",
+  "status": "awaiting_merge",
+  "spec": "../superpowers/specs/2026-11-01-noninteractive-executor-design.md",
+  "plan": "../superpowers/plans/2026-11-01-noninteractive-executor.md",
+  "acceptance_criteria": [
+    "Installation-owned profile and explicit allowlist bind source checkout/ref, runner, safe argv, limits and pinned Superpowers instructions",
+    "Durable local queue admits each delivery once and fences uncertain owner/launch outcomes without blind replay",
+    "One foreground worker prepares an isolated exact-source worktree and revalidates current Issue, dependencies and private authority before effects",
+    "Bounded cancellable cross-platform processes remove GitHub token environment keys and require confirmed cleanup",
+    "Strict run/attempt/source-bound results distinguish execution_completed from acceptance/task completion; retry only proven no-child prelaunch failures",
+    "Real installed Codex scratch execution, genuine authenticated dependency14 proof and independent source/test acceptance are recorded honestly",
+    "Current exact-head/base PR and three-platform CI plus independent exact-main acceptance precede publisher-driven Issue15 closure"
+  ],
+  "stages": {
+    "spec": {
+      "status": "accepted",
+      "reviewer": "executor_spec_acceptance",
+      "evidence": "evidence/TT-EXECUTOR-001/spec-review.md",
+      "sha256": "262f9e69ef7014574b45ca8bb49956ff664516fce2e7b56bbaf33b780848ac93",
+      "hash_scheme": "sha256-utf8-lf-v1"
+    },
+    "development": {
+      "status": "accepted",
+      "reviewer": "executor_whole_development",
+      "evidence": "evidence/TT-EXECUTOR-001/wholeIssue-development-review.md",
+      "sha256": "ae33cc3c789a474d13b06b320747751830458940c29ea3735ab48feebd7b0bfa",
+      "hash_scheme": "sha256-utf8-lf-v1"
+    },
+    "test": {
+      "status": "accepted",
+      "reviewer": "executor_final_test",
+      "evidence": "evidence/TT-EXECUTOR-001/test-review.md",
+      "sha256": "39d1b052b6c0a836bf591c5b6b50f132e45be2bfa0a70ee3e9aa39ed7e60ed18",
+      "hash_scheme": "sha256-utf8-lf-v1"
+    },
+    "postmerge": {
+      "status": "pending"
+    }
+  }
+}

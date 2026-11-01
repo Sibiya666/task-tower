@@ -1,0 +1,21 @@
+# Independent whole-Issue test acceptance — Issue #15
+
+## 2026-11-01 final frozen-input review — ACCEPTED (local test stage)
+
+Reviewer: independent executor_final_test instance, distinct from implementation. Reviewed current executor policy, adapter/CLI, queue, worker, harness/result contract, process/fault/integration tests, executor documentation and accepted Task 1–5 evidence. No production or test edits, commits or remote mutations were made. This is local test-stage acceptance, not exact-head/base PR or postmerge acceptance.
+
+The reviewed worktree HEAD was `d8b3ea7e597bcb06eb951a442ae629773808c44e`, with integration changes not yet committed. Binding is therefore the frozen canonical source inventory: **1f2976d3ba36559408326f728a25a2c4eeee7ea0613d00ff6f79544185cc9bae**, **116 files**, identical before and after both suite runs and boundary probes. Inventory consists of `task_tower/*.py`, `tests/*.py`, root `README.md`/`AGENTS.md`, and `docs/**/*.md` excluding `docs/tasks/**` (mutable cards/evidence). Each file is decoded UTF-8 with optional BOM removed, CRLF/CR normalized to LF and hashed as UTF-8; aggregate hashes the path-to-digest mapping as sorted compact JSON. Raw runtime/logs are excluded. Inventory membership and all hashes were regenerated after the final suite; no additions, removals or changes occurred.
+
+Bundled Python **3.12.14**, Windows 10 build 19045: fresh `python -m unittest discover -s tests -v` completed **429 tests in 100.448s, OK, 4 skipped**, exit 0 (425 executed tests passed). Skips: executor capture symlink, instruction-file symlink, harness state-directory symlink, postmerge database-parent symlink; each reports unavailable Windows symlink privilege. Separate junction cases executed successfully. No POSIX or future CI result is inferred.
+
+Six independent temporary-fixture probes passed: changing the admitted profile timeout prevented preparation; a real custom child returning needs_input retained that state and was not replayed; a real zero-exit child returning a wrong source SHA failed; 1366 three-byte summary characters exceeded the 4096-byte result limit; unknown ownership consumed a one-slot capacity while queued cancellation remained cancelled; boolean Issue admission failed before creating a queue. The probe loader also reran 20 existing WorkerFaultTests, so its actual summary is **26 tests in 16.894s, OK**, not 26 new tests. Existing fault coverage independently inspected includes cancel before/after worktree and during a real child, unavailable/changed dependency evidence, claim and intent crashes, source/policy drift, ownership fencing, bounded retry history, strict malformed results and no-child proofs. No blocking defect found in these boundaries.
+
+Historical reviewer harness correction: the first full run deliberately isolated TEMP but mistakenly placed it inside the enclosing Git checkout. Its readiness non-repository fixture consequently inherited the parent repository and failed; summary **429 tests in 107.739s, 1 failure, 4 skips**. The source was unchanged. Restoring the ordinary system temporary directory and rerunning the complete suite produced the passing result above. This environmental failure is preserved, not presented as a production fix.
+
+Installed Codex evidence remains separately recorded in `installed-codex-smoke.md`; the trusted Python fixture does not prove installed Codex behavior. Authenticated production #14 receipt readability is a separate coordinator gate and is not supplied by synthetic remote receipt tests here. The historical capture/main evidence does not establish executor main acceptance. Current three-platform CI, independent whole-Issue development review, fresh exact head/base PR acceptance, serialized merge/postmerge acceptance and automatic Issue closure remain required. No night, daemon, event parser, resume, automatic publishing or unattended pool readiness is claimed.
+
+Local raw log SHA-256 (logs remain untracked runtime evidence):
+
+- `runtime-final-acceptor-suite.log`: `a9b20a79018639ae0ff6bc42320f396825d37c80be4b8b46f3c2e5bc244c6833`
+- `runtime-final-acceptor-suite-default-temp.log`: `62d42bc2fafe3b5c2c21d04cf9ef5acf01daf9052d002f10b36f0efa88659350`
+- `runtime-final-acceptor-probes.log`: `c5b03321ec82b1400b746b05609be300a5699fef8c3a3395f3c600e75cea0cad`
