@@ -10,7 +10,7 @@ Run the complete test suite: `python -m unittest discover -s tests -v` (Python 3
 
 Follow [clean-clone GitHub setup](docs/github-setup.md) and [bootstrap/custom harness instructions](docs/bootstrap.md). For creation workflows, establish an authenticated, writable repository-linked Project and complete Status mapping through `python -m task_tower connect` (or explicit bootstrap GitHub flags) before importing Issues. A bare URL/read-only connection or local-only harness setup is not full readiness. Preserve existing Issues, prose, options and private connections; recover partial creation by retrying the same identity, never deleting resources or blindly recreating them. Serialize initial setup across hosts; discovery is not a distributed creation lock.
 
-Authentication and project scope authorization are explicit human steps; never run hidden scope grants, install tools, select models or store secrets in connections. Private installation config lives outside source checkouts. GitHub connector/Git transport login does not establish local CLI Projects access. Current sequencing and capability limits are in [roadmap](docs/roadmap.md): #24 precedes #14; development executors, autonomous callbacks/resume and daemon orchestration remain planned. The existing PR acceptor and chat orchestration are distinct from a background PR worker.
+Authentication and project scope authorization are explicit human steps; never run hidden scope grants, install tools, select models or store secrets in connections. Private installation config lives outside source checkouts. GitHub connector/Git transport login does not establish local CLI Projects access. Current sequencing and capability limits are in [roadmap](docs/roadmap.md): #24 is completed; #14 is current until exact-main acceptance/automatic closure, then #15 is next; development executors, autonomous callbacks/resume and daemon orchestration remain planned. The existing PR acceptor and chat orchestration are distinct from a background PR worker.
 
 ## Unified repository
 
@@ -39,3 +39,7 @@ Documentation images belong in `docs/screenshots/`. Preserve raw user screenshot
 From overlay/: `python -m unittest -v`, `node --test test-web.cjs test-room-skins.cjs test-presence.cjs test-presence-browser.cjs test-scene-position.cjs`; run native `powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File overlay.ps1 -SmokeTest` after host/launch/render changes. Browser tests require Playwright, Sharp and Edge (current bundled paths are machine-specific). CLI tests remain dependency-free and must pass after integration.
 
 PowerShell 5.1 scripts with Cyrillic must be UTF-8 BOM. The desktop shortcut must target `overlay/launch-codex-tower.ps1` and its assets icon. Keep old launch entry points working when moving files.
+
+## Authorized continuation and dispatcher boundary
+
+Continue taking the next eligible authorized backlog task after each main/postmerge/automatic Issue-closure cycle without asking for another continue. Preserve dependencies and independent stage acceptance. The foreground dispatcher delivers identities to a trusted adapter; it does not execute development, install a service or prove unattended readiness. See docs/dispatcher.md. Preserve its private installation journal: committed intents never resubmit, including unknown outcomes.
