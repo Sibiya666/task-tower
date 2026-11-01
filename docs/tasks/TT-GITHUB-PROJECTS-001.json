@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "id": "TT-GITHUB-PROJECTS-001",
+  "title": "Independent GitHub projects, aggregated books and distributed acceptance",
+  "executor": "github-projects-implementation-team",
+  "project_root": "../..",
+  "mode": "assisted",
+  "status": "awaiting_merge",
+  "spec": "../superpowers/specs/2026-11-01-github-projects-design.md",
+  "plan": "../superpowers/plans/2026-11-01-github-projects.md",
+  "acceptance_criteria": [
+    "Private connections preserve each project repository, Issues and Project",
+    "Source-linked ideas/tasks/library aggregate with three entries per page",
+    "Durable dispatch and independent acceptance retain cross-machine evidence",
+    "Done requires verified main, CI and independent review; recovery cannot resurrect stale approval"
+  ],
+  "stages": {
+    "spec": {
+      "status": "accepted",
+      "reviewer": "github-projects-spec-review",
+      "evidence": "evidence/TT-GITHUB-PROJECTS-001/spec-review.md",
+      "sha256": "cb8b02dfe54f932ffb5fd513aa6c47c681c5bbb16baa0afdd8ec6dbce7149d67",
+      "hash_scheme": "sha256-utf8-lf-v1"
+    },
+    "development": {
+      "status": "accepted",
+      "reviewer": "github-projects-code-review",
+      "evidence": "evidence/TT-GITHUB-PROJECTS-001/code-review.md",
+      "sha256": "a54b3f64a899be57eca90a53920574868dfc0c8f73f38f0921ef7ae381fc1e6d",
+      "hash_scheme": "sha256-utf8-lf-v1"
+    },
+    "test": {
+      "status": "accepted",
+      "reviewer": "github-projects-test-acceptance",
+      "evidence": "evidence/TT-GITHUB-PROJECTS-001/test-acceptance.md",
+      "sha256": "4630547e16a81a60b35d6b6a6ecb56a0649b85c6ac9424a54cee714ff6769630",
+      "hash_scheme": "sha256-utf8-lf-v1"
+    },
+    "postmerge": {
+      "status": "pending"
+    }
+  }
+}

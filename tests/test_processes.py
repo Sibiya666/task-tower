@@ -1,14 +1,78 @@
 import hashlib
+import errno
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
+from types import SimpleNamespace
 
 from task_tower.processes import run_command
 
 
 class ProcessTests(unittest.TestCase):
+    def simulated_posix_command(self, signals, *, platform="darwin", timed_out=True):
+        process = mock.Mock(pid=12345)
+        process.wait.side_effect = ([subprocess.TimeoutExpired("python", .3), -9, -9]
+                                    if timed_out else [0, 0])
+        elapsed = [0.0]
+
+        def sleep(seconds):
+            elapsed[0] += seconds
+
+        fake_os = SimpleNamespace(name="posix", killpg=mock.Mock(side_effect=signals))
+        with (mock.patch("task_tower.processes.os", fake_os),
+              mock.patch("task_tower.processes.signal", SimpleNamespace(SIGKILL=9)),
+              mock.patch("task_tower.processes.sys", SimpleNamespace(platform=platform), create=True),
+              mock.patch("task_tower.processes.subprocess.Popen", return_value=process),
+              mock.patch("task_tower.processes.time.monotonic", side_effect=lambda: elapsed[0]),
+              mock.patch("task_tower.processes.time.sleep", side_effect=sleep)):
+            result = self.run_python("pass", timeout=.3)
+        self.assertLessEqual(elapsed[0], 1)
+        return result
+
+    def test_darwin_timeout_retries_transient_cleanup_permission_error(self):
+        result = self.simulated_posix_command(
+            [None, PermissionError(errno.EPERM, "denied"), ProcessLookupError(errno.ESRCH, "gone")])
+        self.assertEqual((result["status"], result["exit_code"]), ("timeout", -9))
+
+    def test_darwin_timeout_cleanup_permission_error_stays_fail_closed(self):
+        attempts = [0]
+
+        def signals(*args):
+            attempts[0] += 1
+            if attempts[0] > 1:
+                raise PermissionError(errno.EPERM, "denied")
+
+        result = self.simulated_posix_command(signals)
+        self.assertEqual(result["status"], "cleanup_failed")
+
+    def test_darwin_timeout_cleanup_can_signal_after_permission_race(self):
+        result = self.simulated_posix_command(
+            [None, PermissionError(errno.EPERM, "denied"), None])
+        self.assertEqual((result["status"], result["exit_code"]), ("timeout", -9))
+
+    def test_darwin_timeout_other_permission_error_stays_fail_closed(self):
+        result = self.simulated_posix_command(
+            [None, PermissionError(errno.EACCES, "denied"), None])
+        self.assertEqual(result["status"], "cleanup_failed")
+
+    def test_posix_cleanup_missing_group_preserves_timeout(self):
+        result = self.simulated_posix_command([None, ProcessLookupError(errno.ESRCH, "gone")])
+        self.assertEqual((result["status"], result["exit_code"]), ("timeout", -9))
+
+    def test_normal_exit_permission_error_is_not_retried(self):
+        result = self.simulated_posix_command(
+            [PermissionError(errno.EPERM, "denied"), None], timed_out=False)
+        self.assertEqual(result["status"], "cleanup_failed")
+
+    def test_other_posix_timeout_permission_error_is_not_retried(self):
+        result = self.simulated_posix_command(
+            [None, PermissionError(errno.EPERM, "denied"), None], platform="linux")
+        self.assertEqual(result["status"], "cleanup_failed")
+
     def run_python(self, source, timeout=5):
         return run_command([sys.executable, "-c", source], Path.cwd(), timeout)
 

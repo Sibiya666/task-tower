@@ -1,0 +1,50 @@
+# Copy to each owning repository as .github/workflows/task-tower-project.yml.
+# Replace fixed runner label, paths and pinned Python executable before enabling.
+name: Task Tower project acceptance
+on:
+  workflow_dispatch:
+    inputs:
+      issue:
+        required: true
+        type: string
+      recover:
+        required: false
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  actions: read
+  issues: write
+concurrency:
+  group: task-tower-${{ github.repository }}-${{ inputs.issue }}
+  cancel-in-progress: false
+  queue: max
+jobs:
+  accept:
+    # Fixed trusted label; never route using Issue text or a dispatch input.
+    runs-on: [self-hosted, task-tower-PROJECT]
+    steps:
+      # The installed product checkout/config are administrator-owned. Do not
+      # checkout or execute Issue/PR branches with this job's credentials.
+      - name: Independently accept exact main merge
+        id: consume
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TASK_TOWER_ISSUE: ${{ inputs.issue }}
+          TASK_TOWER_RECOVER: ${{ inputs.recover }}
+        run: |
+          [[ "$TASK_TOWER_ISSUE" =~ ^[1-9][0-9]*$ ]] || exit 2
+          echo "issue=$TASK_TOWER_ISSUE" >> "$GITHUB_OUTPUT"
+          cd /opt/task-tower/product
+          recovery_args=()
+          if [[ "$TASK_TOWER_RECOVER" == true ]]; then recovery_args=(--confirm-stopped); fi
+          /opt/task-tower/python/bin/python3 -m task_tower.project_worker --connections /opt/task-tower/private/connections.json --project PROJECT --config /opt/task-tower/private/worker.json consume --issue "$TASK_TOWER_ISSUE" "${recovery_args[@]}"
+      - name: Preserve durable review for publication retry on another runner
+        if: always() && steps.consume.outputs.issue != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: task-tower-review-${{ steps.consume.outputs.issue }}-${{ github.run_attempt }}
+          path: /opt/task-tower/private/state/my-project/public/${{ steps.consume.outputs.issue }}.json
+          if-no-files-found: ignore
+          retention-days: 90

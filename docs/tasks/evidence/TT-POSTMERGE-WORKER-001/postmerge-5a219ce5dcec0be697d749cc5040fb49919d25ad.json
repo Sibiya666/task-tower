@@ -1,0 +1,30 @@
+{
+  "task_id": "TT-POSTMERGE-WORKER-001",
+  "commit": "5a219ce5dcec0be697d749cc5040fb49919d25ad",
+  "bundle": {
+    "repository": "Sibiya666/task-tower",
+    "pr_number": 7,
+    "merge_commit": "5a219ce5dcec0be697d749cc5040fb49919d25ad",
+    "task_ids": [
+      "TT-POSTMERGE-WORKER-001"
+    ],
+    "run_url": "https://github.com/Sibiya666/task-tower/actions/runs/41305697794",
+    "run_id": "41305697794",
+    "attempt": "1",
+    "platforms": {
+      "macos": "passed",
+      "linux": "passed",
+      "windows": "passed"
+    },
+    "delivery_key": "c89cad656ad969cdb96c21a4911a9f2249b736cb6eb94425908f5f0efb068650"
+  },
+  "review": {
+    "task_id": "TT-POSTMERGE-WORKER-001",
+    "commit": "5a219ce5dcec0be697d749cc5040fb49919d25ad",
+    "verdict": "approve",
+    "summary": "Scoped postmerge acceptance approved: exact checkout SHA, pinned skill and all prior acceptance evidence hashes verified; supplied verified CI bundle reports Linux, macOS and Windows passed. Inspected worker safeguards align with the acceptance criteria.",
+    "findings": [
+      "Local full-suite rerun discovered 123 tests but encountered 102 errors because the read-only sandbox provides no writable temporary directory; no local full-suite pass is claimed. Approval relies on the supplied verified CI bundle and prior independent acceptance."
+    ]
+  }
+}

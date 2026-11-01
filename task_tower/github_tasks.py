@@ -1,0 +1,149 @@
+"""Bounded GitHub Issue store. Issue bodies are data, never execution authority."""
+import json
+from pathlib import Path
+import re
+import urllib.request
+from urllib.parse import quote
+
+from .github_source import resolve_token, GitHubSourceError, MAX_BYTES, MAX_PAGES
+
+START = '<!-- task-tower:v1\n'
+END = '\n-->'
+
+
+def parse_metadata(body):
+    body = body or ''
+    if not isinstance(body, str): raise ValueError('Invalid Issue body')
+    if body.count('<!-- task-tower:') > 1: raise ValueError('Duplicate task metadata')
+    if '<!-- task-tower:' not in body: return None
+    if START not in body: raise ValueError('Unsupported task metadata')
+    try:
+        raw = body.split(START, 1)[1].split(END, 1)
+        if len(raw) != 2: raise ValueError()
+        data = json.loads(raw[0])
+        if not isinstance(data, dict) or type(data.get('version')) is not int or data['version'] != 1 or data.get('kind') not in ('idea', 'task'):
+            raise ValueError()
+        stages = data.get('stages', {})
+        order = ('spec', 'development', 'test', 'postmerge')
+        if not isinstance(stages, dict) or set(stages) - set(order): raise ValueError()
+        pending = False
+        for stage in order:
+            record = stages.get(stage, {'status': 'pending'})
+            if not isinstance(record, dict) or record.get('status') not in ('pending', 'accepted'): raise ValueError()
+            if record['status'] == 'pending': pending = True
+            else:
+                if pending or not isinstance(data.get('executor'), str) or not data['executor'] or not isinstance(record.get('reviewer'), str) or not record['reviewer'] or record['reviewer'] == data['executor']:
+                    raise ValueError()
+                if not isinstance(record.get('evidence'), str) or not record['evidence'] or not isinstance(record.get('sha256'), str) or not re.fullmatch(r'[a-f0-9]{64}', record['sha256']): raise ValueError()
+                if stage == 'postmerge' and (record.get('main_ref') not in ('refs/heads/main', 'refs/remotes/origin/main') or not isinstance(record.get('commit'), str) or not re.fullmatch(r'[a-f0-9]{40}', record['commit'])): raise ValueError()
+        return data
+    except (ValueError, IndexError): raise ValueError('Invalid task metadata') from None
+
+
+def replace_metadata(body, metadata):
+    block = START + json.dumps(metadata, ensure_ascii=False, sort_keys=True) + END
+    parse_metadata(block)
+    body = body or ''
+    existing = parse_metadata(body)
+    if existing is None: return body + ('\n\n' if body and not body.endswith('\n') else '') + block
+    begin = body.index(START)
+    finish = body.index(END, begin) + len(END)
+    return body[:begin] + block + body[finish:]
+
+
+def task_status(metadata):
+    # Even structurally convincing body metadata is user-editable, not attestation.
+    if not metadata: return 'open'
+    status = metadata.get('status', 'open')
+    if status == 'done' or metadata.get('stages', {}).get('postmerge', {}).get('status') == 'accepted':
+        return 'needs_input'
+    return status if status in ('open', 'in_progress', 'needs_input', 'awaiting_merge', 'awaiting_postmerge', 'postmerge_review', 'postmerge_failed') else 'needs_input'
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        raise GitHubSourceError('GitHub redirects are not allowed')
+
+
+def _transport(method, url, headers, payload, limit):
+    data = None if payload is None else json.dumps(payload).encode()
+    request = urllib.request.Request(url, data=data, headers=headers, method=method)
+    with urllib.request.build_opener(_NoRedirect()).open(request, timeout=30) as response:
+        content = response.read(limit + 1)
+    if len(content) > limit: raise GitHubSourceError('GitHub response too large')
+    return content
+
+
+class GitHubTasks:
+    def __init__(self, connection, token=None, transport=None):
+        self.connection = connection
+        self.repository = connection.repository
+        self.transport = transport or _transport
+        self.headers = {'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'Task-Tower'}
+        token = token if token is not None else (resolve_token() if transport is None else None)
+        if token: self.headers['Authorization'] = 'Bearer ' + token
+
+    def request(self, method, path, payload=None):
+        if method not in ('GET', 'POST', 'PATCH', 'PUT') or not path.startswith('/') or '..' in path or '://' in path or '#' in path:
+            raise ValueError('Invalid GitHub request')
+        try:
+            raw = self.transport(method, 'https://api.github.com/repos/' + self.repository + ('' if path == '/' else path), dict(self.headers), payload, MAX_BYTES)
+            if not isinstance(raw, bytes) or len(raw) > MAX_BYTES: raise ValueError()
+            return json.loads(raw) if raw else None
+        except Exception:
+            raise GitHubSourceError('GitHub request unavailable or invalid') from None
+
+    @staticmethod
+    def _number(number):
+        if type(number) is not int or number < 1: raise ValueError('Invalid Issue number')
+        return str(number)
+
+    def list_issues(self):
+        rows = []
+        for page in range(1, MAX_PAGES + 1):
+            data = self.request('GET', f'/issues?state=all&per_page=100&page={page}')
+            if not isinstance(data, list) or len(data) > 100: raise GitHubSourceError('Invalid Issue page')
+            if any(not isinstance(item, dict) for item in data): raise GitHubSourceError('Invalid Issue row')
+            rows.extend(item for item in data if 'pull_request' not in item)
+            if len(data) < 100: return rows
+        raise GitHubSourceError('Issue pagination limit exceeded')
+
+    def get(self, number):
+        issue = self.request('GET', '/issues/' + self._number(number))
+        if not isinstance(issue, dict) or issue.get('number') != number or 'pull_request' in issue:
+            raise GitHubSourceError('Invalid Issue identity')
+        return issue
+
+    def update(self, number, **fields):
+        if set(fields) - {'body', 'title', 'state', 'labels'}: raise ValueError('Invalid Issue update')
+        return self.request('PATCH', '/issues/' + self._number(number), fields)
+
+    metadata = staticmethod(lambda issue: parse_metadata(issue.get('body')))
+
+    def import_card(self, path):
+        from .tasks import load_task
+        path = Path(path).resolve()
+        raw = json.loads(path.read_text(encoding='utf-8'))
+        if not isinstance(raw, dict) or not isinstance(raw.get('id'), str) or not raw['id'].strip(): raise ValueError('Invalid legacy card')
+        # Preserve evidence as historical data; imports never attest remote completion.
+        try:
+            verified = load_task(path)
+            status = verified['status'] if verified['status'] != 'done' else 'needs_input'
+        except ValueError:
+            status = 'needs_input'
+        for issue in self.list_issues():
+            metadata = self.metadata(issue)
+            if metadata and metadata.get('legacy_id') == raw['id']: return issue
+        metadata = dict(version=1, kind='task', legacy_id=raw['id'], status=status, legacy_card=raw)
+        body = replace_metadata(raw.get('description', '') if isinstance(raw.get('description', ''), str) else '', metadata)
+        return self.request('POST', '/issues', dict(title=str(raw.get('title') or raw['id'])[:256], body=body))
+
+    def library(self):
+        repository = self.request('GET', '/')
+        branch = repository.get('default_branch')
+        if not isinstance(branch, str): raise GitHubSourceError('Default branch unavailable')
+        commit = self.request('GET', '/commits/' + quote(branch, safe='')).get('sha')
+        if not isinstance(commit, str) or not re.fullmatch(r'[0-9a-f]{40}', commit): raise GitHubSourceError('Invalid library commit')
+        tree = self.request('GET', '/git/trees/' + commit + '?recursive=1')
+        if tree.get('truncated') is not False or not isinstance(tree.get('tree'), list): raise GitHubSourceError('Library tree incomplete')
+        return [dict(title=item['path'], source='https://github.com/' + self.repository + '/blob/' + commit + '/' + quote(item['path'], safe='/')) for item in tree['tree'] if item.get('type') == 'blob' and isinstance(item.get('path'), str) and item['path'].lower().endswith('.md')]
