@@ -48,3 +48,19 @@ Canonical UTF-8/LF SHA-256 independently recomputed:
 - overlay/web/world-view.js: b703cfdf765b8d455d32f2679f7f382b33c44bf2f382d4185fac9d7a572586b9
 
 Changing any bound source invalidates this acceptance. No unresolved blocking findings in the reviewed Task 4 source/browser scope.
+
+## R2 scoped keyboard-layout review (current verdict)
+
+Verdict: **ACCEPTED for Task 4 source/browser scope** at the bindings below. R1 behavior remains accepted; this section supersedes its two changed source bindings. Inspected actual diff: books-view.js changes only Ctrl+B admission to physical code KeyB, English key fallback only when code is absent, and excludes Alt/Meta/Shift modifier chords. Browser test adds real Edge synthetic keyboard-event regression for Russian key и/code KeyB, English uppercase/lowercase fallback, modifiers, and conflicting physical code. No collector, native, policy, network or layout contract change.
+
+Fresh `node --test overlay/test-books-browser.cjs`: **9/9 PASS**, exit 0. Independent additional Edge probe rejected unmodified Russian KeyB, Ctrl+b with KeyX and Ctrl+Alt Russian KeyB, opened with Ctrl+Russian KeyB and confirmed Escape restored previously focused pin: **PASS**, exit 0. Existing focus, stale timer, removed detail, missing/unavailable, relationship actions, filters/quota and narrow browser cases all remain green in that fresh run. No source edits or commit by reviewer. This scoped review does not claim actual native UI acceptance, OS keyboard injection evidence, PR acceptance or complete integration; Task 5 remains separate.
+
+Canonical UTF-8/LF SHA-256 independently recomputed for all five files:
+
+- overlay/web/books-view.js: e6519b7a0fbd4a8a15a4531a6b6acb119c8de1bda0290f543a9d4a7495edfbf4
+- overlay/web/books.css: 5c9710611d412f61f6723761c5f4b71b8c0ec61b4cd1bf52b2916ff2d1421f58
+- overlay/test-books-browser.cjs: 4534ff6e8372ecbd22c75c838bb0594bd6739255e688a631aeeae8caa8f2331c
+- overlay/web/index.html: a5bcbf661db2b7a85d80695d1dc39a3ada0c8eaed4fc37d225c1284e1bcdda77
+- overlay/web/world-view.js: b703cfdf765b8d455d32f2679f7f382b33c44bf2f382d4185fac9d7a572586b9
+
+No unresolved blocking findings in this scoped review. Changing bound source invalidates acceptance.
