@@ -12,68 +12,89 @@ from .github_tasks import GitHubTasks, parse_metadata, task_status
 from .project_connections import load_connections
 
 
-def aggregate(connections, store_factory=GitHubTasks, include_library=False):
+def aggregate(connections, store_factory=GitHubTasks, include_library=False, *, on_update=None):
+    from copy import deepcopy
+    from .book_projection import identity_issue, project_issue
+    from .book_library import project_library
+    connections=list(connections)
     report = dict(fetched_at=datetime.now(timezone.utc).isoformat(), entries=[], errors=[])
+    projects=[]; candidates=[]
+    def publish():
+        if on_update is not None: on_update(deepcopy(report))
+    def error(connection, source, message):
+        report['errors'].append(dict(project=connection.id,source=source,error=message))
+    # Identity publication is deliberately independent of every detail/proof endpoint.
     for connection in connections:
+        source=f'https://github.com/{connection.repository}/issues'
         try:
-            store = store_factory(connection)
-            issues={}
+            store=store_factory(connection); issues={}; rows={}
+            projects.append((connection,store,issues,rows))
             for issue in store.list_issues():
-                number = issue.get('number')
-                if type(number) is not int or number < 1: raise ValueError()
-                issues[number]=issue
-                metadata = parse_metadata(issue.get('body'))
-                if metadata and metadata.get('kind') == 'task':
-                    from .project_worker import issue_lifecycle
-                    metadata = issue_lifecycle(store, issue)
-                status = task_status(metadata)
-                if metadata and metadata.get('status') == 'done':
-                    try:
-                        from .project_worker import verified_done
-                        from .github_source import GitHubSource
-                        authorization = store.headers.get('Authorization', '')
-                        source = GitHubSource(connection.repository, token=authorization.removeprefix('Bearer ') or None)
-                        if verified_done(connection, store, source, issue): status = 'done'
-                        else: raise ValueError()
-                    except Exception:
-                        report['errors'].append(dict(project=connection.id, source=f'https://github.com/{connection.repository}/issues/{number}', error='Completion evidence unavailable or unverified'))
-                entry=dict(id=f'{connection.repository}#{number}', project=connection.id, book='ideas' if metadata and metadata.get('kind') == 'idea' else 'tasks', title=str(issue.get('title', '')), status=status, remote_state=issue.get('state'), source=f'https://github.com/{connection.repository}/issues/{number}')
-                if metadata and 'capture' in metadata:
-                    from .capture import capture_projection, relationship_projection
-                    entry['capture']=capture_projection(metadata)
-                    entry['relationships'],errors=relationship_projection(connection,store,issue)
-                    for error in errors:
-                        report['errors'].append(dict(project=connection.id,source=entry['source'],error=error))
-                report['entries'].append(entry)
-            if hasattr(connection,'checkout'):
                 try:
-                    from .capture_migration import book_migrations
-                    for migration in book_migrations(connection):
-                        found=False
-                        for entry in report['entries']:
-                            if entry['project']==connection.id and entry['source']==migration['issue_url']:
-                                found=True
-                                entry.setdefault('migrations',[]).append(migration)
-                                if 'relationships' not in entry:
-                                    from .capture import relationship_projection
-                                    entry['relationships'],errors=relationship_projection(connection,store,issues[migration['number']])
-                                    for error in errors:
-                                        report['errors'].append(dict(project=connection.id,source=entry['source'],error=error))
-                        if migration['number'] is not None and not found:
-                            report['errors'].append(dict(project=connection.id,source=migration['issue_url'],error='Legacy canonical Issue unavailable; preserve migration provenance'))
-                        if migration['status']!='current':
-                            report['errors'].append(dict(project=connection.id,source=migration['issue_url'] or f'https://github.com/{connection.repository}/issues',error='Legacy migration '+migration['status']+'; inspect original source and existing Issue'))
-                except (ValueError,OSError):
-                    report['errors'].append(dict(project=connection.id,source=f'https://github.com/{connection.repository}/issues',error='Legacy migration provenance unavailable'))
-        except Exception:
-            report['errors'].append(dict(project=connection.id, source=f'https://github.com/{connection.repository}/issues', error='Issues unavailable or incomplete'))
-        if include_library:
+                    row=identity_issue(connection,issue)
+                    if row['number'] in issues: raise ValueError()
+                    issues[row['number']]=issue; rows[row['number']]=row
+                    report['entries'].append(row)
+                except Exception: error(connection,source,'Issue identity unavailable or duplicated')
+        except Exception: error(connection,source,'Issues unavailable or incomplete')
+        publish()
+    if include_library:
+        for connection,store,issues,rows in projects:
+            library,errors=project_library(connection,store,connected_repositories={c.repository for c in connections})
+            report['entries'].extend(library); report['errors'].extend(errors); publish()
+    for connection,store,issues,rows in projects:
+        for number,issue in issues.items():
+            row=rows[number]; metadata=None; lifecycle_ok=True
             try:
-                store = store_factory(connection)
-                for entry in store.library():
-                    report['entries'].append(dict(entry, id=entry['source'], project=connection.id, book='library', status='source'))
+                metadata=parse_metadata(issue.get('body'))
+                if metadata and metadata.get('kind')=='task':
+                    from .project_worker import issue_lifecycle
+                    metadata=issue_lifecycle(store,issue)
             except Exception:
-                report['errors'].append(dict(project=connection.id, source=f'https://github.com/{connection.repository}', error='Library unavailable or incomplete'))
+                lifecycle_ok=False
+                error(connection,row['source'],'Issue metadata or lifecycle unavailable')
+            try:
+                projected,errors=project_issue(connection,store,issue,metadata)
+                if not lifecycle_ok: projected['verification']='unverified'; projected['status']='needs_input'
+                row.update(projected); report['errors'].extend(errors)
+                if lifecycle_ok and metadata and metadata.get('status')=='done': candidates.append((connection,store,issue,row))
+            except Exception:
+                row['verification']='unverified'
+                error(connection,row['source'],'Issue details unavailable')
+            publish()
+        if hasattr(connection,'checkout'):
+            try:
+                from .capture_migration import book_migrations
+                for migration in book_migrations(connection):
+                    found=False
+                    for entry in report['entries']:
+                        if entry['project']==connection.id and entry['source']==migration['issue_url']:
+                            found=True
+                            entry.setdefault('migrations',[]).append(migration)
+                            if 'relationships' not in entry:
+                                from .capture import relationship_projection
+                                entry['relationships'],errors=relationship_projection(connection,store,issues[migration['number']])
+                                for error in errors:
+                                    report['errors'].append(dict(project=connection.id,source=entry['source'],error=error))
+                    if migration['number'] is not None and not found:
+                        report['errors'].append(dict(project=connection.id,source=migration['issue_url'],error='Legacy canonical Issue unavailable; preserve migration provenance'))
+                    if migration['status']!='current':
+                        report['errors'].append(dict(project=connection.id,source=migration['issue_url'] or f'https://github.com/{connection.repository}/issues',error='Legacy migration '+migration['status']+'; inspect original source and existing Issue'))
+            except (ValueError,OSError):
+                report['errors'].append(dict(project=connection.id,source=f'https://github.com/{connection.repository}/issues',error='Legacy migration provenance unavailable'))
+        publish()
+    for connection,store,issue,row in candidates:
+        try:
+            from .project_worker import verified_done
+            from .github_source import GitHubSource
+            authorization=store.headers.get('Authorization','')
+            source=GitHubSource(connection.repository,token=authorization.removeprefix('Bearer ') or None)
+            if verified_done(connection,store,source,issue) is not True: raise ValueError()
+            row.update(status='done',verification='verified')
+        except Exception:
+            row['verification']='unverified'
+            error(connection,row['source'],'Completion evidence unavailable or unverified')
+        publish()
     return report
 
 
