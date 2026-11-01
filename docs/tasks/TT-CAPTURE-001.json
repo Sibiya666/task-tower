@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "id": "TT-CAPTURE-001",
+  "title": "Capture session ideas and tasks into canonical project Issues",
+  "executor": "session-capture-implementation-team",
+  "project_root": "../..",
+  "mode": "autonomous",
+  "status": "awaiting_merge",
+  "spec": "../superpowers/specs/2026-11-01-session-capture-design.md",
+  "plan": "../superpowers/plans/2026-11-01-session-capture.md",
+  "acceptance_criteria": [
+    "Explicit bounded capture preserves exact original text and session provenance with durable event deduplication",
+    "Project-first creation, safe promotion and native relationships preserve canonical Issue identity and execution authority boundaries",
+    "Legacy migration preserves active card bytes and evidence with drift detection and private provenance registry",
+    "Books expose safe provenance and separate parent/subissue/milestone links; hierarchical renderer remains Issue23",
+    "Continuous two-Issue execution policy preserves independent acceptance and serialized exact-main closure",
+    "Independent stage, exact-head/base PR and exact-main postmerge acceptance precede automatic Issue22 closure"
+  ],
+  "stages": {
+    "spec": {
+      "status": "accepted",
+      "reviewer": "capture_spec_acceptance",
+      "evidence": "evidence/TT-CAPTURE-001/spec-review.md",
+      "sha256": "d7b50cc9351b97c9ee46a857e84400d690994a0e8377b70c90dc876c59481b99",
+      "hash_scheme": "sha256-utf8-lf-v1"
+    },
+    "development": {
+      "status": "accepted",
+      "reviewer": "capture_migration_review",
+      "evidence": "evidence/TT-CAPTURE-001/wholeIssue-development-review.md",
+      "sha256": "6012a5fde63109c9b9a929b361e82b90b332843c017e26949951ab8239ce5de3",
+      "hash_scheme": "sha256-utf8-lf-v1"
+    },
+    "test": {
+      "status": "accepted",
+      "reviewer": "capture_test_acceptance",
+      "evidence": "evidence/TT-CAPTURE-001/test-review.md",
+      "sha256": "3f0937619de5051163254df9e9395e7b8f0939f6aed62d98aef776ed0a10c803",
+      "hash_scheme": "sha256-utf8-lf-v1"
+    },
+    "postmerge": {
+      "status": "pending"
+    }
+  }
+}

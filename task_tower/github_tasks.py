@@ -37,6 +37,9 @@ def parse_metadata(body):
                     raise ValueError()
                 if not isinstance(record.get('evidence'), str) or not record['evidence'] or not isinstance(record.get('sha256'), str) or not re.fullmatch(r'[a-f0-9]{64}', record['sha256']): raise ValueError()
                 if stage == 'postmerge' and (record.get('main_ref') not in ('refs/heads/main', 'refs/remotes/origin/main') or not isinstance(record.get('commit'), str) or not re.fullmatch(r'[a-f0-9]{40}', record['commit'])): raise ValueError()
+        if 'capture' in data or 'capture_promotion' in data:
+            from .capture import capture_projection
+            capture_projection(data)
         return data
     except (ValueError, IndexError): raise ValueError('Invalid task metadata') from None
 

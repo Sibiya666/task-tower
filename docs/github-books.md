@@ -45,3 +45,5 @@ Closed Issues never imply acceptance. Body metadata alone never proves `done`: b
 Managed task lifecycle updates are read from bounded append-only Task Tower Issue comments. These updates preserve Issue body prose; a comment claiming completion still requires the independent remote completion proof.
 
 For explicit, retryable GitHub Project board projection and trusted status-field mapping, see [board configuration](github-board.md).
+
+Explicit session capture, same-Issue promotion and provenance-only legacy migration are documented in [session capture](session-capture.md). Migration retains active card bytes and historical worker evidence; GitHub remains editable task truth. Books attach migration hash/status to the canonical Issue without exposing private source paths or creating duplicate tasks. Changed local bytes are shown as stale provenance, never silently synchronized. The flat renderer exposes session/native relationship links; expandable hierarchy remains #23.

@@ -17,9 +17,11 @@ def aggregate(connections, store_factory=GitHubTasks, include_library=False):
     for connection in connections:
         try:
             store = store_factory(connection)
+            issues={}
             for issue in store.list_issues():
                 number = issue.get('number')
                 if type(number) is not int or number < 1: raise ValueError()
+                issues[number]=issue
                 metadata = parse_metadata(issue.get('body'))
                 if metadata and metadata.get('kind') == 'task':
                     from .project_worker import issue_lifecycle
@@ -35,7 +37,34 @@ def aggregate(connections, store_factory=GitHubTasks, include_library=False):
                         else: raise ValueError()
                     except Exception:
                         report['errors'].append(dict(project=connection.id, source=f'https://github.com/{connection.repository}/issues/{number}', error='Completion evidence unavailable or unverified'))
-                report['entries'].append(dict(id=f'{connection.repository}#{number}', project=connection.id, book='ideas' if metadata and metadata.get('kind') == 'idea' else 'tasks', title=str(issue.get('title', '')), status=status, remote_state=issue.get('state'), source=f'https://github.com/{connection.repository}/issues/{number}'))
+                entry=dict(id=f'{connection.repository}#{number}', project=connection.id, book='ideas' if metadata and metadata.get('kind') == 'idea' else 'tasks', title=str(issue.get('title', '')), status=status, remote_state=issue.get('state'), source=f'https://github.com/{connection.repository}/issues/{number}')
+                if metadata and 'capture' in metadata:
+                    from .capture import capture_projection, relationship_projection
+                    entry['capture']=capture_projection(metadata)
+                    entry['relationships'],errors=relationship_projection(connection,store,issue)
+                    for error in errors:
+                        report['errors'].append(dict(project=connection.id,source=entry['source'],error=error))
+                report['entries'].append(entry)
+            if hasattr(connection,'checkout'):
+                try:
+                    from .capture_migration import book_migrations
+                    for migration in book_migrations(connection):
+                        found=False
+                        for entry in report['entries']:
+                            if entry['project']==connection.id and entry['source']==migration['issue_url']:
+                                found=True
+                                entry.setdefault('migrations',[]).append(migration)
+                                if 'relationships' not in entry:
+                                    from .capture import relationship_projection
+                                    entry['relationships'],errors=relationship_projection(connection,store,issues[migration['number']])
+                                    for error in errors:
+                                        report['errors'].append(dict(project=connection.id,source=entry['source'],error=error))
+                        if migration['number'] is not None and not found:
+                            report['errors'].append(dict(project=connection.id,source=migration['issue_url'],error='Legacy canonical Issue unavailable; preserve migration provenance'))
+                        if migration['status']!='current':
+                            report['errors'].append(dict(project=connection.id,source=migration['issue_url'] or f'https://github.com/{connection.repository}/issues',error='Legacy migration '+migration['status']+'; inspect original source and existing Issue'))
+                except (ValueError,OSError):
+                    report['errors'].append(dict(project=connection.id,source=f'https://github.com/{connection.repository}/issues',error='Legacy migration provenance unavailable'))
         except Exception:
             report['errors'].append(dict(project=connection.id, source=f'https://github.com/{connection.repository}/issues', error='Issues unavailable or incomplete'))
         if include_library:
@@ -53,6 +82,11 @@ def _output_path(path, sources, overwrite, checkouts=()):
     path = _safe_path(path)
     for checkout in checkouts:
         checkout = Path(checkout).resolve()
+        registry=checkout/'.task-tower'/'capture-migrations.json'
+        protected=(registry,registry.with_name(registry.name+'.lock.sqlite3'))
+        for target in protected:
+            if path==target or (path.exists() and target.exists() and os.path.samefile(path,target)):
+                raise ValueError('Report cannot replace migration provenance')
         if path.is_relative_to(checkout):
             parts = path.relative_to(checkout).parts
             if not parts or parts[0] not in ('runtime', '.task-tower'):
@@ -91,7 +125,26 @@ def render_html(report):
     for entry in report['entries']:
         source = entry.get('source', '')
         source = source if isinstance(source, str) and source.startswith('https://github.com/') else '#'
-        cards.append('<article data-project="' + esc(entry['project']) + '" data-book="' + esc(entry['book']) + '"><h2>' + esc(entry['title']) + '</h2><p>' + esc(entry['project']) + ' · ' + esc(entry['status']) + '</p><a rel="noreferrer" href="' + esc(source) + '">Source</a></article>')
+        links=[]
+        provenance=entry.get('capture',{})
+        candidates=[('Session',provenance.get('session',{}).get('url'))]
+        candidates.extend(('Related source',url) for url in provenance.get('requested_relations',{}).get('sources',[]))
+        relationships=entry.get('relationships',{})
+        for key in ('parent','milestone'):
+            row=relationships.get(key)
+            if isinstance(row,dict): candidates.append((key.capitalize(),row.get('source')))
+        children=relationships.get('sub_issues',[])
+        if isinstance(children,list): candidates.extend(('Sub-issue',row.get('source')) for row in children if isinstance(row,dict))
+        from .capture import safe_url
+        for label,url in candidates:
+            if url is None: continue
+            try: safe_url(url)
+            except ValueError: continue
+            links.append('<a rel="noreferrer" href="'+esc(url)+'">'+esc(label)+'</a>')
+        session=provenance.get('session',{})
+        session_text='<p>Session: '+esc(session.get('provider',''))+' / '+esc(session.get('id',''))+'</p>' if session else ''
+        session_text+=''.join('<p>Legacy migration: '+esc(row.get('status','unavailable'))+'</p>' for row in entry.get('migrations',[]))
+        cards.append('<article data-project="' + esc(entry['project']) + '" data-book="' + esc(entry['book']) + '"><h2>' + esc(entry['title']) + '</h2><p>' + esc(entry['project']) + ' · ' + esc(entry['status']) + '</p>'+session_text+'<a rel="noreferrer" href="' + esc(source) + '">Source</a> '+ ' '.join(links)+'</article>')
     errors = ''.join('<li>' + esc(error['project']) + ': ' + esc(error['error']) + '</li>' for error in report['errors'])
     projects = ''.join('<option>' + esc(project) + '</option>' for project in sorted({e['project'] for e in report['entries']}))
     return '''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Task Tower books</title>

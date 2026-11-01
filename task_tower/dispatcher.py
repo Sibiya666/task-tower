@@ -28,7 +28,8 @@ def validate_paths(connections_path, config_path, journal_path, connections):
 
 
 def _source(connection):
-    return GitHubSource(connection.repository)
+    from .github_source import resolve_token
+    return GitHubSource(connection.repository, token=resolve_token())
 
 
 def _identity(snapshot, candidate):
