@@ -13,7 +13,7 @@ from task_tower.project_connections import ProjectConnection
 class CaptureCLITests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
-        self.root=Path(self.temp.name)
+        self.root=Path(self.temp.name).resolve()
         self.connection=ProjectConnection('p','o/r',self.root,'runner')
         self.base=['--connections',str(self.root/'connections.json'),'--project','p']
 

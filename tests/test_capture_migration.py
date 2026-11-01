@@ -20,7 +20,7 @@ class Store:
 class MigrationTests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
-        self.root=Path(self.tmp.name)
+        self.root=Path(self.tmp.name).resolve()
         self.connection=ProjectConnection('p','owner/repo',self.root,'runner')
         self.path=self.root/'card.json'; self.raw=b'{"id":"legacy-1","title":"Old","evidence":{"snapshot_hash":"unchanged"}}\r\n'
         self.path.write_bytes(self.raw); self.store=Store()
@@ -161,7 +161,7 @@ class RealImportMigrationTests(unittest.TestCase):
         import subprocess
         import sys
         with tempfile.TemporaryDirectory() as directory:
-            root=Path(directory)
+            root=Path(directory).resolve()
             for identity in ('one','two'): (root/(identity+'.json')).write_text(json.dumps({'id':identity}))
             script='''import sys,time
 from pathlib import Path

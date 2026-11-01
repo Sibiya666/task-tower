@@ -28,14 +28,14 @@
       "status": "accepted",
       "reviewer": "capture_migration_review",
       "evidence": "evidence/TT-CAPTURE-001/wholeIssue-development-review.md",
-      "sha256": "853418cab6671116e3d9729af944c874b2e04a168c3ae5196822a24bc1a1153d",
+      "sha256": "6012a5fde63109c9b9a929b361e82b90b332843c017e26949951ab8239ce5de3",
       "hash_scheme": "sha256-utf8-lf-v1"
     },
     "test": {
       "status": "accepted",
       "reviewer": "capture_test_acceptance",
       "evidence": "evidence/TT-CAPTURE-001/test-review.md",
-      "sha256": "479b4df818c6cc8d27ba19347266875620ec5790d7b7a0c0d669ab5a866c239a",
+      "sha256": "3f0937619de5051163254df9e9395e7b8f0939f6aed62d98aef776ed0a10c803",
       "hash_scheme": "sha256-utf8-lf-v1"
     },
     "postmerge": {

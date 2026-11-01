@@ -113,3 +113,38 @@ Current expanded sourceHash (22 inputs): `9547c2acb484d8d1690b3a3dd888b0fff13da9
 | `tests/test_capture_cli.py` | `66bbcd3b418b9aab8b1e84403d7cab7a713a7ad692a65f2f6f53f0fd6453be04` |
 | `tests/test_capture_migration.py` | `c7b0bb05e5dc32bb2dc9698fba8966fa60d6286fa3ae446b2b8e31c09ef7bdc1` |
 | `tests/test_dispatcher.py` | `041a03f10bd61f5a0a1204875f08c890ef83d2041cfd1261ec82efe562808c6d` |
+
+## Current-main incorporation and macOS fixture correction (CURRENT)
+
+Verdict: ACCEPTED for current whole Issue22 development against the refreshed 22-input manifest below. No unresolved blocking findings. Earlier 9547c2ac manifest and R1/R2 history remain preserved as historical exact-source verdicts. This supplement does not substitute for final testing, fresh PR exact head/base or postmerge/main acceptance.
+
+Reviewed the four fixture-only edits across tests/test_capture.py, tests/test_capture_cli.py and tests/test_capture_migration.py: resolve the trusted TemporaryDirectory base before constructing fixture paths or subprocess arguments. macOS /var temporary roots can be symlink aliases; canonicalizing a test-owned root preserves the intended regular canonical-path setup while production safe_config_path continues rejecting user-supplied symlink/reparse paths. No path guard, authorization, production source, assertions or negative-path tests were weakened. Production hashes are identical to prior accepted manifest. The independent testing acceptor owns fresh focused/full execution; no new test-run result is asserted by this document-only review.
+
+Reviewed README/AGENTS changes incorporated from already accepted current main 8c316b7 via merge 0cc3fc5: overlay world/lighting/weather/inactive settings and their verification commands are retained separately from capture. Capture capability, private authorization, #23 hierarchy-renderer ownership, active-chat versus future persistent pool boundary and serialized integration gates remain consistent. This accepts compatibility of the integrated documentation with Issue22, not a new independent overlay implementation acceptance. Canonical comparison confirms only README, AGENTS and the three fixture files changed among the prior 22 inputs.
+
+Current sourceHash: `d0e73aa33a484b3380df529ab33f9bed0185787ee03fc14cdb0440aa85306c5e`. Canonical UTF-8/LF hashing follows the algorithm above; mutable task cards, evidence and runtime state remain excluded.
+
+| CURRENT stable input | Canonical SHA-256 |
+|---|---|
+| `AGENTS.md` | `29c2d287fff80873a6b034f1c7cd8f8259b85b744e45a2cf62ae193dae7f4311` |
+| `README.md` | `eb42ec82b900bc80e67e8b5234002d664cbc21e52325a6e2a3f3f1799ec688e2` |
+| `docs/development-process.md` | `d13da41354b40b706d14cdc44c57569c8914500e5f8ba870c7aeadaac3c2bcf0` |
+| `docs/dispatcher.md` | `82076f3284e8c4b380a6d32a0b4efc21b5ae8dafb68dae73da857b18d583de00` |
+| `docs/github-books.md` | `0da864ae878de40cb5066a505b675a9a636a8d042f71d7f7ff268adc9dab4171` |
+| `docs/roadmap.md` | `8448c15f88a2997d068a24282853271084bd8d7fdb2cde3fcede641d1aa12974` |
+| `docs/session-capture.md` | `af6683473d4e14485a42c7dbfa2af3dba69aee56b221fb87b12203d9156b97bc` |
+| `docs/superpowers/plans/2026-11-01-session-capture.md` | `52e8a0263b5755cc3acdb36c9824fb74de34e736d7055593262c26502e9ae746` |
+| `docs/superpowers/specs/2026-11-01-agent-development-architecture-design.md` | `dc8de3c2d0b8b8551498b3c652f89e4ee32cd903cb7bf5c8c5ce3832199833ac` |
+| `docs/superpowers/specs/2026-11-01-session-capture-design.md` | `bf601bcd82206b61c85f735be88d87d3ec49e7eafc6b41b701dcd8737db2488c` |
+| `task_tower/__main__.py` | `b233be3d4570816c4178d8e3a21af0cea6ac772fb2927eeb8c549a3844f75cdb` |
+| `task_tower/books.py` | `d838086f3a340a657b2635f2f559296945f5b2a4b4ece3ece0e82a0c55e30e87` |
+| `task_tower/capture.py` | `aecb96e7ae4e9bd8fafbcd85f44ae548a183a4a6ef3a22192247321a93f3f331` |
+| `task_tower/capture_cli.py` | `ea41cf183930a513eba501652b2ba80d89b118f58be6eea67c5f5c1f37c19c8e` |
+| `task_tower/capture_migration.py` | `d8c5c26d6e7ca8b6be77d1543cd679d8bb38d1440563753f8669a766753c09b7` |
+| `task_tower/creation_journal.py` | `c5c6be3332276d038d151d99d101893e00bf1a6638af7a1b64be336d340412e3` |
+| `task_tower/dispatcher.py` | `b070801cf3085362b730b0adc8028ea91b2d56951be9398037ba3e017d9790e4` |
+| `task_tower/github_tasks.py` | `7a59f38382fb9676536c1307fc863edca331be93cdd2858d3ebcfe8a85911519` |
+| `tests/test_capture.py` | `92997f5da84d2fc8ed0078fdbc119b852fb94a74e5b77820b28bf0cf660af830` |
+| `tests/test_capture_cli.py` | `8f87bb0cff1bee4a1ca041141e557bdf54cfa50fb113f727c39e45b06298fec8` |
+| `tests/test_capture_migration.py` | `60fbd21c816b35402dab3f62d07553a6cb2c68759f61f9c23588d6b23aa289b3` |
+| `tests/test_dispatcher.py` | `041a03f10bd61f5a0a1204875f08c890ef83d2041cfd1261ec82efe562808c6d` |

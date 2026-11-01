@@ -95,7 +95,7 @@ class CaptureTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.connection=ProjectConnection('test','owner/repo',Path(self.temp.name),'runner')
+        self.connection=ProjectConnection('test','owner/repo',Path(self.temp.name).resolve(),'runner')
         self.store=Store()
         self.preflight=patch('task_tower.project_onboarding.preflight',return_value={'id':'R_1'})
         self.preflight.start(); self.addCleanup(self.preflight.stop)
