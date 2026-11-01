@@ -86,11 +86,25 @@ def _status(stages: dict) -> str:
     return 'in_progress'
 
 
-def _hash(path: Path, root: Path) -> str:
+def _hash(path: Path, root: Path, scheme: str = 'sha256') -> tuple[str, str]:
     path = path.resolve()
     if not path.is_relative_to(root) or not path.is_file():
         raise ValueError('Evidence must be an existing file inside project root')
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    content = path.read_bytes()
+    if scheme == 'auto':
+        try:
+            text = content.decode('utf-8')
+        except UnicodeDecodeError:
+            scheme = 'sha256'
+        else:
+            # NUL and other binary control characters are not text evidence.
+            scheme = ('sha256' if any(ord(char) < 32 and char not in '\t\r\n'
+                                      for char in text) else 'sha256-utf8-lf-v1')
+    if scheme == 'sha256-utf8-lf-v1':
+        content = content.decode('utf-8').replace('\r\n', '\n').encode('utf-8')
+    elif scheme != 'sha256':
+        raise ValueError('Unknown evidence hash scheme')
+    return hashlib.sha256(content).hexdigest(), scheme
 
 
 def _check_evidence(card: dict, path: Path, root: Path, stages=STAGES) -> None:
@@ -99,7 +113,10 @@ def _check_evidence(card: dict, path: Path, root: Path, stages=STAGES) -> None:
         if record.get('status') == 'accepted':
             evidence = Path(record['evidence'])
             try:
-                if evidence.is_absolute() or _hash(path.parent / evidence, root) != record['sha256']:
+                scheme = record.get('hash_scheme', 'sha256')
+                if scheme not in ('sha256', 'sha256-utf8-lf-v1'):
+                    raise ValueError('Unknown evidence hash scheme')
+                if evidence.is_absolute() or _hash(path.parent / evidence, root, scheme)[0] != record['sha256']:
                     raise ValueError('hash mismatch')
             except (OSError, ValueError) as error:
                 raise ValueError('stale evidence for ' + stage) from error
@@ -136,9 +153,10 @@ def accept_task(path: Path, stage: str, reviewer: str, evidence: Path,
             raise ValueError('Cannot skip task stages')
     _check_evidence(card, path, root, STAGES[:index])
     evidence = Path(evidence).resolve()
-    digest = _hash(evidence, root)
+    digest, scheme = _hash(evidence, root, 'auto')
     record = {'status': 'accepted', 'reviewer': reviewer,
-              'evidence': Path(os.path.relpath(evidence, path.parent)).as_posix(), 'sha256': digest}
+              'evidence': Path(os.path.relpath(evidence, path.parent)).as_posix(),
+              'sha256': digest, 'hash_scheme': scheme}
     if stage == 'postmerge':
         record['commit'] = _check_commit(root, commit)
     card['stages'][stage] = record
