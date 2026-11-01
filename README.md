@@ -6,9 +6,11 @@
 
 У каждого подключённого проекта свои Issues, GitHub Project и Markdown-артефакты. Приватный список подключений принадлежит установке, а не репозиторию продукта. [Подключения и книги](docs/github-books.md), [распределённая приёмка и установка runners](docs/github-projects.md).
 
-Целевая структура книжной полки: «Идеи» хранит предложения, «Задачи» — этапы Milestone, крупные фичи в родительских Issues и их подзадачи, «Библиотека проекта» — связанные спеки, исследования и результаты. Этап и фича — отдельные связи: фича может проходить через несколько этапов. Сейчас CLI/HTML показывает плоский список; иерархическое представление запланировано в #22/#23.
+[Процесс непрерывной и параллельной разработки](docs/development-process.md): после явной авторизации бэклога менеджер сам поддерживает до двух независимых задач в работе. Ветки, рабочие копии и приёмка раздельны; слияния и приёмка main последовательны. Сейчас этим управляет активный агентный чат; постоянный пул исполнения внедряется в #15/#16/#18/#19.
 
-Для нового подключения сначала настройте GitHub CLI и создайте/подключите Project, затем импортируйте Issues: [пошаговая настройка с чистого clone](docs/github-setup.md). Bootstrap принимает явные GitHub-флаги и останавливает запуск при отказе Projects; локальный запуск без них не доказывает GitHub-готовность. [Roadmap и реальные Issues 13–28](docs/roadmap.md): project-first onboarding #24 завершён; текущая задача — диспетчер #14, следующая — исполнитель #15. Фоновый исполнитель разработки ещё не реализован.
+Целевая структура книжной полки: «Идеи» хранит предложения, «Задачи» — этапы Milestone, крупные фичи в родительских Issues и их подзадачи, «Библиотека проекта» — связанные спеки, исследования и результаты. Этап и фича — отдельные связи: фича может проходить через несколько этапов. Сейчас CLI/HTML показывает плоский список; структурированные связи и provenance захвата доступны в данных; иерархический интерфейс остаётся в #23.
+
+Для нового подключения сначала настройте GitHub CLI и создайте/подключите Project, затем импортируйте Issues: [пошаговая настройка с чистого clone](docs/github-setup.md). Bootstrap принимает явные GitHub-флаги и останавливает запуск при отказе Projects; локальный запуск без них не доказывает GitHub-готовность. [Roadmap и реальные Issues 13–28](docs/roadmap.md): project-first onboarding #24 и диспетчер #14 завершены; #15 и #22 ведутся параллельно в отдельных рабочих копиях. Фоновый исполнитель разработки ещё не реализован.
 
 Работающий локальный watcher также может [публиковать успешную приёмку и закрывать связанную Issue](docs/github-publication.md). Для этого в приватной конфигурации явно задаются сопоставления задач и доверенный аккаунт; установка self-hosted runner для этого режима не требуется.
 
@@ -113,6 +115,10 @@ Pop-Location
 
 ## Foreground Issue dispatcher
 
-`python -m task_tower dispatcher --connections PRIVATE_CONNECTIONS --config PRIVATE_CONFIG --journal PRIVATE_JOURNAL --once` delivers authorized ready identities to a trusted custom adapter. See [configuration, recovery and limits](docs/dispatcher.md). The default command polls in the foreground; delivery is not development execution or accepted task completion. #14 remains current until exact-main independent acceptance and automatic Issue closure; #15 is next.
+`python -m task_tower dispatcher --connections PRIVATE_CONNECTIONS --config PRIVATE_CONFIG --journal PRIVATE_JOURNAL --once` delivers authorized ready identities to a trusted custom adapter. See [configuration, recovery and limits](docs/dispatcher.md). The default command polls in the foreground; delivery is not development execution or accepted task completion. #14 passed exact-main independent acceptance and automatic closure; #15 and #22 are coordinated in parallel with separate worktrees.
 
 Active-chat authorization continues to the next eligible backlog task after every main/postmerge/Issue-closure cycle without another continue. It does not establish a background development daemon.
+
+## Explicit session capture
+
+[Capture, idea promotion and legacy migration](docs/session-capture.md) use explicit input and the selected project. Original text/session provenance and native parent/milestone links are retained. Ideas do not execute implicitly; migration keeps the original card/evidence bytes and exposes drift while GitHub remains canonical. No all-chat scraping or Codex database writes are involved.
