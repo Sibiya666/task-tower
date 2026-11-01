@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 import re
+import urllib.error
 import urllib.request
 from urllib.parse import quote
 
@@ -60,6 +61,16 @@ def task_status(metadata):
     return status if status in ('open', 'in_progress', 'needs_input', 'awaiting_merge', 'awaiting_postmerge', 'postmerge_review', 'postmerge_failed') else 'needs_input'
 
 
+class GitHubRequestError(GitHubSourceError):
+    """A closed set of diagnostics; remote strings are never retained."""
+    def __init__(self, *, http_status=None, category='invalid_response'):
+        self.http_status=http_status if type(http_status) is int and 100<=http_status<=599 else None
+        self.category=category if category in ('network','invalid_response') else 'invalid_response'
+        message=('GitHub HTTP '+str(self.http_status) if self.http_status is not None else
+                 'GitHub network unavailable' if self.category=='network' else 'GitHub response unavailable or invalid')
+        super().__init__(message)
+
+
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *args, **kwargs):
         raise GitHubSourceError('GitHub redirects are not allowed')
@@ -84,14 +95,18 @@ class GitHubTasks:
         if token: self.headers['Authorization'] = 'Bearer ' + token
 
     def request(self, method, path, payload=None):
-        if method not in ('GET', 'POST', 'PATCH', 'PUT') or not path.startswith('/') or '..' in path or '://' in path or '#' in path:
+        if method not in ('GET', 'POST', 'PATCH', 'PUT') or not path.startswith('/') or ('..' in path and not re.fullmatch(r'/compare/[0-9a-f]{40}\.\.\.main', path)) or '://' in path or '#' in path:
             raise ValueError('Invalid GitHub request')
         try:
             raw = self.transport(method, 'https://api.github.com/repos/' + self.repository + ('' if path == '/' else path), dict(self.headers), payload, MAX_BYTES)
             if not isinstance(raw, bytes) or len(raw) > MAX_BYTES: raise ValueError()
             return json.loads(raw) if raw else None
+        except urllib.error.HTTPError as error:
+            raise GitHubRequestError(http_status=error.code) from None
+        except (urllib.error.URLError, OSError):
+            raise GitHubRequestError(category='network') from None
         except Exception:
-            raise GitHubSourceError('GitHub request unavailable or invalid') from None
+            raise GitHubRequestError() from None
 
     @staticmethod
     def _number(number):

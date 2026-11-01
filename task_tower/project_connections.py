@@ -1,5 +1,5 @@
 """Installation-owned project connections; credentials never belong here."""
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from dataclasses import asdict
 import argparse
 import json
@@ -20,6 +20,7 @@ class ProjectConnection:
     runner_label: str
     project_url: str | None = None
     board: dict | None = None
+    trusted_publishers: list[str] = field(default_factory=list)
 
     def __post_init__(self):
         if not isinstance(self.id, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,99}', self.id):
@@ -28,6 +29,10 @@ class ProjectConnection:
             raise ValueError('Invalid repository')
         if not isinstance(self.runner_label, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,99}', self.runner_label):
             raise ValueError('Invalid runner label')
+        accounts = self.trusted_publishers
+        if (not isinstance(accounts, list) or any(not isinstance(account, str) or '--' in account or not re.fullmatch(r'[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?(?:\[bot\])?', account) for account in accounts)
+            or len({account.casefold() for account in accounts}) != len(accounts)):
+            raise ValueError('Invalid trusted publisher accounts')
         checkout = Path(self.checkout)
         if not checkout.is_absolute() or not checkout.is_dir():
             raise ValueError('Checkout must be an existing absolute directory')

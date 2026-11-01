@@ -88,7 +88,14 @@ class Journal:
 
     def rows(self) -> list[dict]:
         with self._connect() as db:
-            return [self._row(row) for row in db.execute('SELECT * FROM reviews ORDER BY task_id,"commit"')]
+            rows = [self._row(row) for row in db.execute('SELECT * FROM reviews ORDER BY task_id,"commit"')]
+            if db.execute("SELECT name FROM sqlite_master WHERE name='publication_receipts'").fetchone():
+                for publication in db.execute('SELECT p.*, r.payload FROM publications p JOIN publication_receipts r ON p.identity=r.identity ORDER BY p.rowid'):
+                    receipt=json.loads(publication['payload'])
+                    for row in rows:
+                        if row['task_id']==receipt['task_id'] and row['commit']==receipt['commit']:
+                            row['publication']={k:publication[k] for k in ('identity','status','detail')}
+            return rows
 
     def retry(self, task_id: str, commit: str) -> None:
         key = self._key(task_id, commit)
@@ -108,3 +115,54 @@ class Journal:
                 WHERE task_id=? AND "commit"=? AND status='running' ''', key)
             if cursor.rowcount != 1:
                 raise ValueError('Recovery requires an existing running claim')
+
+    def claim_publication(self, identity, owner, now=None, lease_seconds=300):
+        import time
+        now = time.time() if now is None else now
+        if not isinstance(identity, str) or not identity or not owner or not 120 <= lease_seconds <= 3600:
+            raise ValueError('Invalid publication claim')
+        with self._connect() as db:
+            db.execute('''CREATE TABLE IF NOT EXISTS publications (
+                identity TEXT PRIMARY KEY, owner TEXT NOT NULL, status TEXT NOT NULL,
+                lease REAL NOT NULL, detail TEXT NOT NULL DEFAULT '')''')
+            db.execute('BEGIN IMMEDIATE')
+            cursor = db.execute('''INSERT INTO publications VALUES(?,?,'publishing',?,'')
+                ON CONFLICT(identity) DO UPDATE SET owner=excluded.owner,status='publishing',
+                lease=excluded.lease,detail='' WHERE publications.status != 'published'
+                AND (publications.status != 'publishing' OR publications.lease <= ?)''',
+                (identity, owner, now + lease_seconds, now))
+            return cursor.rowcount == 1
+
+    def finish_publication(self, identity, owner, status, detail=''):
+        if status not in ('published', 'failed'):
+            raise ValueError('Invalid publication status')
+        with self._connect() as db:
+            cursor=db.execute('''UPDATE publications SET status=?,detail=?,lease=0
+                WHERE identity=? AND owner=? AND status='publishing' ''',
+                (status, detail, identity, owner))
+            if cursor.rowcount != 1: raise ValueError('Publication owner changed')
+
+    def publication(self, identity):
+        with self._connect() as db:
+            exists=db.execute("SELECT name FROM sqlite_master WHERE name='publications'").fetchone()
+            row=db.execute('SELECT * FROM publications WHERE identity=?',(identity,)).fetchone() if exists else None
+            return dict(row) if row else None
+
+
+    def save_publication_receipt(self, identity, owner, receipt):
+        payload = json.dumps(receipt, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
+        with self._connect() as db:
+            db.execute('CREATE TABLE IF NOT EXISTS publication_receipts (identity TEXT PRIMARY KEY, payload TEXT NOT NULL)')
+            row = db.execute('SELECT owner,status FROM publications WHERE identity=?', (identity,)).fetchone()
+            if not row or row['owner'] != owner or row['status'] != 'publishing':
+                raise ValueError('Publication owner changed')
+            db.execute('INSERT OR IGNORE INTO publication_receipts VALUES(?,?)', (identity,payload))
+            saved = db.execute('SELECT payload FROM publication_receipts WHERE identity=?',(identity,)).fetchone()[0]
+            if saved != payload: raise ValueError('Publication receipt changed')
+            return json.loads(saved)
+
+    def check_publication_owner(self, identity, owner, min_remaining=60):
+        import time
+        row = self.publication(identity)
+        if not row or row['owner'] != owner or row['status'] != 'publishing' or row['lease'] <= time.time() + min_remaining:
+            raise ValueError('Publication lease expired or owner changed')
