@@ -138,8 +138,8 @@ public sealed class TowerHost : Window
             await Task.Delay(150);
             string ok=await web.CoreWebView2.ExecuteScriptAsync("Boolean(window.Tower && window.Tower.ready && document.querySelectorAll('.room').length)");
             if(ok!="true")throw new Exception("HTML did not render live project rooms");
-            string tower=await web.CoreWebView2.ExecuteScriptAsync("document.querySelectorAll('.tower-floor').length === 1 && document.querySelectorAll('.employee-marker').length > 0");
-            if(tower!="true")throw new Exception("Selected floor or individual employee markers missing");
+            string tower=await web.CoreWebView2.ExecuteScriptAsync("document.querySelectorAll('.tower-floor').length === 1 && Boolean(document.querySelector('.scene canvas')) && [...document.querySelectorAll('.employee-marker')].every(m => m.dataset.agentId && m.dataset.status !== 'completed')");
+            if(tower!="true")throw new Exception("Selected floor or truthful employee presence missing");
             string overview=await web.CoreWebView2.ExecuteScriptAsync("Boolean(document.body.classList.contains('overview-mode') && document.querySelectorAll('.overview-floor').length)");
             if(overview!="true")throw new Exception("Whole tower home screen missing");
             if(!AllowsTransparency || web.DefaultBackgroundColor.A!=0)throw new Exception("Native overlay is not transparent");
