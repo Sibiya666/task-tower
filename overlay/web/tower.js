@@ -12,6 +12,7 @@ try{towerSlots=new Map(Object.entries(JSON.parse(localStorage.getItem('tower-slo
 function slotFor(id){if(!towerSlots.has(id)){const used=new Set(towerSlots.values());let slot=0;while(used.has(slot))slot++;towerSlots.set(id,slot);try{localStorage.setItem('tower-slots',JSON.stringify(Object.fromEntries(towerSlots)))}catch{}}return towerSlots.get(id)}
 let viewMode='overview',scrollToSession=null;
 let sentViewMode=null;
+let overviewPosition={left:0,top:0};
 let enteredSkin=null;
 glyphs.waiting=glyphs.idle;glyphs.idle=['000000000','000000000','000000000','000000000','001010100','000000000','000000000','000000000','000000000'];glyphs.completed=glyphs.stopped;
 const presence=new window.AgentPresence();
@@ -150,6 +151,8 @@ const atTop=view.scrollTop<8,atBase=view.scrollTop+view.clientHeight>=view.scrol
 const label=$('tower-map').querySelector('.map-position');if(label)label.textContent=atTop?'Верх\nбашни':atBase?'У\nоснования':'Этаж\n'+nearest.dataset.number;
 }
 function renderOverview(){
+const returning=sentViewMode==='rooms'&&viewMode==='overview';
+if(sentViewMode==='overview'&&viewMode==='rooms')overviewPosition={left:$('overview').scrollLeft,top:$('overview').scrollTop};
 document.body.classList.toggle('overview-mode',viewMode==='overview');
 if(sentViewMode!==viewMode){sentViewMode=viewMode;bridge(viewMode==='overview'?'overview-view':'floor-view')}
 overviewScenes=[];
@@ -183,6 +186,7 @@ const base=document.createElement('div');base.className='overview-foundation';ba
 }
 for(const p of data.projects){const wrapper=[...district.children].find(n=>n.dataset.project===p.id),byId=new Map(p.rooms.map(r=>[r.id,r]));for(const button of wrapper.querySelectorAll('.overview-floor')){const room=byId.get(button.dataset.session),active=occupants(room).filter(a=>state(a)==='active').length;button.classList.toggle('is-active',active>0);button.classList.toggle('source-unknown',sourceBad);button.dataset.activeCount=active;button.title=p.name+' · '+room.title+' · '+(sourceBad?'Нет данных':active?'Работают: '+active:room.label);button.setAttribute('aria-label',button.title);const count=button.querySelector('.overview-floor-count');if(count)count.textContent=sourceBad?'Нет данных':active?'Работают: '+active:'Тихий этаж'}}
 drawOverview();layoutTowerArt();
+if(returning){const restore=()=>{if(viewMode==='overview'){$('overview').scrollLeft=overviewPosition.left;$('overview').scrollTop=overviewPosition.top}};restore();requestAnimationFrame(restore)}
 if(viewMode==='overview'){title($('task-title'),'Башни проектов');title($('task-status'),sourceBad?'Источник недоступен · свет не показывает активность':data.projects.length+' башен · '+lit+' этажей со светом · агентов работают: '+total);$('task-status').style.color=palette[sourceBad?'unknown':'active'];title($('agent-names'),'Башня — проект. Этаж — сессия. Свет в окнах — идёт работа. Нажми на этаж, чтобы войти.')}
 }
 function drawOverview(){

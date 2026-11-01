@@ -16,6 +16,7 @@ The readiness CLI (`task_tower/`) and Windows overlay (`overlay/`) are one produ
 - Draw one whole interior, never concatenate tower facades. Four capacity tiers, three variants each. Capture tier on entry and preserve until leaving; variant is deterministic by session ID.
 - Show all current agents. Newly seen agents enter once, completed/removed agents exit once and disappear; historical completed agents are not occupants. Keep stable models, depth sorting and individual tooltip hitboxes aligned with sprites. Hourglasses mean explicit unresolved user decisions, never generic idle or completed work. Do not infer questions from arbitrary message prose.
 - Minimal transparent UI: overview pin/close, room back/pin/close. No restored footer, captions or combined room tooltip. Drag threshold is 5 px and dragging must not open a floor.
+- Room placement is clamped to the current monitor work area with DPI/negative coordinates considered. Save overview bounds separately and restore them on return, together with canvas scroll; room dragging must not overwrite overview placement.
 - Preserve aspect ratios, true alpha, reduced motion, composition WebView2, CSP and restricted native message origin/actions.
 - Read Codex SQLite in mode=ro; never mutate Codex internals. Stale/unknown states must not claim confirmed work. Runtime snapshots, logs, browser profiles and project assignments stay out of Git. Diagnose using the snapshot referenced by overlay-source.json.
 
@@ -27,6 +28,6 @@ Documentation images belong in `docs/screenshots/`. Preserve raw user screenshot
 
 ## Verification
 
-From overlay/: `python -m unittest -v`, `node --test test-web.cjs test-room-skins.cjs test-presence.cjs test-presence-browser.cjs`; run native `powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File overlay.ps1 -SmokeTest` after host/launch/render changes. Browser tests require Playwright, Sharp and Edge (current bundled paths are machine-specific). CLI tests remain dependency-free and must pass after integration.
+From overlay/: `python -m unittest -v`, `node --test test-web.cjs test-room-skins.cjs test-presence.cjs test-presence-browser.cjs test-scene-position.cjs`; run native `powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File overlay.ps1 -SmokeTest` after host/launch/render changes. Browser tests require Playwright, Sharp and Edge (current bundled paths are machine-specific). CLI tests remain dependency-free and must pass after integration.
 
 PowerShell 5.1 scripts with Cyrillic must be UTF-8 BOM. The desktop shortcut must target `overlay/launch-codex-tower.ps1` and its assets icon. Keep old launch entry points working when moving files.
