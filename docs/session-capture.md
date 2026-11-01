@@ -60,3 +60,9 @@ Cooperating local processes hold a SQLite registry lock across migration. Public
 `migration_state(connection, path)` reports `unmapped`, `pending`, `current` or `stale`. Books attach public hash/status provenance to the canonical Issue once and show stale/pending source errors. Changed source bytes or conflicting same-ID cards cannot silently re-import or overwrite GitHub. Restore and inspect the original input and existing identity before retrying; a different desired payload needs an explicitly reviewed reconciliation outside this migration command. Never delete registry/journal records to force replay.
 
 Keep connections, creation journals, registry/locks and runtime inputs private and out of source control. A registry is not an alternate task database and should not be hand-edited to change task status. Preserve existing active-card controllers; migration adds no blanket ban on their writes, and later changes become visible source drift.
+
+## Task completion and merge identity
+
+For a managed implementation PR, include the exact standalone task marker (for this capture implementation, `Task-Tower: TT-CAPTURE-001`) before merge. Check it against the installation-owned Issue/task mapping and record it with head/base acceptance. Capture provenance and a green CI result do not supply this merge-event identity.
+
+PR37 initially omitted the marker; its genuine successful Actions bundles were unbound (`task_ids: []`). A rerun retained the original payload. The same Issue22 remains open until a reviewed correctly marked follow-up emits a genuine new event and the independent postmerge publisher closes it. Preserve this refusal/reconciliation history; see [recovery process](development-process.md#missing-merge-event-identity-recovery). No manual Issue closure or fabricated receipt is a substitute.
