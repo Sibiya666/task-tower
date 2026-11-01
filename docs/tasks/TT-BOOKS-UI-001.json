@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "id": "TT-BOOKS-UI-001",
+  "title": "Render truthful project books and native task hierarchy in the overlay",
+  "executor": "overlay-books-implementation-team",
+  "project_root": "../..",
+  "mode": "autonomous",
+  "status": "in_progress",
+  "spec": "../superpowers/specs/2026-11-01-overlay-books-design.md",
+  "plan": "../superpowers/plans/2026-11-01-overlay-books.md",
+  "acceptance_criteria": [
+    "Ideas, Tasks and Project library use shared GitHub projections with qualified identities and at most three record cards per page",
+    "Native milestone stages and parent/subissue hierarchy remain distinct, cycle-safe and complete for loaded data; unknown relationships stay visible",
+    "Explicit repository library declarations retain immutable Markdown versions and declared states without implying verified task acceptance",
+    "Progressive bounded private-helper frames render known data before expensive unchanged acceptance proof; stale, partial and pending verification remain explicit",
+    "Restricted native messages/source allowlist preserve private configuration, CSP, transparency, activity and room/monitor invariants",
+    "Real Edge keyboard/DOM and native Windows composition-host UI evidence plus existing full suites establish actual behavior",
+    "Independent stage/exact-head-base PR and exact-main postmerge acceptance precede publisher-driven Issue23 closure"
+  ],
+  "stages": {
+    "spec": {
+      "status": "accepted",
+      "reviewer": "books_ui_spec_acceptance",
+      "evidence": "evidence/TT-BOOKS-UI-001/spec-review.md",
+      "sha256": "f43a3cf980393c6c301b37e80e53fd06bc3f105f8c4f2e2038d32765f31fcfdd",
+      "hash_scheme": "sha256-utf8-lf-v1"
+    },
+    "development": {
+      "status": "pending"
+    },
+    "test": {
+      "status": "pending"
+    },
+    "postmerge": {
+      "status": "pending"
+    }
+  }
+}
