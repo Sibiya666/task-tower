@@ -7,7 +7,7 @@ from task_tower.github_publication import GitHubPublisher, PublicationError
 class PublicationTests(unittest.TestCase):
     def test_claim_has_owner_and_expiring_lease(self):
         with tempfile.TemporaryDirectory() as d:
-            a=Journal(Path(d)/'journal.sqlite'); b=Journal(a.path)
+            a=Journal(Path(d).resolve()/'journal.sqlite'); b=Journal(a.path)
             self.assertTrue(a.claim_publication('id','one',now=100,lease_seconds=120))
             self.assertFalse(b.claim_publication('id','two',now=110,lease_seconds=120))
             self.assertTrue(b.claim_publication('id','two',now=221,lease_seconds=120))
