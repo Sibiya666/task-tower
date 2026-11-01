@@ -124,6 +124,51 @@ class WorkerPublicationTests(__import__('test_postmerge_worker').WorkerTests):
         self.assertEqual(worker.journal.rows()[0]['publication']['detail'],'comment_post: http_403')
         self.assertEqual(row['status'],'done')
 
+    def conflicting_history_case(self, edit_after_post):
+        import json
+        from types import SimpleNamespace
+        from task_tower.github_tasks import GitHubTasks
+        store=self.publisher_store()
+        store.comments=[dict(id=1,body='Ordinary project discussion',user={'login':'bot'})]
+        store.posts=1
+        patches=[]
+        rejection='<!-- task-tower:lifecycle:v1\n'+json.dumps({'status':'needs_input','remote_attempt':{'status':'needs_input','run_id':'999','run_attempt':'1'}})+'\n-->'
+        def transport(method,url,headers,payload,limit):
+            path=url.removeprefix('https://api.github.com/repos/owner/repo')
+            if method=='GET' and path=='/issues/9': return json.dumps(store.get(9)).encode()
+            if method=='PATCH':
+                patches.append(payload)
+                raise OSError('Uncertain transport response')
+            result=store.request(method,path,payload)
+            if method=='POST' and edit_after_post: store.comments[0]['body']=rejection
+            return json.dumps(result).encode()
+        client=GitHubTasks(SimpleNamespace(repository='owner/repo'),transport=transport)
+        worker=self.worker();worker.publisher=GitHubPublisher('owner/repo',{'issue_tasks':{'TT-WORKER-1':9},'publisher_account':'bot'},store=client)
+        first=worker.once()[0]
+        self.assertEqual(first['status'],'done')
+        self.assertEqual(first['publication']['status'],'failed')
+        if edit_after_post:
+            self.assertEqual(first['publication']['detail'],'final_remote: proof_rejected')
+            self.assertEqual(patches,[])
+        else:
+            self.assertEqual(first['publication']['detail'],'issue_close: network')
+            self.assertEqual(len(patches),1)
+            store.comments[0]['body']=rejection
+        retried=worker.once()[0]
+        self.assertEqual(retried['publication']['status'],'failed')
+        self.assertEqual(retried['publication']['detail'],'remote_check: proof_rejected')
+        self.assertFalse(store.closed)
+        self.assertEqual(len(patches),0 if edit_after_post else 1)
+        self.assertEqual(store.posts,2)
+        self.assertEqual(self.counter.read_text(),'x')
+        self.assertEqual(worker.journal.rows()[0]['status'],'done')
+
+    def test_edited_older_lifecycle_blocks_retry_after_uncertain_patch(self):
+        self.conflicting_history_case(False)
+
+    def test_edited_older_lifecycle_between_post_and_close_blocks_close(self):
+        self.conflicting_history_case(True)
+
 class SafeTransportDiagnostics(unittest.TestCase):
     def test_http_status_is_retained_without_sensitive_error_data(self):
         import io

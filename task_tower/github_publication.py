@@ -122,6 +122,7 @@ class GitHubPublisher:
             expected={'remote_attempt':dict(kind='local-postmerge',status='done',commit=receipt['commit'],publication_id=identity,receipt=receipt),'status':'done'}
             if len(matches)>1: raise PublicationError('Ambiguous publication receipts')
             if matches:
+                if len(comments)!=1: raise PublicationError('Conflicting lifecycle requires explicit reconciliation')
                 matching=matches[-1]
                 value=next(v for c,v in comments if c['id']==matching['id'])
                 if value!=expected or matching.get('user',{}).get('login','').lower()!=self.account.lower():
@@ -144,7 +145,7 @@ class GitHubPublisher:
             journal.check_publication_owner(identity,owner)
             phase='final_remote'
             issue,comments=self._remote(receipt)
-            if not comments or comments[-1][0]['id']!=matching['id'] or comments[-1][1]!=expected:
+            if len(comments)!=1 or comments[-1][0]['id']!=matching['id'] or comments[-1][1]!=expected:
                 raise PublicationError('Newer lifecycle supersedes acceptance')
             if comments[-1][0].get('user',{}).get('login','').lower()!=self.account.lower():
                 raise PublicationError('Publication author changed')
