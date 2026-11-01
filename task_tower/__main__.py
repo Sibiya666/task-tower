@@ -50,6 +50,9 @@ def main(argv=None):
     if supplied and supplied[0] == "bootstrap":
         from .bootstrap import main as bootstrap_main
         return bootstrap_main(supplied[1:])
+    if supplied and supplied[0] == "executor":
+        from .executor import main as executor_main
+        return executor_main(supplied[1:])
     if supplied and supplied[0] == "dispatcher":
         from .dispatcher import main as dispatcher_main
         return dispatcher_main(supplied[1:])

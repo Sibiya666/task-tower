@@ -32,3 +32,7 @@ Reports contain sanitized identities and fixed reason codes. Exit 0 means a comp
 Active-chat authorization continues to the next eligible task after each main/postmerge/Issue-closure cycle without another continue. Foreground polling and that chat authorization are separate from future development execution and daemon orchestration.
 
 Dependency proof reads reuse existing host GitHub authentication, including artifact access. This credential remains in the host reader, not the identity-only backend request. Authentication does not turn an unverifiable dependency into ready work; verified_done requirements remain unchanged.
+
+## Development executor adapter
+
+The optional trusted backend can now call the [executor adapter](executor.md#dispatcher-adapter-and-commands). Accepted means durably queued, not execution or task completion. Start a foreground `executor work --once` separately; dispatcher delivery budgets do not create a persistent developer pool. Continuous stage transitions and automatic slot refill remain #16/#18/#19. Keep the dispatcher journal and executor queue private and preserve uncertain intents across restart.

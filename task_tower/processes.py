@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -89,3 +90,174 @@ def run_command(argv, cwd, timeout_seconds, env=None):
     result["duration_seconds"] = round(time.monotonic() - started, 3)
     return result
 
+
+# Optional executor mode keeps raw output bounded in storage and memory.
+class _Drain:
+    def __init__(self, reader, log, cap):
+        import threading
+        self.reader, self.log, self.cap = reader, log, cap
+        self.digest, self.size, self.saved = hashlib.sha256(), 0, 0
+        self.complete = False
+        self.thread = threading.Thread(target=self.run, daemon=True)
+        self.thread.start()
+
+    def run(self):
+        try:
+            while chunk := self.reader.read(65536):
+                self.digest.update(chunk)
+                self.size += len(chunk)
+                if self.log is not None and self.saved < self.cap:
+                    part = chunk[:self.cap - self.saved]
+                    self.log.write(part)
+                    self.saved += len(part)
+            self.complete = True
+        except (OSError, ValueError):
+            pass
+        finally:
+            self.reader.close()
+            if self.log is not None:
+                self.log.close()
+
+
+def _capture_files(capture):
+    if capture is None:
+        return [None, None], 0
+    if (not isinstance(capture, dict) or set(capture) != {'directory', 'max_bytes_per_stream'}
+            or type(capture['max_bytes_per_stream']) is not int
+            or not 0 < capture['max_bytes_per_stream'] <= 1024 * 1024 * 1024):
+        raise ValueError('invalid_capture')
+    directory = Path(capture['directory']).absolute()
+    for path in (directory, *directory.parents):
+        try:
+            info = path.lstat()
+        except OSError as error:
+            raise ValueError('unsafe_capture_directory') from error
+        reparse = (getattr(info, 'st_file_attributes', 0)
+                   & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0x400))
+        if path.is_symlink() or reparse:
+            raise ValueError('unsafe_capture_directory')
+    if not directory.is_dir():
+        raise ValueError('unsafe_capture_directory')
+    paths = [directory / (name + '.log') for name in ('stdout', 'stderr')]
+    if any(path.exists() or path.is_symlink() for path in paths):
+        raise ValueError('capture_exists')
+    logs = []
+    try:
+        for path in paths:
+            logs.append(path.open('xb', buffering=0))
+    except OSError as error:
+        for log in logs:
+            log.close()
+        raise ValueError('capture_unavailable') from error
+    return logs, capture['max_bytes_per_stream']
+
+
+_legacy_run_command = run_command
+
+
+def run_command(argv, cwd, timeout_seconds, env=None, *, cancel_requested=None, capture=None):
+    """Capture schema: {directory: private existing dir, max_bytes_per_stream: int}.
+
+    Optional mode omits argv. Stream hashes/counts cover observed bytes, with
+    tail_unknown set unless EOF was proved; .log files contain capped prefixes.
+    The caller validates installation/checkouts exclusion of the directory.
+    """
+    if cancel_requested is None and capture is None:
+        return _legacy_run_command(argv, cwd, timeout_seconds, env)
+    started = time.monotonic()
+    result = dict(status='unavailable', exit_code=None, started=False, cleanup_confirmed=True)
+    logs, cap = _capture_files(capture)
+    drains, writers, process = [], [], None
+    try:
+        try:
+            cancelled = cancel_requested is not None and cancel_requested()
+        except Exception:
+            result['status'] = 'unknown'
+            return result
+        if cancelled:
+            result['status'] = 'cancelled'
+            return result
+        executable = shutil.which(argv[0], path=env.get('PATH') if env is not None else None)
+        if not executable:
+            return result
+        if Path(executable).suffix.lower() in ('.cmd', '.bat'):
+            result['reason'] = 'shell_script_requires_explicit_interpreter'
+            return result
+        for log in logs:
+            read_fd, write_fd = os.pipe()
+            reader = os.fdopen(read_fd, 'rb', buffering=0)
+            writers.append(os.fdopen(write_fd, 'wb', buffering=0))
+            drains.append(_Drain(reader, log, cap))
+        actual = [executable, *argv[1:]]
+        if os.name == 'nt':
+            from .windows_job import WindowsJobProcess
+            process = WindowsJobProcess(actual, cwd, *writers, env=env)
+        else:
+            process = subprocess.Popen(actual, cwd=cwd, stdin=subprocess.DEVNULL,
+                                       stdout=writers[0], stderr=writers[1],
+                                       start_new_session=True, env=env)
+        result['started'] = True
+        for writer in writers:
+            writer.close()
+        deadline = time.monotonic() + timeout_seconds
+        while True:
+            try:
+                if cancel_requested is not None and cancel_requested():
+                    result['status'] = 'cancelled'
+                    break
+            except Exception:
+                result['status'] = 'unknown'
+                break
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                result['status'] = 'timeout'
+                break
+            try:
+                code = process.wait(min(.25, remaining))
+                result.update(status='passed' if code == 0 else 'failed', exit_code=code)
+                break
+            except subprocess.TimeoutExpired:
+                pass
+    except OSError:
+        result['status'] = 'unavailable' if process is None else 'unknown'
+    finally:
+        cleanup_deadline = time.monotonic() + 5
+        if process is not None:
+            try:
+                if os.name == 'nt':
+                    if result['exit_code'] is None:
+                        process.terminate()
+                    # Wait before closing process handle, then kill remaining descendants.
+                    result['exit_code'] = process.wait(max(.001, cleanup_deadline-time.monotonic()))
+                    process.close()
+                else:
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    result['exit_code'] = process.wait(timeout=max(.001, cleanup_deadline-time.monotonic()))
+            except (OSError, subprocess.TimeoutExpired):
+                result.update(status='cleanup_failed', cleanup_confirmed=False)
+                if os.name == 'nt':
+                    try:
+                        process.close()
+                    except OSError:
+                        pass
+        for writer in writers:
+            writer.close()
+        for drain in drains:
+            drain.thread.join(max(0, cleanup_deadline-time.monotonic()))
+        for name, drain in zip(('stdout', 'stderr'), drains):
+            result[name + '_sha256'] = drain.digest.hexdigest()
+            result[name + '_bytes'] = drain.size
+            result[name + '_captured_bytes'] = drain.saved
+            result[name + '_tail_unknown'] = not drain.complete
+            result[name + '_truncated'] = drain.size > drain.saved or not drain.complete
+            if not drain.complete:
+                result.update(status='cleanup_failed', cleanup_confirmed=False)
+        if not drains:
+            for log in logs:
+                if log is not None:
+                    log.close()
+        result['duration_seconds'] = round(time.monotonic() - started, 3)
+    return result
