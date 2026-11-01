@@ -56,7 +56,8 @@ class BooksAcceptanceTests(unittest.TestCase):
         from tests.test_project_onboarding import API
         from task_tower.project_onboarding import ensure_project_connection
         with tempfile.TemporaryDirectory() as directory:
-            card = Path(directory) / 'legacy.json'
+            root = Path(directory).resolve()
+            card = root / 'legacy.json'
             card.write_text(json.dumps(dict(id='OLD-7', status='done', evidence='keep.md')), encoding='utf-8')
             original = card.read_bytes()
             remote = {}
@@ -75,7 +76,7 @@ class BooksAcceptanceTests(unittest.TestCase):
             for name in ('one','two'):
                 api=API('owner/'+name)
                 apis['owner/'+name]=api
-                connections.append(ensure_project_connection(Path(directory)/(name+'.json'),name,'owner/'+name,Path(directory).resolve(),'tower',transport=api.transport))
+                connections.append(ensure_project_connection(root/(name+'.json'),name,'owner/'+name,root,'tower',transport=api.transport))
             for connection in connections:
                 store = factory(connection)
                 self.assertEqual(store.import_card(card)['number'], 7)

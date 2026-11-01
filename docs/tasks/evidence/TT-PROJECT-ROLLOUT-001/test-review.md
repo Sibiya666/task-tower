@@ -46,3 +46,27 @@ This is Windows local standard-library/fake-transport verification. It does not 
 | `tests/test_project_onboarding.py` | `306b8219fd68381c034c7219e40dfddaa1b76eb04d06b43da3c7f59c65a35e61` |
 | `tests/test_github_projects.py` | `00664d368500ceeb4a7df3147ccbe2b372957f3fab21f8ab4456a61cdfc02a2e` |
 | `tests/test_github_projects_acceptance.py` | `158d46f0483ef4f0dac34f73eb6a0b1bace1b0b1045f5cbe7505a628bf24753e` |
+
+## Supplemental acceptance: macOS fixture correction
+
+Date: 2026-11-01. Decision: ACCEPTED for the updated test hashes below. The initial verification above remains historical evidence; these hashes supersede only its two corresponding fixture-file hashes.
+
+Independently retrieved the failed [macOS CI job](https://github.com/Sibiya666/task-tower/actions/runs/41321512523/job/124892572053) logs through the GitHub connector. It ran 255 tests in 23.201 seconds and failed with one failure, two errors and three skips. The failing fixtures were test_connections_cli_add_remove_and_no_overwrite_init (connections init returned 2), test_import_is_idempotent_and_preserves_unverified_evidence (onboarding rejected unsafe config), and test_import_same_legacy_id_in_two_projects_is_independent (same rejection).
+
+The three TemporaryDirectory contexts passed raw temporary paths into the deliberately strict private-config path guard. On macOS, the temporary directory may retain a system path alias such as /var resolving through /private/var; rejecting symlink parents is expected production behavior. Independently reviewed the fix: resolve each temporary root before constructing config/card paths, and use that same canonical root for checkout. Only tests/test_github_projects.py and tests/test_github_projects_acceptance.py changed; production path validation stays intact. This explains the prior cross-platform claim's limit: the first local Windows run did not expose these remaining legacy fixtures.
+
+After the implementer's fixture-source-stable notice, independently ran:
+
+```powershell
+& 'C:/Users/sibiya666/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe' -m unittest tests.test_project_onboarding tests.test_bootstrap_connections tests.test_github_projects tests.test_github_projects_acceptance -v
+& 'C:/Users/sibiya666/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe' -m unittest discover -s tests -v
+```
+
+Focused result: **55 tests in 1.526 seconds, OK, exit 0**. Full result: **255 tests in 67.793 seconds, OK (skipped=2), exit 0**. The two skips are the same Windows symlink-unavailable tests listed above. Captured a fresh SHA-256 inventory of all task_tower/ and tests/ Python files before both runs and compared after completion: zero changed inputs. git diff --check also passed.
+
+This supplemental acceptance attests local Windows verification and review of the fixture correction. Final green remote macOS/Linux/Windows CI remains a separate parent-owned gate; this report does not claim it has happened.
+
+| Updated file | SHA-256 |
+| --- | --- |
+| `tests/test_github_projects.py` | `85bf1628e0a18008bb3a31ecd5c1d3dd0a84db8481b5c7b220457060aefa045e` |
+| `tests/test_github_projects_acceptance.py` | `d4b6588901dff86009d3373f5a30c41023535c6cd43411ea8ad8a37be1ad0739` |

@@ -39,3 +39,14 @@ Reviewed SHA-256s:
 - `tests/test_github_projects_acceptance.py`: `158d46f0483ef4f0dac34f73eb6a0b1bace1b0b1045f5cbe7505a628bf24753e`
 - `tests/test_github_projects.py`: `00664d368500ceeb4a7df3147ccbe2b372957f3fab21f8ab4456a61cdfc02a2e`
 - `tests/test_project_onboarding.py`: `306b8219fd68381c034c7219e40dfddaa1b76eb04d06b43da3c7f59c65a35e61`
+
+## Development acceptance supplement — 2026-11-01
+
+Decision: ACCEPTED for the macOS fixture correction. Independently reviewed the complete follow-up diff: 9 insertions and 6 deletions across the two test files below. TemporaryDirectory roots are resolved once before constructing connection/card paths or passing checkout arguments. This correctly uses the canonical physical temporary directory on macOS (where /var can be a symlink) while retaining the production requirement that private configuration paths reject symlink/reparse components. The fixtures retain their original assertions and test behavior; no production files changed.
+
+This supplement supersedes only the earlier SHA-256 entries for these two test files; all earlier review history remains intact. The independent test acceptor owns the fresh full-suite and platform CI evidence. No additional blocking finding.
+
+Supplement reviewed SHA-256s:
+
+- `tests/test_github_projects.py`: `85bf1628e0a18008bb3a31ecd5c1d3dd0a84db8481b5c7b220457060aefa045e`
+- `tests/test_github_projects_acceptance.py`: `d4b6588901dff86009d3373f5a30c41023535c6cd43411ea8ad8a37be1ad0739`
