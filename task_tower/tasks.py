@@ -72,16 +72,24 @@ def _read(path: Path) -> tuple[dict, Path]:
                 raise ValueError('Acceptance requires a distinct reviewer')
             if not isinstance(record.get('evidence'), str) or not isinstance(record.get('sha256'), str):
                 raise ValueError('Acceptance requires evidence and sha256')
-    expected = _status(stages)
+    state = card.get('postmerge_state')
+    if state is not None and (not isinstance(state, dict) or state.get('status') not in
+                              ('pending', 'reviewing', 'failed', 'needs_input', 'accepted')):
+        raise ValueError('Invalid postmerge state')
+    expected = _status(stages, state)
     if card.get('status') != expected:
         raise ValueError('Task status does not match accepted stages')
     return card, root
 
 
-def _status(stages: dict) -> str:
+def _status(stages: dict, state: dict | None = None) -> str:
     if stages.get('postmerge', {}).get('status') == 'accepted':
         return 'done'
     if stages.get('test', {}).get('status') == 'accepted':
+        if state:
+            return {'pending': 'awaiting_postmerge', 'reviewing': 'postmerge_review',
+                    'failed': 'postmerge_failed', 'needs_input': 'needs_input',
+                    'accepted': 'awaiting_postmerge'}[state['status']]
         return 'awaiting_merge'
     return 'in_progress'
 
@@ -121,14 +129,16 @@ def _check_evidence(card: dict, path: Path, root: Path, stages=STAGES) -> None:
             except (OSError, ValueError) as error:
                 raise ValueError('stale evidence for ' + stage) from error
             if stage == 'postmerge':
-                _check_commit(root, record.get('commit'))
+                _check_commit(root, record.get('commit'), record.get('main_ref', 'refs/heads/main'))
 
 
-def _check_commit(root: Path, commit: str | None) -> str:
+def _check_commit(root: Path, commit: str | None, main_ref: str = 'refs/heads/main') -> str:
+    if main_ref not in ('refs/heads/main', 'refs/remotes/origin/main'):
+        raise ValueError('Only main may be used for postmerge acceptance')
     if not isinstance(commit, str) or not re.fullmatch(r'[0-9a-fA-F]{7,40}|[0-9a-fA-F]{64}', commit):
         raise ValueError('postmerge requires an explicit Git commit hash')
     resolved = _git(root, 'rev-parse', '--verify', commit + '^{commit}')
-    _git(root, 'merge-base', '--is-ancestor', resolved, 'refs/heads/main')
+    _git(root, 'merge-base', '--is-ancestor', resolved, main_ref)
     return resolved
 
 
@@ -139,10 +149,19 @@ def load_task(path: Path) -> dict:
     return card
 
 
+def task_snapshot(card: dict) -> str:
+    stable = {k: v for k, v in card.items() if k not in ('status', 'postmerge_state')}
+    return hashlib.sha256(json.dumps(stable, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+
+
 def accept_task(path: Path, stage: str, reviewer: str, evidence: Path,
-                commit: str | None = None) -> dict:
+                commit: str | None = None, main_ref: str = 'refs/heads/main',
+                expected_snapshot: str | None = None) -> dict:
     path = _safe_path(path)
+    original_bytes = path.read_bytes()
     card, root = _read(path)
+    if expected_snapshot is not None and task_snapshot(card) != expected_snapshot:
+        raise ValueError('Task changed during review')
     if stage not in STAGES:
         raise ValueError('Unknown task stage')
     if not isinstance(reviewer, str) or not reviewer.strip() or reviewer == card['executor']:
@@ -158,11 +177,39 @@ def accept_task(path: Path, stage: str, reviewer: str, evidence: Path,
               'evidence': Path(os.path.relpath(evidence, path.parent)).as_posix(),
               'sha256': digest, 'hash_scheme': scheme}
     if stage == 'postmerge':
-        record['commit'] = _check_commit(root, commit)
+        record['commit'] = _check_commit(root, commit, main_ref)
+        record['main_ref'] = main_ref
+        card['postmerge_state'] = {'status': 'accepted', 'commit': record['commit']}
+    else:
+        card.pop('postmerge_state', None)
     card['stages'][stage] = record
     for downstream in STAGES[index + 1:]:
         card['stages'][downstream] = {'status': 'pending'}
-    card['status'] = _status(card['stages'])
+    card['status'] = _status(card['stages'], card.get('postmerge_state'))
+    _save_task(path, card, expected_bytes=original_bytes)
+    return card
+
+
+def update_postmerge_state(path: Path, state: str, commit: str, detail: str,
+                           main_ref: str = 'refs/heads/main') -> dict:
+    path = _safe_path(path)
+    original_bytes = path.read_bytes()
+    card = load_task(path)
+    _, root = _read(path)
+    if state not in ('pending', 'reviewing', 'failed', 'needs_input'):
+        raise ValueError('Invalid postmerge state')
+    if card['stages'].get('test', {}).get('status') != 'accepted':
+        raise ValueError('Prior test acceptance required')
+    if card['status'] == 'done':
+        raise ValueError('Completed tasks require explicit reopening')
+    commit = _check_commit(root, commit, main_ref)
+    card['postmerge_state'] = {'status': state, 'commit': commit, 'detail': detail}
+    card['status'] = _status(card['stages'], card['postmerge_state'])
+    _save_task(path, card, expected_bytes=original_bytes)
+    return card
+
+
+def _save_task(path: Path, card: dict, expected_bytes: bytes | None = None) -> None:
     temporary = None
     try:
         with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=path.parent,
@@ -173,9 +220,10 @@ def accept_task(path: Path, stage: str, reviewer: str, evidence: Path,
             stream.flush()
             os.fsync(stream.fileno())
         _safe_path(path)
+        if expected_bytes is not None and path.read_bytes() != expected_bytes:
+            raise ValueError('Task changed before atomic save')
         os.replace(temporary, path)
     finally:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
-    return card
 

@@ -11,6 +11,37 @@ from task_tower import tasks
 
 
 class TaskTests(unittest.TestCase):
+    def test_visible_postmerge_states_do_not_mean_done(self):
+        for stage in ('spec', 'development', 'test'):
+            self.accept(stage)
+        sha = self.git('rev-parse', 'HEAD')
+        for state, expected in [('pending', 'awaiting_postmerge'), ('reviewing', 'postmerge_review'),
+                                ('failed', 'postmerge_failed'), ('needs_input', 'needs_input')]:
+            card = tasks.update_postmerge_state(self.card, state, sha, 'detail')
+            self.assertEqual(card['status'], expected)
+            self.assertEqual(tasks.load_task(self.card)['status'], expected)
+        self.assertNotEqual(card['status'], 'done')
+
+    def test_remote_main_acceptance_is_pinned_and_revalidated(self):
+        for stage in ('spec', 'development', 'test'):
+            self.accept(stage)
+        sha = self.git('rev-parse', 'HEAD')
+        self.git('update-ref', 'refs/remotes/origin/main', sha)
+        card = tasks.accept_task(self.card, 'postmerge', 'reviewer', self.evidence,
+                                 sha, main_ref='refs/remotes/origin/main')
+        self.assertEqual(card['status'], 'done')
+        self.assertEqual(card['stages']['postmerge']['main_ref'], 'refs/remotes/origin/main')
+        self.git('update-ref', '-d', 'refs/remotes/origin/main')
+        with self.assertRaises(ValueError):
+            tasks.load_task(self.card)
+
+    def test_postmerge_state_does_not_bypass_stale_evidence(self):
+        for stage in ('spec', 'development', 'test'):
+            self.accept(stage)
+        self.evidence.write_text('changed')
+        with self.assertRaises(ValueError):
+            tasks.update_postmerge_state(self.card, 'reviewing', self.git('rev-parse', 'HEAD'), '')
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

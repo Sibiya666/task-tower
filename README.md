@@ -72,6 +72,8 @@ docs/            архитектура, планы, отчёты, скринш�
 
 ## CLI готовности
 
+Получение merge-событий, отдельный агент-приёмщик и обновление карточек: [postmerge worker](docs/postmerge-worker.md).
+
 ```powershell
 python -m task_tower audit --project C:/path/to/project --manifest examples/dialoid.project.json --output ../runtime/readiness.json
 ```

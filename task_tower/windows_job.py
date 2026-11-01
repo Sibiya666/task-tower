@@ -64,7 +64,7 @@ def _kernel():
 
 
 class WindowsJobProcess:
-    def __init__(self, argv, cwd, stdout, stderr):
+    def __init__(self, argv, cwd, stdout, stderr, env=None):
         self.kernel = kernel = _kernel()
         self.info = _ProcessInfo()
         self.job = kernel.CreateJobObjectW(None, None)
@@ -86,9 +86,11 @@ class WindowsJobProcess:
                     for handle in handles:
                         os.set_handle_inheritable(handle, True)
                     command = C.create_unicode_buffer(subprocess.list2cmdline(argv))
+                    environment = None if env is None else C.create_unicode_buffer("\0".join(
+                        key + "=" + value for key, value in sorted(env.items(), key=lambda item: item[0].upper())) + "\0\0")
                     # No command runs before successful assignment to the job.
                     if not kernel.CreateProcessW(argv[0], command, None, None, True,
-                                                 0x08000004, None, str(cwd),
+                                                 0x08000404, environment, str(cwd),
                                                  C.byref(startup), C.byref(self.info)):
                         raise C.WinError(C.get_last_error())
                 finally:
@@ -131,3 +133,4 @@ class WindowsJobProcess:
                 setattr(owner, field, None)
         if errors:
             raise C.WinError(errors[0])
+

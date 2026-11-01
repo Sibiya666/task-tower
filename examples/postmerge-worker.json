@@ -1,0 +1,11 @@
+{
+  "project": "..",
+  "repository": "Sibiya666/task-tower",
+  "required_platforms": ["linux", "macos", "windows"],
+  "interval_seconds": 30,
+  "max_reviews": 1,
+  "reviewer": {
+    "kind": "codex",
+    "timeout_seconds": 300
+  }
+}
