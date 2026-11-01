@@ -126,3 +126,54 @@ Same exclusions and canonicalization convention as original manifest (mutable ca
 | `tests/test_github_projects_acceptance.py` | `a9d4b88c253330cac4d24f0228dc82302253377ef8792ee4da3cbacb66f6cc55` |
 | `tests/test_overlay_books.py` | `94d3ae3789c7dde18c6aed1844a7b9675d440bbb42d2e4fc3617aa7eb3774f01` |
 | `tests/test_publication_books.py` | `0fe005102d193795b1b1fdba7abfe5022bded1e56c6033c0ec51bc4ccaf00445` |
+
+## R2 independent test-only rebind — current verdict
+
+Verdict: **ACCEPTED for whole-implementation development/source-and-focused-regression scope** at the complete manifest below. R1 acceptance is retained with the single updated test binding; original rejected findings and correction history remain preserved. No unresolved blocking development finding. This is not TEST/hardware/genuine-source, PR, main/postmerge or Issue-closure acceptance. HEAD `ba125ca4d054333e736a5c2a7348124257e9b3b6`, original base `918554a1e7f6dec10f81a366c1dececa845ff072`.
+
+Independently inspected the entire delta since R1 commit ba125ca: one test-only ProcessStartInfo initializer now sets `WorkingDirectory=rootDir`. The root is already derived from Node __dirname and passed to the compiled harness, so the real producer fixture imports from the canonical repository root regardless of the invoking shell directory. No assertion is removed or weakened, and no product behavior changes. This corrects the documented-overlay-cwd failure independently reproduced by the native reviewer; my R1 checks ran from root and did not expose that portability failure.
+
+Fresh independent command from overlay: `node --test test-books-host.cjs`: **2/2 PASS**, 7.521 seconds, exit 0, including compiled native migration admission/privacy and helper lifecycle checks. Independently recomputed all 34 R1 manifest hashes: exactly overlay/test-books-host.cjs changed; all other 33 bound artifacts, including every product source and pending product documentation, remain unchanged. Corrected test raw SHA-256 `e9be6f93c1b1dfd60e0596b2bf0f711c4a52ecc7bd039ae7e9e76f41ddfa1876`, canonical `fd29a98e3310dd3f7d1bed6f3248fc1fd031a8160d17d6e24ca8595a692f7147`, match supplied values.
+
+Read the separate native review R2: it reports its own fresh root/overlay boundary runs and full documented Node **42/42 PASS**, retaining independently rerun R1 actual composition smoke against unchanged product hashes. Coordinator reports R1 full root CLI **455 tests OK, 4 skipped, 138.231 seconds**. Those broader/native runs were not repeated by me for this test-only insertion. Hardware/manual keyboard routing and genuine configured UI refresh remain pending; Issue23 needs_input/awaiting-user status is coordinator-reported rather than independently queried. This review grants no closure authority. No product edits, commit, push, GitHub write or desktop interaction by reviewer.
+
+### R2 exact complete canonical manifest
+
+Same exclusions/canonicalization as prior manifests. SHA-256 of sorted `path<TAB>hash<LF>`: `871f1e34457e6126a6d696ba2c463bed3ec1f9449682e9435f6b321be6d5085d`. Changing a bound artifact invalidates this acceptance.
+
+| File | SHA-256 |
+| --- | --- |
+| `AGENTS.md` | `38376a50ca739b947883dc09d76465927274f1d6bdd3b85541cfccbc748a80f9` |
+| `README.md` | `ff19a49fb8900f16720525d921cae89d9632b68d94dcf1ca3ad381f5849b9746` |
+| `docs/evidence/2026-11-01-overlay-books.md` | `b6fa106c38cb4841d531eb6c08007e20d469044717e770cb437ebbf038fac383` |
+| `docs/evidence/2026-11-02-overlay-books-native-smoke.md` | `ac8e96b17f88d50ba20ff9f3bb108404df747e14537f45cac1c738f1194ef265` |
+| `docs/github-books.md` | `519dec8fe36aeeeb7f52a73a60aa23ff4c03440e26231369ca1d89731bd28a81` |
+| `docs/roadmap.md` | `aa38146e087666ce2e7a620082144ef46f2f6db85fc24e315ebe9251bf26efac` |
+| `docs/screenshots/2026-11-02-books-native-fixture-overview.png` | `d903d2ba9d65d95ac9458480fb558b483e1c1fc8a6da54336ca00d64d700d7d8` |
+| `docs/screenshots/2026-11-02-books-native-unavailable-compact.png` | `ae1061970092c965affab481bbe5685b7203b8e7fff639f1a71a3263d8585f2a` |
+| `docs/superpowers/plans/2026-11-01-overlay-books.md` | `8f57f5d23934e250d5307da943675ddc57c674ff337d73f3494c3eef4d39f777` |
+| `docs/superpowers/specs/2026-11-01-overlay-books-design.md` | `dc8b90a5284a320d3acafdfddf54c2aef3a95f6791a8941389f21c4213e8e426` |
+| `overlay/BooksBridge.cs` | `49e48abab51e0aadffe1c2ae290fef513ce782a80487832fa6bf3a02946cffd2` |
+| `overlay/README.md` | `8e3acb1f51c9a92c4ad7f935621cf9b719cc5d3acd11d5e333831907a834ac69` |
+| `overlay/TowerHost.cs` | `b3f27c7e70be9ece489f9a22aef9049412403d70a1185610d9531c5c14fdaf97` |
+| `overlay/run-html-overlay.ps1` | `32b59871334595b11099b531c3baef5ca818203e74c3e2013d90fd853670dc4e` |
+| `overlay/test-books-browser.cjs` | `5d9fe4ab27b62543f550a24d3c882818d2aa62e7af9642b6888b29e15ad8396b` |
+| `overlay/test-books-host.cjs` | `fd29a98e3310dd3f7d1bed6f3248fc1fd031a8160d17d6e24ca8595a692f7147` |
+| `overlay/test-books-policy.cjs` | `779003f71284c2122c2a1aba9849c81c10c35046063fc7dd41ebe6ccc90d69c0` |
+| `overlay/web/books-policy.js` | `a73fa4b73cd81d6e8ae9524118f39458cad46febf535bdc6c8adad332d1eb507` |
+| `overlay/web/books-view.js` | `3acce53ef452d2a3136f0b71c3b40ee23509edec4112e813466b1ab0ac510a95` |
+| `overlay/web/books.css` | `5c9710611d412f61f6723761c5f4b71b8c0ec61b4cd1bf52b2916ff2d1421f58` |
+| `overlay/web/index.html` | `a5bcbf661db2b7a85d80695d1dc39a3ada0c8eaed4fc37d225c1284e1bcdda77` |
+| `overlay/web/world-view.js` | `b703cfdf765b8d455d32f2679f7f382b33c44bf2f382d4185fac9d7a572586b9` |
+| `task_tower/book_library.py` | `2d15df2bc8595aa2b96fdfc9f255a6217b5836d5dec63d7235041d2b316f96db` |
+| `task_tower/book_projection.py` | `d10f3b747db9ae2106a4c75794f15fb6708d398368f3490e829d2fe917bc3a1e` |
+| `task_tower/books.py` | `ba38d0976361a797f7cc8acc50a18e6d727ae115e46c82a9b34c0b26804768c5` |
+| `task_tower/github_tasks.py` | `9269064bdf9e1f50f62c7fb58339f7212850030b13a8953e590b499c3687117d` |
+| `task_tower/overlay_books.py` | `5d05cc1da6c6df815b0b212122856b065d9d521d63c0f046ebe1658e8cdc4480` |
+| `tests/books_overlay_fixture.py` | `40827bd4adc19a48b58e6f215735ee863485092fc550f6a063fa1f1853fae7a4` |
+| `tests/test_book_library.py` | `1c0e5afe013826081e61d237f9a283c623e40fd1f288ba407ab2d6e21f9fd5d9` |
+| `tests/test_book_projection.py` | `ec776c5438ca4e714b60380f0ab3f87cc7de6891c2fac77a701f06a4c16f69cc` |
+| `tests/test_github_projects.py` | `fac743f9dcef7c06d769eb774b5289f4e180425d0d824de4f4741e35fe4a3a40` |
+| `tests/test_github_projects_acceptance.py` | `a9d4b88c253330cac4d24f0228dc82302253377ef8792ee4da3cbacb66f6cc55` |
+| `tests/test_overlay_books.py` | `94d3ae3789c7dde18c6aed1844a7b9675d440bbb42d2e4fc3617aa7eb3774f01` |
+| `tests/test_publication_books.py` | `0fe005102d193795b1b1fdba7abfe5022bded1e56c6033c0ec51bc4ccaf00445` |

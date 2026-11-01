@@ -26,7 +26,11 @@
       "hash_scheme": "sha256-utf8-lf-v1"
     },
     "development": {
-      "status": "pending"
+      "status": "accepted",
+      "reviewer": "books_development_review",
+      "evidence": "evidence/TT-BOOKS-UI-001/development-review.md",
+      "sha256": "0028e912b05709e69b1d26c8be498d627cf0a5439ddee19c2898aa7ef53b35a6",
+      "hash_scheme": "sha256-utf8-lf-v1"
     },
     "test": {
       "status": "pending"

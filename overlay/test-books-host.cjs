@@ -67,7 +67,7 @@ using System;using System.IO;using System.Diagnostics;using System.Collections.G
 public static class NativeBooksTest {
  static string python,helper,dir,rootDir;static JavaScriptSerializer json=new JavaScriptSerializer(){MaxJsonLength=10*1024*1024};
  static void Check(bool ok,string message){if(!ok)throw new Exception(message);}
- static ProcessStartInfo Start(string mode,string barrier){return new ProcessStartInfo(python,BooksBridge.QuoteArgument(helper)+" "+BooksBridge.QuoteArgument(mode)+" "+BooksBridge.QuoteArgument(barrier)){UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};}
+ static ProcessStartInfo Start(string mode,string barrier){return new ProcessStartInfo(python,BooksBridge.QuoteArgument(helper)+" "+BooksBridge.QuoteArgument(mode)+" "+BooksBridge.QuoteArgument(barrier)){WorkingDirectory=rootDir,UseShellExecute=false,CreateNoWindow=true,RedirectStandardOutput=true,RedirectStandardError=true};}
  static Dictionary<string,object> Parse(string raw){return (Dictionary<string,object>)json.DeserializeObject(raw);}
  public static void Run(string p,string h,string d,string root){python=p;helper=h;dir=d;rootDir=root;RunAsync().GetAwaiter().GetResult();}
  static async Task RunAsync(){
