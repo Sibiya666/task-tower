@@ -22,7 +22,7 @@
       "status": "accepted",
       "reviewer": "pipeline_task6_spec_review",
       "evidence": "evidence/TT-PIPELINE-001/task6-spec-review.md",
-      "sha256": "364328bd9340cffadfdf437ce72e1f302b5363dfe38368daa30d5649f3193441",
+      "sha256": "e87e96f8a4f92ba2dfd767e19e2eec3d2f71b745e0448d2fedf2d04e8399db53",
       "hash_scheme": "sha256-utf8-lf-v1"
     },
     "development": {
