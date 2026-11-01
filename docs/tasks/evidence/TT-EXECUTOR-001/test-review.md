@@ -36,3 +36,22 @@ Fresh independent command `python -m unittest tests.test_executor_integration te
 - `tests/test_executor_worker.py`: `9f9ab044a602084aec74bd93b072e285d952bbd2eff619fab15893e9d8b9ad2a`
 
 Focused log SHA-256: `722a4338733e1bf599ce039fec16f42ab3f8bd4a6d964f115a05389c36383f69`. Current all-platform CI, fresh exact head/base PR acceptance, exact-main postmerge acceptance and automatic Issue closure remain separate. No source/test edits or commits by this reviewer.
+
+## 2026-11-01 capture reparse guard / portable fixtures supplement — ACCEPTED (local test stage)
+
+Independent executor_final_test reviewed the new production capture guard and all changed fixtures after the genuine second CI failures. The supplied Windows CI log records CPython 3.11.9 and `test_junction_capture_directory_rejected` failing because ValueError was not raised; the macOS CPython 3.11.9 log records positive harness/capture fixture failures. These failures remain historical evidence. They are not a passing current CI result.
+
+This revision has exactly four changed canonical inventory files relative to the preceding supplement: `task_tower/processes.py`, `tests/test_executor_processes.py`, `tests/test_executor_harness.py`, and `tests/test_executor_worker.py`. No other production file changed. The production guard now lstat-checks the capture directory and every ancestor and rejects Windows reparse attributes (including the 0x400 fallback); it does not depend on Path.is_junction. An lstat OSError becomes unsafe_capture_directory before log opening or executable lookup. Canonicalizing test-owned temporary base paths supplies genuine positive paths on alias-based temporary installations; negative raw alias paths remain intact. No assertion was weakened.
+
+Fresh independent bundled Python **3.12.14 / Windows 10** complete command `python -m unittest discover -s tests -v`: **430 tests in 100.444s, OK (4 unavailable symlink privilege skips)**, exit 0. Thus 426 tests executed successfully, including the added real junction test after temporarily removing Path.is_junction, both direct and ancestor aliases, no executable lookup and no output logs. Existing cancellation, containment, strict result, queue and integration tests passed. This is actual Python 3.12 execution with the newer API absent for that regression; it is not actual Python 3.11 execution. Fresh Python 3.11/POSIX platform CI remains required.
+
+Additional independent negative probe injected PermissionError specifically at an existing capture-directory ancestor's lstat: run_command raised unsafe_capture_directory before executable lookup and neither log was created. Removing the injection allowed the same canonical directory to execute a real short child, capture its output and confirm cleanup. Both checks passed; they exercise the new error branch beyond the existing genuine junction regression. No blocking defect found.
+
+The complete 116-file inventory membership and all hashes were regenerated before and after this full run/probe and match. New authoritative aggregate binding: **40802650e6318ce1da55a0e236c75e2f4f9abf8bf14dd0134506ee76ec7846e6**, superseding the previous aggregate for current-source acceptance. Inventory/UTF-8 LF rules remain as initially documented; mutable cards/evidence/runtime are excluded. Changed file hashes:
+
+- `task_tower/processes.py`: `50d2feddcfad3530d3ab63c94bc514b78f082e330de99543e857259cc951c729`
+- `tests/test_executor_processes.py`: `39fa03f0a0b195871e431f3cbfe269efc70b2b500314ddc7670c7dec57020ee3`
+- `tests/test_executor_harness.py`: `bc1d67df95c74f11d56059f50aedd5aff2455a8ff244fab5c148c31fa3ad84a0`
+- `tests/test_executor_worker.py`: `e03851eed4f0ccf18695d9b209e65098343f72a8fbf7fea21ba3247f4da649f9`
+
+Fresh full-suite local log SHA-256: `13026d5469cde8511fe35fabf2c7a300f8f5225736f8fe2c7eab3343f53be9d7`. This reviewer changed only this evidence report, with no source/test changes, commits or remote operations. Whole development acceptance, current all-platform CI, exact head/base PR acceptance and postmerge/closure gates remain separate.

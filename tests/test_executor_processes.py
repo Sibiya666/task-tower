@@ -34,6 +34,7 @@ class ExecutorProcessesTests(unittest.TestCase):
 
     def test_overflow_caps_logs_but_hashes_complete_streams(self):
         with tempfile.TemporaryDirectory() as directory:
+            directory = pathlib.Path(directory).resolve()
             result = run_command([sys.executable, '-c', "import os; os.write(1,b'a'*200000); os.write(2,b'b'*150000)"], '.', 10,
                                  capture={'directory': directory, 'max_bytes_per_stream': 1024})
             self.assertEqual(result['status'], 'passed')
@@ -47,6 +48,7 @@ class ExecutorProcessesTests(unittest.TestCase):
 
     def test_existing_capture_file_not_overwritten(self):
         with tempfile.TemporaryDirectory() as directory:
+            directory = pathlib.Path(directory).resolve()
             path = pathlib.Path(directory) / 'stdout.log'
             path.write_bytes(b'keep')
             with self.assertRaises(ValueError):
@@ -65,6 +67,7 @@ class ExecutorProcessesTests(unittest.TestCase):
     def test_timeout_and_normal_parent_exit_kill_descendants(self):
         for normal in (False, True):
             with self.subTest(normal=normal), tempfile.TemporaryDirectory() as directory:
+                directory = pathlib.Path(directory).resolve()
                 marker = pathlib.Path(directory) / 'escaped'
                 child = "import pathlib,time;time.sleep(.8);pathlib.Path(" + repr(str(marker)) + ").write_text('escaped')"
                 parent = ('import subprocess,sys,time;subprocess.Popen([sys.executable,"-c",' + repr(child) + ']);' + ('pass' if normal else 'time.sleep(20)'))
@@ -83,6 +86,7 @@ class ExecutorProcessesTests(unittest.TestCase):
 
     def test_alias_capture_directory_rejected(self):
         with tempfile.TemporaryDirectory() as root:
+            root = pathlib.Path(root).resolve()
             directory = pathlib.Path(root) / 'private'
             directory.mkdir()
             alias = pathlib.Path(root) / 'alias'
@@ -99,6 +103,7 @@ class ExecutorProcessesTests(unittest.TestCase):
         import os
         import subprocess
         with tempfile.TemporaryDirectory() as root:
+            root = pathlib.Path(root).resolve()
             directory = pathlib.Path(root) / 'private'
             directory.mkdir()
             alias = pathlib.Path(root) / 'alias'
@@ -109,4 +114,35 @@ class ExecutorProcessesTests(unittest.TestCase):
                     run_command([sys.executable, '-c', 'pass'], '.', 3,
                                 capture={'directory': alias, 'max_bytes_per_stream': 100})
             finally:
+                os.rmdir(alias)
+
+    @unittest.skipUnless(sys.platform == 'win32', 'Windows junction')
+    def test_junction_capture_rejected_without_path_is_junction(self):
+        import os
+        import subprocess
+        with tempfile.TemporaryDirectory() as raw:
+            root = pathlib.Path(raw).resolve()
+            directory = root / 'private'
+            directory.mkdir()
+            (directory / 'nested').mkdir()
+            alias = root / 'alias'
+            subprocess.run(['cmd', '/c', 'mklink', '/J', str(alias), str(directory)],
+                           check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            # Python 3.11 lacks Path.is_junction; retain the real reparse point.
+            is_junction = getattr(pathlib.Path, 'is_junction', None)
+            if is_junction is not None:
+                delattr(pathlib.Path, 'is_junction')
+            try:
+                for capture_dir in (alias, alias / 'nested'):
+                    with self.subTest(directory=capture_dir):
+                        with patch('task_tower.processes.shutil.which', return_value=None) as lookup:
+                            with self.assertRaisesRegex(ValueError, 'unsafe_capture_directory'):
+                                run_command([sys.executable, '-c', 'pass'], '.', 3,
+                                            capture={'directory': capture_dir, 'max_bytes_per_stream': 100})
+                            lookup.assert_not_called()
+                        self.assertFalse((capture_dir / 'stdout.log').exists())
+                        self.assertFalse((capture_dir / 'stderr.log').exists())
+            finally:
+                if is_junction is not None:
+                    pathlib.Path.is_junction = is_junction
                 os.rmdir(alias)

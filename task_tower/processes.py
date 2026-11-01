@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -126,8 +127,16 @@ def _capture_files(capture):
             or not 0 < capture['max_bytes_per_stream'] <= 1024 * 1024 * 1024):
         raise ValueError('invalid_capture')
     directory = Path(capture['directory']).absolute()
-    if any(path.is_symlink() or getattr(path, 'is_junction', lambda: False)()
-           for path in (directory, *directory.parents)) or not directory.is_dir():
+    for path in (directory, *directory.parents):
+        try:
+            info = path.lstat()
+        except OSError as error:
+            raise ValueError('unsafe_capture_directory') from error
+        reparse = (getattr(info, 'st_file_attributes', 0)
+                   & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0x400))
+        if path.is_symlink() or reparse:
+            raise ValueError('unsafe_capture_directory')
+    if not directory.is_dir():
         raise ValueError('unsafe_capture_directory')
     paths = [directory / (name + '.log') for name in ('stdout', 'stderr')]
     if any(path.exists() or path.is_symlink() for path in paths):

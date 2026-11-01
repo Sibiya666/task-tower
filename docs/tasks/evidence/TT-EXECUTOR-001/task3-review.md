@@ -24,3 +24,20 @@ No blocking finding. Optional capture drains fixed-size pipe chunks and stores b
 Default tempfile-based behavior is deliberately preserved byte-for-byte for compatibility. New executor callers must supply bounded capture. Installation/checkouts/connections exclusions are Task 4 caller responsibilities. Static directory aliases/junctions and existing log files fail closed; capture uses exclusive creation. This review does not claim hostile concurrent filesystem mutation containment or a process sandbox.
 
 No historical production finding was recorded in this review. Acceptance is invalidated by any change to either source hash above; other Issue 15 implementation stages and whole-diff/head-base acceptance are separate gates.
+
+## Python 3.11 reparse-guard correction supplement — ACCEPTED
+
+Independent reviewer executor_whole_development, 2026-11-01, distinct from implementation/fixer instances. Inspection HEAD `2022439e45e47816218a606ded73564f6c1e2627`, base main `f7ce385b89cdddda089985404ce11fffc36a0797`; corrections are actual uncommitted working-tree bytes. No blocking finding. Historical acceptance remains preserved but changed file bindings are superseded below. Fresh exact-head/base PR acceptance and current CI remain separate gates.
+
+Inspected the actual four-file delta. `_capture_files` now lstat-checks the supplied directory and every ancestor, rejects the Windows reparse bit (portable constant/fallback 0x400), retains symlink rejection and raises fixed unsafe_capture_directory ValueError on lstat OSError. This runs before log creation or executable lookup and does not require Python 3.12 Path.is_junction. Existing files remain exclusively created. Both the target junction and an aliased ancestor are covered by a real Windows junction regression which temporarily removes Path.is_junction and restores it in finally. No process-launch, cleanup, output, authority or dependency behavior changed. Static path checks retain the existing limitation against hostile concurrent filesystem mutation.
+
+The remaining changes canonicalize test-owned temporary roots before supplying legitimate fixture paths in process/harness/one worker test. Assertions and malformed-output cases remain intact; alias tests still explicitly create unsafe aliases and pass those raw aliases to production. This accommodates macOS temporary-root aliases without resolving untrusted production inputs. Source/spec/plan and installation authority remain unchanged apart from the corrected capture guard.
+
+Independent bundled Python 3.12.14 Windows run with PYTHONPATH=tests: `-m unittest tests.test_executor_processes tests.test_processes tests.test_worker_cli tests.test_project_worker tests.test_postmerge_worker tests.test_executor_worker tests.test_executor_harness -q`: **76 tests OK (skipped=1), 33.201 seconds**. The real junction regression ran. Independent missing-directory, regular-file-as-directory and injected lstat PermissionError probes returned unsafe_capture_directory, did not call executable lookup and created no logs. Focused diff-check passed. This reviewer did not execute real Python 3.11 or macOS; mandatory current all-three-OS Python 3.11 CI remains the portability gate. Full-suite acceptance is separate. No downloaded CI failure log inspection is claimed.
+
+Current Task 3 canonical UTF-8/LF bindings supersede the historical process/source-test hashes above:
+
+| File | Canonical SHA-256 |
+| --- | --- |
+| `task_tower/processes.py` | `50d2feddcfad3530d3ab63c94bc514b78f082e330de99543e857259cc951c729` |
+| `tests/test_executor_processes.py` | `39fa03f0a0b195871e431f3cbfe269efc70b2b500314ddc7670c7dec57020ee3` |

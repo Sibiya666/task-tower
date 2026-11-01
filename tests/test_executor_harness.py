@@ -8,12 +8,12 @@ from task_tower import executor_harness as harness
 class HarnessTests(unittest.TestCase):
     def test_duplicate_oversize_and_hardlinked_output_rejected(self):
         with tempfile.TemporaryDirectory() as raw:
-            path=Path(raw)/'result'; attempt=dict(run_id='r',attempt_id='a',source_sha='1'*40)
+            path=Path(raw).resolve()/'result'; attempt=dict(run_id='r',attempt_id='a',source_sha='1'*40)
             path.write_text('{"version":1,"version":1}')
             with self.assertRaises(ValueError): harness.validate_result(path,attempt,4096)
             path.write_text(' '*100)
             with self.assertRaises(ValueError): harness.validate_result(path,attempt,50)
-            os.link(path,Path(raw)/'alias')
+            os.link(path,Path(raw).resolve()/'alias')
             with self.assertRaises(ValueError): harness.validate_result(path,attempt,4096)
     def test_flags_and_policy(self):
         attempt=dict(schema_path='schema',result_path='result',worktree='work',request_path='request',prompt_path='prompt')
@@ -26,7 +26,7 @@ class HarnessTests(unittest.TestCase):
         with self.assertRaises(ValueError): harness.build_invocation(attempt,dict(kind='custom',argv=['custom']))
     def test_result_binding_and_strictness(self):
         with tempfile.TemporaryDirectory() as raw:
-            path=Path(raw)/'result.json'
+            path=Path(raw).resolve()/'result.json'
             attempt=dict(run_id='r',attempt_id='a',source_sha='1'*40)
             value=dict(version=1,**attempt,status='completed',summary='ok')
             path.write_text(json.dumps(value),encoding='utf-8')
@@ -38,6 +38,6 @@ class HarnessTests(unittest.TestCase):
             with self.assertRaises(ValueError): harness.validate_result(path,attempt,4096)
     def test_result_status_container_is_rejected_as_value_error(self):
         with tempfile.TemporaryDirectory() as raw:
-            path=Path(raw)/'result'; attempt=dict(run_id='r',attempt_id='a',source_sha='1'*40)
+            path=Path(raw).resolve()/'result'; attempt=dict(run_id='r',attempt_id='a',source_sha='1'*40)
             path.write_text(json.dumps(dict(version=1,**attempt,status=[],summary='ok')))
             with self.assertRaises(ValueError): harness.validate_result(path,attempt,4096)

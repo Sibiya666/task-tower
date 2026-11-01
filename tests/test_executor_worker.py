@@ -22,7 +22,7 @@ class WorkerTests(unittest.TestCase):
         from task_tower.executor_profiles import profile_fingerprint
         from task_tower.executor_queue import ExecutionQueue
         with tempfile.TemporaryDirectory() as raw:
-            queue=ExecutionQueue(Path(raw)/'queue.db'); profile={'kind':'custom'}
+            queue=ExecutionQueue(Path(raw).resolve()/'queue.db'); profile={'kind':'custom'}
             receipt=queue.submit(dict(operation='submit',delivery_id=str(uuid.uuid4()),repository='Owner/Repo',issue=15,task_id='TT-15',runner_label='local'),profile_fingerprint(profile),profile_id='custom')
             with patch.object(worker,'_authorized',return_value=False),patch.object(worker,'prepare_attempt') as prepare:
                 result=worker.execute_one(dict(profiles={'custom':profile}),queue)
