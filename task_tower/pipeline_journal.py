@@ -517,6 +517,7 @@ class PipelineJournal:
     def _initial_ready(db,row,transition):
         manifest=transition.get('manifest')
         if (row['stage']!='spec' or row['generation']!=1 or row['admission'] is None
+                or row['worktree'] is None or row['git_dir'] is None
                 or transition.get('stage','spec')!='spec' or transition.get('generation',1)!=1
                 or manifest is None or manifest['checkpoint_sha']!=row['source_sha']
                 or manifest['source_sha']!=row['source_sha'] or manifest['base_sha']!=row['base_sha']
@@ -579,6 +580,8 @@ class PipelineJournal:
         schemas['rework_commit']=schemas['commit']|{'failed_attempt_id'}
         kind=intent.get('kind')
         if kind not in schemas or set(intent)!=schemas[kind]: raise ValueError('Invalid effect schema')
+        if kind=='worktree_create':
+            for key in ('worktree','git_dir'): PipelineJournal._host_directory(intent[key])
         if kind in {'commit','rework_commit'}:
             _sha(intent['parent'],40); _sha(intent['tree'],40)
             if intent['contributing_executor_attempt_id'] is not None: _uuid(intent['contributing_executor_attempt_id'])

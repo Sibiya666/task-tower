@@ -80,3 +80,25 @@ Code review confirms the same private index/hook-disabled raw Git implementation
 Initial preparing-to-ready is restricted to spec generation one, immutable admission/source/base, no attempts/verdicts, an owned matching positively completed worktree creation and an initial-source checkpoint with no prior verdict/check proof. It grants no review/publication passage. The real worktree/dead-owner handoff test establishes that an initial zero-process ready action can continue without replaying preparation. Task4 remains responsible for actual Git/external freshness immediately before recording transitions, as explicitly assigned by the accepted rulings; this review does not substitute journal-stored claims for Task4 verification.
 
 No blocking Task 2 R2 findings remain. Builder check: **nothing important left within this extension boundary**. No product files, commits or pushes were changed by this reviewer. Final whole-controller/integration, publication, CI, exact-head/base PR and exact-main gates remain separate. Any change to the four bindings invalidates this acceptance.
+
+
+## Current R3 narrow identity-guard review — accepted
+
+Verdict: **accepted for Task 2 R3**, superseding the R2 four-file bindings while preserving the historical reviews above. Independent reviewer `/root/pipeline_journal_review`; source HEAD `ff7f39c889f891d2747de6fb56f418c171ceab20`. The author disclosed a further missing-identity case after R2: null stored worktree/Git-directory identities could match a worktree_create intent with null values and reach initial ready. Ruling 13 requires actual bound directory identities. This narrow correction closes that API gap rather than relying on the normal Task4 caller to always supply paths.
+
+Final raw hashes equal canonical UTF-8/LF hashes, independently verified before and after checks:
+
+| File | Raw and canonical SHA256 |
+| --- | --- |
+| task_tower/pipeline_inputs.py | ad11e773f7564204edc58e0a080d9f667d657afa48997e07ef343e1214f8bc16 |
+| task_tower/pipeline_journal.py | 58bf6caf92ec9ba39d61f6e92914c0bfed5f3ea803c36ad8ce21201a8e89045f |
+| tests/test_pipeline_inputs.py | 0449de1a85aa3e8fe5e9e6c15a4d1d6976303f6dcfe8994ac07f5b0a2e605566 |
+| tests/test_pipeline_journal.py | c108186861c59874f49d2bb6267bf0b045c64b7cb8395cd2cf650976f7bf4013 |
+
+Inspected the entire actual diff: three production guard lines and ten additive test lines. `_intent` now calls the existing strict host-directory validator for each worktree_create worktree/git_dir value before any effect intent can be persisted; `_initial_ready` independently requires both saved identities to be nonnull. Existing immutable bindings, actual source observation, no-attempt/verdict constraints, unresolved fencing and preparation/rework logic remain intact.
+
+Independent public-API negative probes varied each directory field separately while keeping its counterpart valid: None, False, integer, relative path, Windows reserved-name path and an existing file path. All twelve combinations raised ValueError and the effect history remained empty. This verifies rejection occurs before effect persistence rather than merely rejecting a later ready transition.
+
+Actual independent bundled-Python command: `-m unittest tests.test_pipeline_journal.InitialIdentityGuardTests tests.test_pipeline_journal.InitialReadyProofTests tests.test_pipeline_inputs.InitialReadyCheckpointTests tests.test_pipeline_inputs.ReworkCheckpointTests tests.test_pipeline_journal.ReviewRegressionTests -q`: **7 tests, 18.386 seconds, OK**. The positive actual Git initial preparation/dead-owner handoff and both failed test/check rework flows still pass; R1 late stale-reject and strict typed-preparation regressions also pass. The author separately reports 110 focused tests passing in 62.080 seconds with one skip; that is separate author evidence, not a broader suite rerun by this reviewer for a three-line change.
+
+No blocking R3 findings remain. Builder check: **nothing important left within this narrow guard correction**. No product edits, commit or push were made by this reviewer. Task4's actual external/Git preparation validation and final worker-flow acceptance, later publication and CI/PR/main gates remain independent obligations. Changing any binding invalidates this acceptance.

@@ -478,3 +478,13 @@ class CrossRunReworkProofTests(AttemptFixture, unittest.TestCase):
         intent=dict(kind='rework_commit',parent='a'*40,tree='b'*40,message='Task Tower checkpoint '+second['run_id'],branch=second['branch'],contributing_executor_attempt_id=None,evidence_manifest_sha256=None,failed_attempt_id=attempt['attempt_id'])
         with self.assertRaisesRegex(ValueError,'current failed mutation proof'): self.journal.begin_effect(second['run_id'],owner,intent)
         self.assertEqual(self.journal.history(second['run_id'])['effects'],[])
+
+class InitialIdentityGuardTests(JournalFixture, unittest.TestCase):
+    def test_worktree_creation_requires_nonnull_absolute_directory_identities(self):
+        self.journal.submit(request(),policy()); owner=uid(); run=self.journal.claim(owner,2)
+        run=self.journal.record(run['run_id'],owner,{k:run[k] for k in ('state','stage','generation','input_sha256')},dict(state='preparing',source_sha='a'*40))
+        for worktree,git_dir in ((None,None),('relative/worktree','relative/git'),(123,str(self.path.parent/'gitdir')),(str(self.path.parent/'worktree'),False)):
+            intent=dict(kind='worktree_create',source_sha='a'*40,branch=run['branch'],worktree=worktree,git_dir=git_dir)
+            with self.subTest(worktree=worktree,git_dir=git_dir), self.assertRaisesRegex(ValueError,'host directory'):
+                self.journal.begin_effect(run['run_id'],owner,intent)
+        self.assertEqual(self.journal.history(run['run_id'])['effects'],[])
