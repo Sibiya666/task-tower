@@ -4,7 +4,7 @@
   "title": "Automatically publish successful local acceptance and close the mapped GitHub Issue",
   "executor": "github-publication-implementation-team",
   "project_root": "../..",
-  "mode": "assisted",
+  "mode": "autonomous",
   "status": "awaiting_merge",
   "spec": "../superpowers/specs/2026-11-01-github-publication-design.md",
   "plan": "../superpowers/plans/2026-11-01-github-publication.md",

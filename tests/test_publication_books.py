@@ -1,5 +1,7 @@
 import copy
 import hashlib
+import io
+import zipfile
 import json
 from pathlib import Path
 import tempfile
@@ -115,5 +117,74 @@ class PublicationBookTests(unittest.TestCase):
         self.comments=[]
         self.store.metadata=lambda issue:dict(kind='task',legacy_id='TT-X',remote_attempt=attempt,_lifecycle_author='publisher')
         self.assertFalse(verified_done(self.connection,self.store,self.source,self.issue))
+
+
+
+class ActionsLifecycleBookTests(unittest.TestCase):
+    """Exercise the real ZIP/digest/workflow verifier across lifecycle histories."""
+    def setUp(self):
+        self.connection=SimpleNamespace(repository='a/b',trusted_publishers=['publisher'])
+        self.issue={'number':1,'state':'closed'}
+        bundle={'repository':'a/b','merge_commit':'a'*40,'task_ids':['TT-X'],
+                'platforms':dict(windows='passed',macos='passed',linux='passed')}
+        receipt={'repository':'a/b','issue':1,'run_id':'41','run_attempt':'1','bundle':bundle,
+                 'review':{'verdict':'approve','commit':'a'*40,'task_id':'TT-X'},
+                 'required_platforms':['windows','macos','linux'],
+                 'policy':{'reviewer':'postmerge-agent','executor':'dev','superpowers_sha256':'c'*64}}
+        data=io.BytesIO()
+        with zipfile.ZipFile(data,'w') as archive: archive.writestr('1.json',json.dumps(receipt))
+        raw=data.getvalue()
+        artifact={'id':1,'name':'task-tower-review-1-1','expired':False,
+                  'digest':'sha256:'+hashlib.sha256(raw).hexdigest(),
+                  'workflow_run':{'id':41,'head_sha':'b'*40}}
+        self.source=SimpleNamespace(_pages=lambda *args:[artifact],_get=lambda *args,**kwargs:raw,
+                                    _id=lambda number:number,poll=lambda:[bundle])
+        self.run={'status':'completed','run_attempt':1,'event':'workflow_dispatch','head_branch':'main',
+                  'path':'.github/workflows/task-tower-project.yml','repository':{'full_name':'a/b'},'head_sha':'b'*40}
+        self.approval={'status':'done','remote_attempt':{'status':'done','run_id':'41','run_attempt':'1'}}
+        self.history=[self.approval]
+        self.store=SimpleNamespace(metadata=lambda issue:{'kind':'task'},request=self.request)
+    def request(self,method,path,payload=None):
+        if '/comments?' in path:
+            return [{'id':index+1,'user':{'login':'ordinary-user'},
+                     'body':LIFECYCLE+json.dumps(value)+'\n-->'} for index,value in enumerate(self.history)]
+        if '/actions/runs/' in path: return self.run
+        if '/compare/' in path: return {'status':'ahead'}
+        self.fail('Unexpected request '+path)
+    def test_single_valid_actions_receipt_remains_accepted(self):
+        self.assertTrue(verified_done(self.connection,self.store,self.source,self.issue))
+    def test_actions_replay_cannot_hide_conflicting_local_or_actions_attempt(self):
+        conflicts=[{'kind':'local-postmerge','status':'needs_input'},
+                   {'kind':'local-postmerge','status':'done','publication_id':'d'*64},
+                   {'status':'running','run_id':'42','run_attempt':'1'},
+                   {'status':'needs_input','run_id':'41','run_attempt':'1'},
+                   {'status':'reviewed','run_id':'41','run_attempt':'1','review':{'verdict':'reject'}},
+                   {'status':'done','run_id':'41','run_attempt':'2'}]
+        for conflict in conflicts:
+            with self.subTest(conflict=conflict):
+                self.history=[self.approval,{'status':conflict['status'],'remote_attempt':conflict},self.approval]
+                self.assertFalse(verified_done(self.connection,self.store,self.source,self.issue))
+    def test_same_attempt_running_after_done_cannot_be_hidden_by_replay(self):
+        self.history=[self.approval,{'status':'in_progress','remote_attempt':
+                      {'status':'running','run_id':'41','run_attempt':'1'}},self.approval]
+        self.assertFalse(verified_done(self.connection,self.store,self.source,self.issue))
+    def test_same_attempt_unproven_review_after_done_blocks_replay(self):
+        self.history=[self.approval,{'status':'in_progress','remote_attempt':
+                      {'status':'reviewed','run_id':'41','run_attempt':'1'}},self.approval]
+        self.assertFalse(verified_done(self.connection,self.store,self.source,self.issue))
+    def test_same_attempt_approved_retry_after_done_remains_accepted(self):
+        self.history=[self.approval,{'status':'in_progress','remote_attempt':
+                      {'status':'reviewed','run_id':'41','run_attempt':'1','review':{'verdict':'approve'}}},self.approval]
+        self.assertTrue(verified_done(self.connection,self.store,self.source,self.issue))
+    def test_same_actions_attempt_progress_and_duplicate_done_remain_accepted(self):
+        self.history=[{'status':'in_progress','remote_attempt':{'status':status,'run_id':'41','run_attempt':'1'}}
+                      for status in ('running','reviewed')]+[self.approval,self.approval]
+        self.assertTrue(verified_done(self.connection,self.store,self.source,self.issue))
+        # The API's comment IDs establish order even if rows arrive out of order.
+        original=self.store.request
+        self.store.request=lambda method,path,payload=None: (list(reversed(original(method,path,payload)))
+                            if '/comments?' in path else original(method,path,payload))
+        self.assertTrue(verified_done(self.connection,self.store,self.source,self.issue))
+
 
 if __name__=='__main__': unittest.main()

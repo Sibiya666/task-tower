@@ -21,6 +21,7 @@ def issue_lifecycle(store, issue):
     metadata = dict(store.metadata(issue) or {})
     metadata.pop('_lifecycle_author', None)
     metadata['_lifecycle_history'] = []
+    history = []
     latest = None
     for page in range(1,21):
         comments = store.request('GET', f"/issues/{issue['number']}/comments?per_page=100&page={page}")
@@ -33,10 +34,11 @@ def issue_lifecycle(store, issue):
                 data = json.loads(body[len(LIFECYCLE):-4])
                 if not isinstance(data,dict) or set(data) - {'remote_attempt','status'}: raise ValueError('Invalid lifecycle')
                 if type(comment.get('id')) is not int or comment['id'] < 1: raise ValueError('Invalid lifecycle identity')
-                metadata['_lifecycle_history'].append(data)
+                history.append((comment['id'], data))
                 if latest is None or comment['id'] > latest[0]: latest=(comment['id'],data,comment.get('user', {}).get('login'))
         if len(comments)<100: break
     else: raise ValueError('Lifecycle pagination exceeded')
+    metadata['_lifecycle_history'] = [data for _, data in sorted(history, key=lambda item: item[0])]
     if latest:
         metadata.update(latest[1])
         metadata['_lifecycle_author'] = latest[2]
@@ -155,7 +157,23 @@ def verified_done(connection, store, source, issue):
         if meta.get('remote_attempt', {}).get('status') != 'done': return False
         if meta['remote_attempt'].get('kind') == 'local-postmerge':
             return verified_local_receipt(connection, store, source, issue, meta)
-        return verified_receipt(connection, store, source, issue['number'], meta['remote_attempt']) is not None
+        attempt = meta['remote_attempt']
+        # Artifact provenance proves this approval, but cannot erase conflicting history.
+        # Preserve normal progress within one Actions run/attempt; other identities
+        # and any rejection require explicit reconciliation in either receipt mode.
+        identity = (str(attempt.get('run_id', '')), str(attempt.get('run_attempt', '1')))
+        saw_done = False
+        for lifecycle in meta['_lifecycle_history']:
+            other = lifecycle.get('remote_attempt', {})
+            if saw_done and (other.get('status') == 'running' or
+                             (other.get('status') == 'reviewed' and other.get('review', {}).get('verdict') != 'approve')): return False
+            if other.get('status') == 'done': saw_done = True
+            if (other.get('kind') not in (None, 'actions')
+                or other.get('status') not in ('running', 'reviewed', 'done')
+                or lifecycle.get('status') in ('needs_input', 'failed', 'rejected')
+                or ('review' in other and other['review'].get('verdict') != 'approve')
+                or (str(other.get('run_id', '')), str(other.get('run_attempt', '1'))) != identity): return False
+        return verified_receipt(connection, store, source, issue['number'], attempt) is not None
     except (OSError, ValueError, KeyError, TypeError, AttributeError, RuntimeError, zipfile.BadZipFile):
         return False
 
