@@ -25,6 +25,8 @@ The readiness CLI (`task_tower/`) and Windows overlay (`overlay/`) are one produ
 - Show all current agents. Newly seen agents enter once, completed/removed agents exit once and disappear; historical completed agents are not occupants. Keep stable models, depth sorting and individual tooltip hitboxes aligned with sprites. Hourglasses mean explicit unresolved user decisions, never generic idle or completed work. Do not infer questions from arbitrary message prose.
 - Minimal transparent UI: overview pin/close, room back/pin/close. No restored footer, captions or combined room tooltip. Drag threshold is 5 px and dragging must not open a floor.
 - Room placement is clamped to the current monitor work area with DPI/negative coordinates considered. Save overview bounds separately and restore them on return, together with canvas scroll; room dragging must not overwrite overview placement.
+- World settings live in local WebView storage and are opened by scene context menu. Inactive hiding must preserve waiting decisions and uncertain data, never delete projects, and revive on activity. Distant compact tower art must show the true floor count and keep every session selectable; decorative LOD groups are not actual chat floors.
+- Day/night/weather are decorative only. Preserve transparent backgrounds, input hit-testing, stable plots, real-activity lights and reduced motion. World effects use local licensed PixelFX exports; never add a weather API or network call implicitly.
 - Preserve aspect ratios, true alpha, reduced motion, composition WebView2, CSP and restricted native message origin/actions.
 - Read Codex SQLite in mode=ro; never mutate Codex internals. Stale/unknown states must not claim confirmed work. Runtime snapshots, logs, browser profiles and project assignments stay out of Git. Diagnose using the snapshot referenced by overlay-source.json.
 
@@ -36,7 +38,7 @@ Documentation images belong in `docs/screenshots/`. Preserve raw user screenshot
 
 ## Verification
 
-From overlay/: `python -m unittest -v`, `node --test test-web.cjs test-room-skins.cjs test-presence.cjs test-presence-browser.cjs test-scene-position.cjs`; run native `powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File overlay.ps1 -SmokeTest` after host/launch/render changes. Browser tests require Playwright, Sharp and Edge (current bundled paths are machine-specific). CLI tests remain dependency-free and must pass after integration.
+From overlay/: `python -m unittest -v`, `node --test test-web.cjs test-room-skins.cjs test-presence.cjs test-presence-browser.cjs test-scene-position.cjs test-session-light.cjs test-tower-arrivals.cjs test-world-policy.cjs test-world-browser.cjs test-visual-audit.cjs`; run native `powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File overlay.ps1 -SmokeTest` after host/launch/render changes. Browser tests require Playwright, Sharp and Edge (current bundled paths are machine-specific). CLI tests remain dependency-free and must pass after integration.
 
 PowerShell 5.1 scripts with Cyrillic must be UTF-8 BOM. The desktop shortcut must target `overlay/launch-codex-tower.ps1` and its assets icon. Keep old launch entry points working when moving files.
 
