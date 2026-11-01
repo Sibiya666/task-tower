@@ -98,11 +98,11 @@ class SelectionTests(unittest.TestCase):
         result=select_ready(snapshot,[dict(repository='owner/repo',issue=1,task_id='TT-1')],verify_done=lambda *a:True)
         self.assertFalse(result['ready'])
     def test_config_rejects_ambiguous_task_authority(self):
-        path=Path(self.temp.name)/'private.json'
+        path=Path(self.temp.name).resolve()/'private.json'
         path.write_text(json.dumps(dict(version=1,allowlist=[dict(repository='owner/repo',issue=n,task_id='TT-SAME') for n in (1,2)])))
         with self.assertRaises(ValueError): load_dispatch_config(path,[self.a])
     def test_config_defaults_and_strict_validation(self):
-        path=Path(self.temp.name)/'private.json'
+        path=Path(self.temp.name).resolve()/'private.json'
         def load(value):
             path.write_text(json.dumps(value),encoding='utf-8')
             return load_dispatch_config(path,[self.a])

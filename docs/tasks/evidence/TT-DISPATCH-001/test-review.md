@@ -69,3 +69,14 @@ Canonical manifest scheme: sha256-utf8-lf-v1. Decode UTF-8, normalize CRLF and C
 - tests/test_task_cli.py: cbd6268521debad9b5bbae6b7120535b043f0ae6e6d991eb6b756915e763aaad
 - tests/test_tasks.py: 799b9c5b7c6d1dcb00442c907c116c92cb3eeaf3235dca69104cfe8e799bcfa7
 - tests/test_worker_cli.py: dac98ab97f81e58a524e24029787f5b5c76d76ab4fa13ee5c997278d15080bf7
+
+
+## Supplemental macOS fixture acceptance
+
+Verdict: ACCEPTED for the two-line fixture correction after CI run 41326121583, job 124906306234 reported the unresolved macOS temporary-root path error. Reviewer: dispatcher_test_acceptance. The prior record is retained as history. Both private.json fixtures now resolve the temporary root before constructing the path; this preserves strict production symlink rejection and prevents the ambiguous-authority negative case passing for the wrong reason. No production source or assertion changed.
+
+Independent focused selector verification: 12 tests in 0.046s, OK. Independent complete-suite verification after the correction: 299 tests, OK (2 existing platform skips), exit 0; log runtime-dispatcher-macos-fix-full.log. The complete 55-file source inventory was identical before/after this rerun; relative to the original accepted manifest only tests/test_dispatch_selection.py changed. Inventory runtime-dispatcher-macos-fix-hashes.json. Windows verification does not replace the required macOS/Linux CI rerun, fresh head/base PR acceptance or exact-main postmerge gates.
+
+Canonical scheme remains sha256-utf8-lf-v1. The original selector binding above is explicitly superseded; all other 54 original bindings remain unchanged. Mutable task-card/evidence files are excluded.
+
+- tests/test_dispatch_selection.py: fb345c3bb32cfe43861028cbac78213e6aff2359be1b03e685a89b27ab854e1c

@@ -25,3 +25,15 @@ Canonical manifest scheme: sha256-utf8-lf-v1. Decode each text file as UTF-8, ex
 - tests/test_dispatch_selection.py: ac8a64e9f54ab13b4b8fb1f4e8662c4aeea1d14e9de92185fbbd7d73fcb66345
 - tests/test_dispatch_delivery.py: f363113a265563469a75e1cfb68a5a5a9095d1565d41bde060703e4b99d316ea
 - tests/test_dispatcher.py: 3001755ea884ea791cb77602e295807b356399d95942133d7c2b7579ebdd4245
+
+## Superseding development acceptance — canonical macOS fixture paths
+
+Verdict: ACCEPTED for the supplemental fixture-only diff against 0edcd57a584ac4ce3e3dab0e91ee4b28cd7e9adf. Reviewer: dispatcher_development_acceptance. The preceding acceptance and manifest are preserved as historical evidence; this record supersedes its tests/test_dispatch_selection.py binding only.
+
+Independent review confirmed exactly two fixture path changes: both private.json locations now use Path(self.temp.name).resolve() before composing the filename. This follows the established canonical temporary-directory convention: macOS temporary roots may include a system symlink prefix which safe_config_path intentionally rejects when supplied unresolved. Production path validation remains unchanged. No assertion, authorization gate or exception expectation was weakened. This corrects the fixture failure reported in CI run 41326121583, job 124906306234; it does not constitute a claim that rerun CI passed.
+
+Independent verification: the selector module completed all 12 tests in 0.060s, OK. All other twelve source-manifest entries above were independently recomputed and remain unchanged. The separate test acceptor owns the final complete-suite gate; fresh exact-head/base PR acceptance and current CI remain required after committing this supplemental diff.
+
+Canonical hashing remains sha256-utf8-lf-v1: decode UTF-8, explicitly normalize CRLF and CR to LF, encode UTF-8, then SHA-256. Mutable task-card/evidence files remain excluded. Superseding source binding:
+
+- tests/test_dispatch_selection.py: fb345c3bb32cfe43861028cbac78213e6aff2359be1b03e685a89b27ab854e1c

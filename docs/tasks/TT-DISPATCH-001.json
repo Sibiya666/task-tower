@@ -29,14 +29,14 @@
       "status": "accepted",
       "reviewer": "dispatcher_development_acceptance",
       "evidence": "evidence/TT-DISPATCH-001/development-review.md",
-      "sha256": "a91f0456dbdb188c67f68a3321b74194306d8737ebb0fab48a90ba6d637f6178",
+      "sha256": "217269dada6b1c3a5ca2e5828f543f4f1c52d3c91a19b5aa0915a30503d63b5b",
       "hash_scheme": "sha256-utf8-lf-v1"
     },
     "test": {
       "status": "accepted",
       "reviewer": "dispatcher_test_acceptance",
       "evidence": "evidence/TT-DISPATCH-001/test-review.md",
-      "sha256": "1206032fe4679caa9ef31bd00ad396f455da949614f04b640251d9c6a8e52857",
+      "sha256": "ee4a198ca671271773f085bbd1cd8b15e1ec75cef5a620571222e42cd04e4455",
       "hash_scheme": "sha256-utf8-lf-v1"
     },
     "postmerge": {
