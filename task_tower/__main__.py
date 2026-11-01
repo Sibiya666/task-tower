@@ -35,6 +35,12 @@ def run_baseline(root, manifest, report):
 
 def main(argv=None):
     supplied = sys.argv[1:] if argv is None else argv
+    if supplied and supplied[0] == "connections":
+        from .project_connections import main as connections_main
+        return connections_main(supplied[1:])
+    if supplied and supplied[0] == "books":
+        from .books import main as books_main
+        return books_main(supplied[1:])
     if supplied and supplied[0] == "bootstrap":
         from .bootstrap import main as bootstrap_main
         return bootstrap_main(supplied[1:])

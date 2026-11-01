@@ -1,0 +1,51 @@
+# Copy to each owning repository as .github/workflows/task-tower-project.yml.
+# Replace fixed runner label, paths and pinned Python executable before enabling.
+name: Task Tower project acceptance
+on:
+  workflow_dispatch:
+    inputs:
+      issue:
+        required: true
+        type: string
+      recover:
+        required: false
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  actions: read
+  issues: write
+concurrency:
+  group: task-tower-${{ github.repository }}-${{ inputs.issue }}
+  cancel-in-progress: false
+  queue: max
+jobs:
+  accept:
+    # Fixed trusted label; never route using Issue text or a dispatch input.
+    runs-on: [self-hosted, task-tower-PROJECT]
+    steps:
+      # The installed product checkout/config are administrator-owned. Do not
+      # checkout or execute Issue/PR branches with this job's credentials.
+      - name: Independently accept exact main merge
+        id: consume
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TASK_TOWER_ISSUE: ${{ inputs.issue }}
+          TASK_TOWER_RECOVER: ${{ inputs.recover }}
+        run: |
+          if ($env:TASK_TOWER_ISSUE -notmatch '^[1-9][0-9]*$') { throw 'Invalid Issue number' }
+          "issue=$env:TASK_TOWER_ISSUE" >> $env:GITHUB_OUTPUT
+          Set-Location 'C:/TaskTower/product'
+          $recoveryArgs = @()
+          if ($env:TASK_TOWER_RECOVER -eq 'true') { $recoveryArgs = @('--confirm-stopped') }
+          & 'C:/TaskTower/python/python.exe' -m task_tower.project_worker --connections 'C:/TaskTower/private/connections.json' --project PROJECT --config 'C:/TaskTower/private/worker.json' consume --issue $env:TASK_TOWER_ISSUE @recoveryArgs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Preserve durable review for publication retry on another runner
+        if: always() && steps.consume.outputs.issue != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: task-tower-review-${{ steps.consume.outputs.issue }}-${{ github.run_attempt }}
+          path: C:/TaskTower/private/state/my-project/public/${{ steps.consume.outputs.issue }}.json
+          if-no-files-found: ignore
+          retention-days: 90

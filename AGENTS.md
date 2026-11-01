@@ -8,7 +8,7 @@ Run the complete test suite: `python -m unittest discover -s tests -v` (Python 3
 
 ## Unified repository
 
-The readiness CLI (`task_tower/`) and Windows overlay (`overlay/`) are one product with separate modules. The overlay monitors actual sessions; the CLI audits readiness. Queue/model execution, automated merging and the three-book UI remain planned. Canonical overlay code is in `overlay/`; external old launch paths are compatibility entry points. Preserve unrelated changes and do not commit/push unless requested.
+The readiness CLI (`task_tower/`) and Windows overlay (`overlay/`) are one product with separate modules. The overlay monitors actual sessions; the CLI audits readiness. Private project connections aggregate GitHub Issues and repository Markdown into CLI/HTML books. The project worker supports Actions-serialized postmerge acceptance only; development execution, automated merging and overlay book integration remain planned. Canonical overlay code is in `overlay/`; external old launch paths are compatibility entry points. Preserve unrelated changes and do not commit/push unless requested.
 
 ## Overlay invariants
 
