@@ -13,7 +13,7 @@ from task_tower.pr_policy import load_pr_policy, policy_fingerprint, authorized_
 class PolicyTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name); self.checkout = self.root / 'checkout'; self.checkout.mkdir()
+        self.root = Path(self.tmp.name).resolve(); self.checkout = self.root / 'checkout'; self.checkout.mkdir()
         self.path = self.root / 'policy.json'
         self.connections = (SimpleNamespace(repository='owner/repo', checkout=self.checkout,
             trusted_publishers=['operator']),)

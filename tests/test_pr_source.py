@@ -72,7 +72,7 @@ class SourceTests(unittest.TestCase):
 
     def test_complete_local_binary_diff_when_api_patch_truncated(self):
         with tempfile.TemporaryDirectory() as root:
-            root=Path(root); repo=root/'repo'; repo.mkdir()
+            root=Path(root).resolve(); repo=root/'repo'; repo.mkdir()
             def git(*args):
                 result=subprocess.run(['git','-C',str(repo),*args],capture_output=True,check=True)
                 return result.stdout.decode().strip()

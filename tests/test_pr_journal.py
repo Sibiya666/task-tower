@@ -30,7 +30,7 @@ def finished_process():
 class JournalTests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
-        self.path=Path(self.tmp.name)/'pr.sqlite3'; self.j=PRJournal(self.path)
+        self.path=Path(self.tmp.name).resolve()/'pr.sqlite3'; self.j=PRJournal(self.path)
         self.owner=str(uuid.uuid4())
 
     def advance(self,state):
@@ -174,7 +174,7 @@ class JournalTests(unittest.TestCase):
         # fixture. This isolates the exact PR check from the normal merge barrier
         # that already prevents two same-repository PRs reaching this point.
         source=self.j
-        target=PRJournal(Path(self.tmp.name)/'other.sqlite3')
+        target=PRJournal(Path(self.tmp.name).resolve()/'other.sqlite3')
         with source.owner(self.owner),target.owner(self.owner):
             publication=self.publication_ready()
             self.j=target
@@ -260,7 +260,7 @@ class JournalTests(unittest.TestCase):
             self.assertEqual(self.j.get('owner/repo',44)['state'],'unknown')
             with patch('task_tower.pr_journal._now',return_value=start+timedelta(seconds=1)):
                 with self.assertRaises(ValueError): self.advance('validating')
-        other=PRJournal(Path(self.tmp.name)/'expired.sqlite3')
+        other=PRJournal(Path(self.tmp.name).resolve()/'expired.sqlite3')
         with patch('task_tower.pr_journal._now',return_value=start): other.admit(binding())
         with other.owner(str(uuid.uuid4())) as owner:
             with patch('task_tower.pr_journal._now',return_value=start+timedelta(seconds=60)):
@@ -476,7 +476,7 @@ class JournalTests(unittest.TestCase):
         self.assertIsNotNone(restarted.barrier('owner/repo'))
 
     def test_private_paths_no_checkout_hardlink_sidecar_or_input_collision(self):
-        root=Path(self.tmp.name); checkout=root/'checkout'; checkout.mkdir()
+        root=Path(self.tmp.name).resolve(); checkout=root/'checkout'; checkout.mkdir()
         with self.assertRaises(ValueError): PRJournal(checkout/'j',checkouts=(checkout,))
         with self.assertRaises(ValueError): PRJournal(self.path,forbidden_paths=(Path(str(self.path)+'-wal'),))
         self.j.admit(binding()); alias=root/'alias'; os.link(self.path,alias)
