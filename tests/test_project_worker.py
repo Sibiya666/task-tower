@@ -31,8 +31,8 @@ class ProjectWorkerTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         self.store = Store()
-        self.worker = ProjectWorker(SimpleNamespace(repository='a/b', checkout=Path(self.temp.name)),
-            {'issue_tasks': {'1': 'docs/tasks/TT-X.json'}, 'state_dir': self.temp.name}, self.store,
+        self.worker = ProjectWorker(SimpleNamespace(repository='a/b', checkout=Path(self.temp.name).resolve()),
+            {'issue_tasks': {'1': 'docs/tasks/TT-X.json'}, 'state_dir': str(Path(self.temp.name).resolve())}, self.store,
             None, None, run_id='42')
     def test_dispatch_persists_pending_and_reconciles(self):
         self.worker.dispatch(1)

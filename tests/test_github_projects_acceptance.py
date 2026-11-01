@@ -165,7 +165,7 @@ class BooksAcceptanceTests(unittest.TestCase):
         source = SimpleNamespace(_pages=lambda *args: [artifact], _get=lambda *args, **kwargs: raw,
                                  _id=lambda value: value, poll=lambda: [bundle])
         with tempfile.TemporaryDirectory() as directory:
-            worker = ProjectWorker(self.connection(), dict(issue_tasks={'7': 'docs/tasks/TT-X.json'}, state_dir=directory),
+            worker = ProjectWorker(self.connection(), dict(issue_tasks={'7': 'docs/tasks/TT-X.json'}, state_dir=str(Path(directory).resolve())),
                                    store, source, None, run_id='42')
             worker._prepare = lambda number: (dict(id='TT-X', executor='dev'), bundle, 'stable')
             worker._review = lambda *args: self.fail('runner B repeated runner A review')
@@ -178,8 +178,8 @@ class BooksAcceptanceTests(unittest.TestCase):
         from tests.test_project_worker import Store
         with tempfile.TemporaryDirectory() as directory:
             store = Store()
-            connection = SimpleNamespace(repository='a/b', checkout=Path(directory))
-            config = dict(issue_tasks={'1': 'docs/tasks/TT-X.json'}, state_dir=directory)
+            connection = SimpleNamespace(repository='a/b', checkout=Path(directory).resolve())
+            config = dict(issue_tasks={'1': 'docs/tasks/TT-X.json'}, state_dir=str(Path(directory).resolve()))
             worker = ProjectWorker(connection, config, store, None, None, run_id='42')
             worker._prepare = lambda number: (dict(id='TT-X', executor='dev'), dict(merge_commit='a' * 40), 'same')
             worker._review = lambda *args: dict(task_id='TT-X', commit='a' * 40, verdict='approve', summary='A approved', findings=[])
@@ -199,8 +199,8 @@ class BooksAcceptanceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             store = Store()
             store.meta['remote_attempt'] = dict(status='reviewed', run_id='41', run_attempt='1')
-            worker = ProjectWorker(SimpleNamespace(repository='a/b', checkout=Path(directory)),
-                dict(issue_tasks={'1': 'docs/tasks/TT-X.json'}, state_dir=directory), store, None, None, run_id='42')
+            worker = ProjectWorker(SimpleNamespace(repository='a/b', checkout=Path(directory).resolve()),
+                dict(issue_tasks={'1': 'docs/tasks/TT-X.json'}, state_dir=str(Path(directory).resolve())), store, None, None, run_id='42')
             result = worker.dispatch(1)
             self.assertTrue(result['dispatched'])
             self.assertTrue(any('/dispatches' in path for method, path, payload in store.calls))
