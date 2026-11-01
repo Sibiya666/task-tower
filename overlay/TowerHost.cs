@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -204,6 +204,70 @@ public sealed class TowerHost : Window
         }catch(IOException){}catch(Exception ex){Log(ex);}
     }
 
+    async Task SmokeBooksAssert(string expression,string message)
+    {
+        if(await web.CoreWebView2.ExecuteScriptAsync(expression)!="true")throw new Exception("Books smoke: "+message);
+    }
+
+    async Task SmokeBooks()
+    {
+        // Deterministic public fixtures are confined to -SmokeTest, never source evidence.
+        await web.CoreWebView2.ExecuteScriptAsync("document.getElementById('pin').focus();document.dispatchEvent(new KeyboardEvent('keydown',{key:'b',code:'KeyB',ctrlKey:true,bubbles:true,cancelable:true}))");
+        var helperWait=Stopwatch.StartNew();
+        while(books.IsRefreshing && helperWait.ElapsedMilliseconds<125000)await Task.Delay(50);
+        if(books.IsRefreshing)throw new Exception("Books smoke: helper did not finish within bounded wait");
+        await Task.Delay(100);
+        await SmokeBooksAssert("!document.getElementById('books-dialog').hidden && document.getElementById('books-dialog').contains(document.activeElement)","Ctrl+B handler/focus");
+        var fixture=new {kind="books",version=1,sequence=1,final=false,state="partial",fetched_at=DateTime.UtcNow.ToString("o"),entries=new[]{new {id="smoke/fixture#1",number=1,repository="smoke/fixture",project="native-smoke",book="tasks",title="Native Books fixture — Unicode",status="active",verification="pending",remote_state="closed",description="<img src=x onerror=alert(1)>",source="https://github.com/smoke/fixture/issues/1",relationships=new {parent=(object)null,sub_issues=new object[0],milestone=(object)null}}},errors=new object[0]};
+        web.CoreWebView2.PostWebMessageAsJson(json.Serialize(fixture));
+        await Task.Delay(150);
+        await SmokeBooksAssert("document.querySelectorAll('.books-card').length===1 && document.getElementById('books-records').textContent.includes('pending')","progressive pending fixture rendered via native message");
+        await web.CoreWebView2.ExecuteScriptAsync("document.querySelector('.books-card button:last-child').click()");
+        await SmokeBooksAssert("document.getElementById('books-detail').textContent.includes('<img src=x') && !document.querySelector('#books-detail img')","plain text detail");
+        using(var stream=File.Create(Path.Combine(folder,"runtime/books-native-overview.png")))
+            await web.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png,stream);
+        await web.CoreWebView2.ExecuteScriptAsync("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}))");
+        await SmokeBooksAssert("!document.getElementById('books-detail') && !document.getElementById('books-dialog').hidden","Escape detail first");
+        await web.CoreWebView2.ExecuteScriptAsync("const bs=[...document.querySelectorAll('#books-dialog button,#books-dialog select')].filter(n=>!n.disabled);bs.at(-1).focus();document.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',bubbles:true,cancelable:true}))");
+        await SmokeBooksAssert("document.activeElement===document.querySelector('#books-dialog button')","Tab boundary trap handler");
+        await web.CoreWebView2.ExecuteScriptAsync("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',shiftKey:true,bubbles:true,cancelable:true}))");
+        await SmokeBooksAssert("document.activeElement===[...document.querySelectorAll('#books-dialog button,#books-dialog select')].filter(n=>!n.disabled).at(-1)","Shift+Tab boundary trap handler");
+        // No source opener receives an allowed URL. Verify the production bridge rejects bad input.
+        if(OpenBookSource("https://github.com.evil/smoke/fixture/issues/1"))throw new Exception("Books smoke: native invalid source accepted");
+        using(var sourceBoundary=new BooksBridge(new[]{"smoke/fixture"},new string[0])){
+            int opened=0;
+            if(!sourceBoundary.OpenSource("https://github.com/smoke/fixture/issues/1",url=>opened++))throw new Exception("Books smoke: configured source rejected");
+            if(sourceBoundary.OpenSource("https://github.com/other/repo/issues/1",url=>opened++) || opened!=1)throw new Exception("Books smoke: source allowlist boundary failed");
+        }
+        await web.CoreWebView2.ExecuteScriptAsync("BooksView.acceptSnapshot({kind:'books',version:1,sequence:2,final:true,state:'unavailable',stale:true,fetched_at:null,entries:[],errors:[{project:'native-smoke',error:'Smoke unavailable fixture'}]})");
+        await SmokeBooksAssert("document.getElementById('books-health').textContent.includes('unavailable')","unavailable state");
+        await web.CoreWebView2.ExecuteScriptAsync("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}))");
+        await SmokeBooksAssert("document.getElementById('books-dialog').hidden && document.activeElement.id==='pin'","dialog Escape/focus restoration");
+        await web.CoreWebView2.ExecuteScriptAsync("document.dispatchEvent(new KeyboardEvent('keydown',{key:'F10',shiftKey:true,bubbles:true,cancelable:true}))");
+        await SmokeBooksAssert("!document.getElementById('world-menu').hidden","context keyboard handler");
+        await web.CoreWebView2.ExecuteScriptAsync("document.querySelector('#world-menu button').click()");
+        await SmokeBooksAssert("!document.getElementById('books-dialog').hidden","context Books entry");
+        await web.CoreWebView2.ExecuteScriptAsync("BooksView.close();document.getElementById('world-menu').hidden=true");
+        using(var failedHelper=new BooksBridge(new string[0],new string[0])){
+            var start=BooksBridge.HelperStartInfo(Path.Combine(folder,"runtime/nonexistent-smoke-python.exe"),Path.GetDirectoryName(folder));
+            await failedHelper.RefreshAsync(start,raw=>web.CoreWebView2.PostWebMessageAsJson(raw),1000);
+            await Task.Delay(100);
+            await web.CoreWebView2.ExecuteScriptAsync("BooksView.open()");
+            await SmokeBooksAssert("document.getElementById('books-health').textContent.includes('unavailable')","actual helper launch failure reaches view");
+            await web.CoreWebView2.ExecuteScriptAsync("BooksView.close();document.getElementById('world-menu').hidden=true");
+        }
+        await web.CoreWebView2.ExecuteScriptAsync("document.querySelector('.overview-floor').click()");await Task.Delay(150);
+        var compactBounds=new Rect(Left,Top,Width,Height);
+        await web.CoreWebView2.ExecuteScriptAsync("BooksView.open()");
+        await Task.Delay(100);
+        await SmokeBooksAssert("!document.getElementById('books-dialog').hidden && document.getElementById('books-dialog').scrollWidth<=document.getElementById('books-dialog').clientWidth","compact modal horizontal fit");
+        if(new Rect(Left,Top,Width,Height)!=compactBounds)throw new Exception("Books smoke: dialog changed native bounds");
+        using(var stream=File.Create(Path.Combine(folder,"runtime/books-native-compact.png")))
+            await web.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png,stream);
+        await web.CoreWebView2.ExecuteScriptAsync("BooksView.close();document.getElementById('back-icon').click()");await Task.Delay(150);
+        File.WriteAllText(Path.Combine(folder,"runtime/books-native-result.txt"),"PASS: real composition WebView2 public fixture message; synthetic DOM Ctrl+B/Tab/Shift+Tab/Escape handlers and focus; inert detail; native source rejection and recording allowlist; unavailable fixture; compact bounds/fit; CoreWebView2 captures. This is not hardware keyboard or human acceptance.");
+    }
+
     async Task SmokeTest()
     {
         try{
@@ -263,7 +327,8 @@ public sealed class TowerHost : Window
                 await web.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png,stream);
             using(var bitmap=new System.Drawing.Bitmap(Path.Combine(folder,"runtime/html-host-smoke.png")))
                 if(bitmap.GetPixel(0,0).A!=0)throw new Exception("WebView capture background is opaque");
-            File.WriteAllText(Path.Combine(folder,"runtime/html-host-result.txt"),"PASS: transparent composition window, clear alpha background, native pin controls, live towers, wide-window layout");
+            await SmokeBooks();
+            File.WriteAllText(Path.Combine(folder,"runtime/html-host-result.txt"),"PASS: Books native smoke; transparent composition window, clear alpha background, native pin controls, live towers, wide-window layout");
         }catch(Exception ex){result=1;File.WriteAllText(Path.Combine(folder,"runtime/html-host-result.txt"),"FAIL: "+ex);}
         Close();
     }
