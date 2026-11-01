@@ -92,3 +92,4 @@ body:not(.overview-mode) #tower-view{display:block;width:100%;height:100%;paddin
 body:not(.overview-mode) #room-grid{width:100%;height:100%}
 .overview-mode #back-icon{display:none}
 #tower-view{touch-action:none;user-select:none}.scene canvas,.tower-art-canvas{-webkit-user-drag:none}
+.tower-arrivals{position:absolute;left:0;bottom:calc(var(--distance,0px) - 12px);width:220px;height:90px;z-index:3;pointer-events:none;image-rendering:pixelated}
