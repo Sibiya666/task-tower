@@ -10,6 +10,7 @@ from task_tower.processes import run_command
 class ActualProcessIdentityTests(unittest.TestCase):
     def test_started_pid_matches_the_actual_child(self):
         with tempfile.TemporaryDirectory() as directory:
+            directory = str(Path(directory).resolve())
             result = run_command(
                 [sys.executable, '-c', 'import os; print(os.getpid(), flush=True)'],
                 directory, 5, capture={'directory': directory, 'max_bytes_per_stream': 100})
