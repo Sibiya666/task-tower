@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "id": "TT-DISPATCH-001",
+  "title": "Dispatch authorized ready GitHub Issues through a durable local delivery protocol",
+  "executor": "issue-dispatcher-implementation-team",
+  "project_root": "../..",
+  "mode": "autonomous",
+  "status": "awaiting_merge",
+  "spec": "../superpowers/specs/2026-11-01-issue-dispatcher-design.md",
+  "plan": "../superpowers/plans/2026-11-01-issue-dispatcher.md",
+  "acceptance_criteria": [
+    "Only private allowlisted open autonomous task Issues with independently verified completed dependencies are eligible",
+    "Selection is deterministic, source failures stay visible and isolated, and readiness is revalidated before sending",
+    "Atomic durable intents permit at most one submit per repository/Issue across processes and restarts; unknown delivery only performs authorized lookup",
+    "Trusted file adapters receive bounded identity-only requests through existing cross-platform process lifecycle controls",
+    "Dry-run and status perform no writes or backend actions, and dispatcher never mutates GitHub",
+    "README and AGENTS explain setup, recovery, limits and continuous authorized backlog execution without claiming a development executor",
+    "Independent stage and exact-head PR acceptance, successful three-platform CI and exact-main postmerge acceptance precede automatic Issue14 closure"
+  ],
+  "stages": {
+    "spec": {
+      "status": "accepted",
+      "reviewer": "dispatcher_spec_acceptance",
+      "evidence": "evidence/TT-DISPATCH-001/spec-review.md",
+      "sha256": "f94e40b08f70f3b19ec6c094588326411283b87ee46dfb69973bbc15c9fe1e56",
+      "hash_scheme": "sha256-utf8-lf-v1"
+    },
+    "development": {
+      "status": "accepted",
+      "reviewer": "dispatcher_development_acceptance",
+      "evidence": "evidence/TT-DISPATCH-001/development-review.md",
+      "sha256": "217269dada6b1c3a5ca2e5828f543f4f1c52d3c91a19b5aa0915a30503d63b5b",
+      "hash_scheme": "sha256-utf8-lf-v1"
+    },
+    "test": {
+      "status": "accepted",
+      "reviewer": "dispatcher_test_acceptance",
+      "evidence": "evidence/TT-DISPATCH-001/test-review.md",
+      "sha256": "ee4a198ca671271773f085bbd1cd8b15e1ec75cef5a620571222e42cd04e4455",
+      "hash_scheme": "sha256-utf8-lf-v1"
+    },
+    "postmerge": {
+      "status": "pending"
+    }
+  }
+}

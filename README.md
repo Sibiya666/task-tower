@@ -8,7 +8,7 @@
 
 Целевая структура книжной полки: «Идеи» хранит предложения, «Задачи» — этапы Milestone, крупные фичи в родительских Issues и их подзадачи, «Библиотека проекта» — связанные спеки, исследования и результаты. Этап и фича — отдельные связи: фича может проходить через несколько этапов. Сейчас CLI/HTML показывает плоский список; иерархическое представление запланировано в #22/#23.
 
-Для нового подключения сначала настройте GitHub CLI и создайте/подключите Project, затем импортируйте Issues: [пошаговая настройка с чистого clone](docs/github-setup.md). Bootstrap принимает явные GitHub-флаги и останавливает запуск при отказе Projects; локальный запуск без них не доказывает GitHub-готовность. [Roadmap и реальные Issues 13–28](docs/roadmap.md): текущая первая задача — project-first onboarding #24, затем диспетчер #14. Фоновый исполнитель разработки ещё не реализован.
+Для нового подключения сначала настройте GitHub CLI и создайте/подключите Project, затем импортируйте Issues: [пошаговая настройка с чистого clone](docs/github-setup.md). Bootstrap принимает явные GitHub-флаги и останавливает запуск при отказе Projects; локальный запуск без них не доказывает GitHub-готовность. [Roadmap и реальные Issues 13–28](docs/roadmap.md): project-first onboarding #24 завершён; текущая задача — диспетчер #14, следующая — исполнитель #15. Фоновый исполнитель разработки ещё не реализован.
 
 Работающий локальный watcher также может [публиковать успешную приёмку и закрывать связанную Issue](docs/github-publication.md). Для этого в приватной конфигурации явно задаются сопоставления задач и доверенный аккаунт; установка self-hosted runner для этого режима не требуется.
 
@@ -110,3 +110,9 @@ Pop-Location
 См. [AGENTS.md](AGENTS.md), [архитектуру](docs/superpowers/specs/2026-11-01-agent-development-architecture-design.md) и [устройство оверлея](overlay/README.md). Не выдавайте планы оркестрации за реализованные возможности.
 
 Графика создана через imagegen; исходники и промпты находятся в `overlay/assets/`. Эффекты PixelFX имеют MIT license и дополнительные атрибуции в `overlay/vendor/pixelfx/`. Условия WebView2 SDK сохранены в `overlay/vendor/webview2/sdk/`. Лицензия всего проекта отдельно не назначена.
+
+## Foreground Issue dispatcher
+
+`python -m task_tower dispatcher --connections PRIVATE_CONNECTIONS --config PRIVATE_CONFIG --journal PRIVATE_JOURNAL --once` delivers authorized ready identities to a trusted custom adapter. See [configuration, recovery and limits](docs/dispatcher.md). The default command polls in the foreground; delivery is not development execution or accepted task completion. #14 remains current until exact-main independent acceptance and automatic Issue closure; #15 is next.
+
+Active-chat authorization continues to the next eligible backlog task after every main/postmerge/Issue-closure cycle without another continue. It does not establish a background development daemon.
