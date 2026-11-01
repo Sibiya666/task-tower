@@ -1,5 +1,7 @@
 # Task Tower
 
+When the user authorizes a backlog, apply [continuous and parallel execution](docs/development-process.md): maintain up to two independent Issues in separate worktrees, refill free slots without a per-Issue prompt, and preserve independent stage acceptance. Serialize merge/main acceptance per repository and invalidate stale head/base verdicts. A blocked task must not stall unrelated authorized work. Use installation-owned scope and budgets; this does not grant autonomy to arbitrary newly connected repositories. Active-chat coordination and the planned persistent group pool are distinct capabilities.
+
 Superpowers is the mandatory development process. Read the architecture spec and applicable implementation plan under docs/superpowers before changing behavior. Apply applicable brainstorming, planning, TDD, independent review and verification skills; record evidence rather than claiming a stage passed.
 
 Preserve unrelated project changes. Use isolated working copies for project execution; a worktree is not a process or credential sandbox. Never write Codex internal databases or expose credentials. No installation or model selection is required by the readiness milestone.
