@@ -165,7 +165,7 @@ def run_command(argv, cwd, timeout_seconds, env=None, *, cancel_requested=None, 
     if cancel_requested is None and capture is None:
         return _legacy_run_command(argv, cwd, timeout_seconds, env)
     started = time.monotonic()
-    result = dict(status='unavailable', exit_code=None, started=False, cleanup_confirmed=True)
+    result = dict(status='unavailable', exit_code=None, started=False, cleanup_confirmed=True, pid=None)
     logs, cap = _capture_files(capture)
     drains, writers, process = [], [], None
     try:
@@ -196,7 +196,7 @@ def run_command(argv, cwd, timeout_seconds, env=None, *, cancel_requested=None, 
             process = subprocess.Popen(actual, cwd=cwd, stdin=subprocess.DEVNULL,
                                        stdout=writers[0], stderr=writers[1],
                                        start_new_session=True, env=env)
-        result['started'] = True
+        result.update(started=True, pid=int(process.pid))
         for writer in writers:
             writer.close()
         deadline = time.monotonic() + timeout_seconds
