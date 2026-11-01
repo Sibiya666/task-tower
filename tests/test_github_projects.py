@@ -44,10 +44,11 @@ class ProjectsTests(unittest.TestCase):
         self.assertEqual(report['errors'], [])
     def test_connections_cli_add_remove_and_no_overwrite_init(self):
         with tempfile.TemporaryDirectory() as directory:
-            config = Path(directory) / 'connections.json'
+            root = Path(directory).resolve()
+            config = root / 'connections.json'
             args = ['--config', str(config)]
             self.assertEqual(connections_main(args + ['init']), 0)
-            self.assertEqual(connections_main(args + ['add', '--id', 'one', '--repository', 'owner/one', '--checkout', directory, '--runner-label', 'tower']), 0)
+            self.assertEqual(connections_main(args + ['add', '--id', 'one', '--repository', 'owner/one', '--checkout', str(root), '--runner-label', 'tower']), 0)
             self.assertEqual(len(load_connections(config)), 1)
             with redirect_stderr(io.StringIO()):
                 self.assertEqual(connections_main(args + ['init']), 2)
@@ -108,17 +109,23 @@ class ProjectsTests(unittest.TestCase):
                 parse_metadata(replace_metadata('', dict(version=1, kind='task', executor='same', stages=stages)))
 
     def test_import_is_idempotent_and_preserves_unverified_evidence(self):
+        from tests.test_project_onboarding import API
+        from task_tower.project_onboarding import ensure_project_connection
+        api=API('owner/one')
         issues = []
         def transport(method, url, headers, payload, limit):
+            if url.endswith('/graphql'): return api.transport(method,url,headers,payload,limit)
             if '/comments?' in url: return b'[]'
             if method == 'POST':
                 issues.append(dict(payload, number=1))
                 return json.dumps(issues[-1]).encode()
             return json.dumps(issues).encode()
         with tempfile.TemporaryDirectory() as directory:
-            card = Path(directory) / 'card.json'
+            root = Path(directory).resolve()
+            card = root / 'card.json'
             card.write_text(json.dumps(dict(version=1, id='OLD-1', status='done', stages={}, description='Preserved prose', evidence='old.md')), encoding='utf-8')
-            store = GitHubTasks(self.connection(), transport=transport)
+            connection=ensure_project_connection(root/'connections.json','one','owner/one',root,'tower',transport=api.transport)
+            store = GitHubTasks(connection, transport=transport)
             self.assertEqual(store.import_card(card)['number'], 1)
             self.assertEqual(store.import_card(card)['number'], 1)
             self.assertEqual(len(issues), 1)

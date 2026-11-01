@@ -125,8 +125,8 @@ def main(argv=None):
         if args.import_card:
             if not args.project: raise ValueError('Import requires one explicit project')
             result = GitHubTasks(connections[0]).import_card(args.import_card)
-            print(json.dumps(dict(number=result['number'], source=f'https://github.com/{connections[0].repository}/issues/{result["number"]}')))
-            return 0
+            print(json.dumps(dict(number=result['number'], source=f'https://github.com/{connections[0].repository}/issues/{result["number"]}',project_sync=result['project_sync'])))
+            return 0 if result['project_sync']['status']=='synced' else 1
         report = aggregate(connections, include_library=args.book in (None, 'library'))
         if args.book: report['entries'] = [e for e in report['entries'] if e['book'] == args.book]
         text = render_html(report) if args.format == 'html' else json.dumps(report, ensure_ascii=False, indent=2)

@@ -53,20 +53,30 @@ class BooksAcceptanceTests(unittest.TestCase):
             self.assertEqual(result, 2)
 
     def test_import_same_legacy_id_in_two_projects_is_independent(self):
+        from tests.test_project_onboarding import API
+        from task_tower.project_onboarding import ensure_project_connection
         with tempfile.TemporaryDirectory() as directory:
-            card = Path(directory) / 'legacy.json'
+            root = Path(directory).resolve()
+            card = root / 'legacy.json'
             card.write_text(json.dumps(dict(id='OLD-7', status='done', evidence='keep.md')), encoding='utf-8')
             original = card.read_bytes()
             remote = {}
+            apis={}
             def factory(connection):
                 rows = remote.setdefault(connection.repository, [])
                 def transport(method, url, headers, payload, limit):
+                    if url.endswith('/graphql'): return apis[connection.repository].transport(method,url,headers,payload,limit)
+                    if '/comments?' in url: return b'[]'
                     if method == 'POST':
                         rows.append(dict(payload, number=7))
                         return json.dumps(rows[-1]).encode()
                     return json.dumps(rows).encode()
                 return GitHubTasks(connection, transport=transport)
-            connections = [self.connection(), self.connection('owner/two')]
+            connections=[]
+            for name in ('one','two'):
+                api=API('owner/'+name)
+                apis['owner/'+name]=api
+                connections.append(ensure_project_connection(root/(name+'.json'),name,'owner/'+name,root,'tower',transport=api.transport))
             for connection in connections:
                 store = factory(connection)
                 self.assertEqual(store.import_card(card)['number'], 7)
