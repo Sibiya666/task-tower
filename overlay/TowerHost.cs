@@ -23,6 +23,8 @@ public sealed class TowerHost : Window
     readonly DispatcherTimer timer = new DispatcherTimer();
     readonly DispatcherTimer deadline = new DispatcherTimer();
     readonly JavaScriptSerializer json = new JavaScriptSerializer();
+    readonly BooksBridge books;
+    readonly string booksPython;
     Process collector;
     bool ready, collapsed;
     bool floorView;
@@ -83,7 +85,8 @@ public sealed class TowerHost : Window
 
     TowerHost(string folder,string python,bool smoke)
     {
-        this.folder=folder;this.smoke=smoke;
+        this.folder=folder;this.smoke=smoke;booksPython=python;
+        books=BooksBridge.FromConfiguration(Environment.GetEnvironmentVariable("TASK_TOWER_CONNECTIONS"));
         snapshotPath=Path.Combine(folder,"runtime/snapshot-"+Process.GetCurrentProcess().Id+".json");
         Title=WindowTitle;Width=650;MinWidth=470;MaxWidth=1000;
         Height=560;MinHeight=560;MaxHeight=560;
@@ -105,7 +108,7 @@ public sealed class TowerHost : Window
         SourceInitialized+=(s,e)=>HwndSource.FromHwnd(new WindowInteropHelper(this).Handle).AddHook(WindowMessages);
         ContentRendered+=(s,e)=>{ShowWindow(new WindowInteropHelper(this).Handle,5);KeepInsideMonitor();};
         Closed+=(s,e)=>{
-            timer.Stop();deadline.Stop();ready=false;
+            timer.Stop();deadline.Stop();ready=false;books.Dispose();
             try{web.Dispose();}catch{}
             if(collector!=null){try{if(!collector.HasExited){collector.Kill();collector.WaitForExit(2000);}}catch{}collector.Dispose();}
         };
@@ -123,11 +126,18 @@ public sealed class TowerHost : Window
             core.Settings.IsZoomControlEnabled=false;
             core.Settings.AreBrowserAcceleratorKeysEnabled=false;
             core.SetVirtualHostNameToFolderMapping("tower.local",Path.Combine(folder,"web"),CoreWebView2HostResourceAccessKind.DenyCors);
-            core.NavigationStarting+=(s,e)=>{Uri uri;if(!Uri.TryCreate(e.Uri,UriKind.Absolute,out uri)||uri.Scheme!="https"||uri.Host!="tower.local")e.Cancel=true;};
+            core.NavigationStarting+=(s,e)=>{if(e.Uri!="https://tower.local/index.html")e.Cancel=true;};
             core.NewWindowRequested+=(s,e)=>e.Handled=true;
             core.WebMessageReceived+=(s,e)=>{
-                if(!e.Source.StartsWith("https://tower.local/",StringComparison.Ordinal))return;
+                if(e.Source!="https://tower.local/index.html")return;
                 try{
+                    string bookAction,bookUrl;
+                    if(BooksBridge.TryMessage(e.Source,e.WebMessageAsJson,out bookAction,out bookUrl)){
+                        if(bookAction=="books-refresh")GC.KeepAlive(RefreshBooksAsync());
+                        else OpenBookSource(bookUrl);
+                        return;
+                    }
+                    if(System.Text.Encoding.UTF8.GetByteCount(e.WebMessageAsJson)>16384)return;
                     var message=json.Deserialize<System.Collections.Generic.Dictionary<string,string>>(e.WebMessageAsJson);
                     string action;if(!message.TryGetValue("action",out action))return;
                     switch(action){
@@ -170,6 +180,20 @@ public sealed class TowerHost : Window
     }
 
     void SetHeight(double height){MinHeight=0;MaxHeight=double.PositiveInfinity;Height=height;MinHeight=height;MaxHeight=height;}
+    public Task RefreshBooksAsync()
+    {
+        return books.RefreshAsync(BooksBridge.HelperStartInfo(booksPython,Path.GetDirectoryName(folder)),raw=>{
+            long attemptId=books.AttemptId;
+            Dispatcher.BeginInvoke(new Action(()=>{
+                // Queued callbacks from a closed/superseded attempt cannot repaint.
+                if(ready && books.AttemptId==attemptId)web.CoreWebView2.PostWebMessageAsJson(raw);
+            }));
+        });
+    }
+    public bool OpenBookSource(string url)
+    {
+        return books.OpenSource(url,target=>Process.Start(new ProcessStartInfo(target){UseShellExecute=true}));
+    }
     void PushSnapshot()
     {
         if(!ready)return;
