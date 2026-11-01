@@ -1,0 +1,24 @@
+{
+  "source": "tower-unified-source.png",
+  "sharedX": 128,
+  "sharedWidth": 768,
+  "slices": {
+    "roof": {
+      "top": 0,
+      "height": 548
+    },
+    "floor": {
+      "top": 548,
+      "height": 405
+    },
+    "base": {
+      "top": 953,
+      "height": 583
+    }
+  },
+  "renderHeights": {
+    "roof": 95.52734375,
+    "floor": 70.6640625,
+    "base": 101.80859375
+  }
+}

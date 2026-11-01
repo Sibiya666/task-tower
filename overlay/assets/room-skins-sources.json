@@ -1,0 +1,50 @@
+[
+  {
+    "id": "cabinet-0",
+    "source": "exec-439671cd-2fba-45f3-9e41-b607ca5abd8f.png"
+  },
+  {
+    "id": "cabinet-1",
+    "source": "exec-4be8133c-425e-46b9-bf86-3d7f97daaf84.png"
+  },
+  {
+    "id": "cabinet-2",
+    "source": "exec-42b4cafb-aa30-4bb9-b19d-5a63d27c068e.png"
+  },
+  {
+    "id": "workshop-0",
+    "source": "exec-803dff05-1bb1-4c4f-a37b-af97625cdfb0.png"
+  },
+  {
+    "id": "workshop-1",
+    "source": "exec-ccfb95ba-9762-4455-961c-03a72813303c.png"
+  },
+  {
+    "id": "workshop-2",
+    "source": "exec-c58c769d-c3bc-4390-b2d7-e2acf638e93f.png"
+  },
+  {
+    "id": "hall-0",
+    "source": "exec-9da62d87-04d4-4199-86ae-87347ee8a48d.png"
+  },
+  {
+    "id": "hall-1",
+    "source": "exec-64bd7163-0a6f-46f7-be42-62d5e5eec8b7.png"
+  },
+  {
+    "id": "hall-2",
+    "source": "exec-dcd536ac-1231-44fe-aa4f-64f49c271ff0.png"
+  },
+  {
+    "id": "wings-0",
+    "source": "exec-1c953d09-b3ae-4ecf-98ce-7b89702c8995.png"
+  },
+  {
+    "id": "wings-1",
+    "source": "exec-5cf5aa67-f99e-4398-a9a8-e3e8debdd8d7.png"
+  },
+  {
+    "id": "wings-2",
+    "source": "exec-10f0f304-acde-4a99-bf6a-bdbb0a0ab349.png"
+  }
+]
