@@ -6,6 +6,7 @@ let data={projects:[]},projectId=null,selectedId=null,scenes=[],lastFrame=0,sour
 const sessions=p=>(p?.rooms||[]).slice().sort((a,b)=>String(a.id).localeCompare(String(b.id)));
 const images={};
 let overviewScenes=[];
+const towerAgentIds=new Map(),towerArrivals=new Map();
 let highlightedFloor=null;
 let towerSlots=new Map();
 try{towerSlots=new Map(Object.entries(JSON.parse(localStorage.getItem('tower-slots')||'{}')).filter(([,v])=>Number.isInteger(v)&&v>=0))}catch{}
@@ -157,13 +158,17 @@ document.body.classList.toggle('overview-mode',viewMode==='overview');
 if(sentViewMode!==viewMode){sentViewMode=viewMode;bridge(viewMode==='overview'?'overview-view':'floor-view')}
 overviewScenes=[];
 const root=$('overview');let district=root.querySelector('#overview-towers');if(!district){district=document.createElement('div');district.id='overview-towers';root.append(district)}
+const oldFieldWidth=district.offsetWidth,oldFieldScroll=root.scrollLeft;
+const columns=Math.max(1,...data.projects.map(p=>slotFor(p.id)%3+1));
+district.style.gridTemplateColumns='repeat('+columns+',220px)';district.style.width='max(100%,'+(columns*220+(columns-1)*25+30)+'px)';district.style.justifyContent='end';
 const allRooms=data.projects.flatMap(p=>p.rooms),lit=allRooms.filter(r=>occupants(r).some(a=>state(a)==='active')).length,total=allRooms.reduce((n,r)=>n+occupants(r).filter(a=>state(a)==='active').length,0);
 const liveProjects=new Set(data.projects.map(p=>p.id));for(const node of [...district.children])if(!liveProjects.has(node.dataset.project))node.remove();
 for(const p of data.projects){
 const ordered=sessions(p),signature=ordered.map(r=>r.id).join('|'),previous=[...district.children].find(n=>n.dataset.project===p.id);
-if(previous&&previous.dataset.signature===signature){previous.querySelector('.project-tower-name').textContent=p.name;overviewScenes.push({canvas:previous.querySelector('canvas'),ordered});continue}
+if(previous&&previous.dataset.signature===signature){previous.style.gridColumn=String(columns-slotFor(p.id)%3);previous.querySelector('.project-tower-name').textContent=p.name;overviewScenes.push({canvas:previous.querySelector('.tower-art-canvas'),ordered});continue}
 const wrapper=document.createElement('section');wrapper.className='project-tower';wrapper.dataset.project=p.id;wrapper.dataset.signature=signature;wrapper.setAttribute('aria-label','Башня проекта '+p.name);
-const slot=slotFor(p.id);wrapper.style.gridColumn=String(slot%3+1);wrapper.style.gridRow=String(Math.floor(slot/3)+1);
+const arrivals=document.createElement('canvas');arrivals.className='tower-arrivals';arrivals.width=220;arrivals.height=90;arrivals.setAttribute('aria-hidden','true');wrapper.append(arrivals);
+const slot=slotFor(p.id);wrapper.style.gridColumn=String(columns-slot%3);wrapper.style.gridRow=String(Math.floor(slot/3)+1);
 wrapper.style.setProperty('--tower-ratio',Math.max(1,ordered.length)/Math.max(1,...data.projects.map(p=>p.rooms.length)));
 wrapper.style.setProperty('--floor-count',Math.max(1,ordered.length));
 const heading=document.createElement('button');heading.className='project-tower-name';heading.textContent=p.name;heading.title=p.name+' · сессий: '+ordered.length;heading.onclick=()=>{viewMode='rooms';projectId=p.id;selectedId=ordered.at(-1)?.id;scrollToSession=selectedId;render()};
@@ -186,6 +191,7 @@ const base=document.createElement('div');base.className='overview-foundation';ba
 }
 for(const p of data.projects){const wrapper=[...district.children].find(n=>n.dataset.project===p.id),byId=new Map(p.rooms.map(r=>[r.id,r]));for(const button of wrapper.querySelectorAll('.overview-floor')){const room=byId.get(button.dataset.session),active=occupants(room).filter(a=>state(a)==='active').length;button.classList.toggle('is-active',active>0);button.classList.toggle('source-unknown',sourceBad);button.dataset.activeCount=active;button.title=p.name+' · '+room.title+' · '+(sourceBad?'Нет данных':active?'Работают: '+active:room.label);button.setAttribute('aria-label',button.title);const count=button.querySelector('.overview-floor-count');if(count)count.textContent=sourceBad?'Нет данных':active?'Работают: '+active:'Тихий этаж'}}
 drawOverview();layoutTowerArt();
+if(viewMode==='overview'&&!returning)root.scrollLeft=Math.max(0,oldFieldScroll+district.offsetWidth-oldFieldWidth);
 if(returning){const restore=()=>{if(viewMode==='overview'){$('overview').scrollLeft=overviewPosition.left;$('overview').scrollTop=overviewPosition.top}};restore();requestAnimationFrame(restore)}
 if(viewMode==='overview'){title($('task-title'),'Башни проектов');title($('task-status'),sourceBad?'Источник недоступен · свет не показывает активность':data.projects.length+' башен · '+lit+' этажей со светом · агентов работают: '+total);$('task-status').style.color=palette[sourceBad?'unknown':'active'];title($('agent-names'),'Башня — проект. Этаж — сессия. Свет в окнах — идёт работа. Нажми на этаж, чтобы войти.')}
 }
@@ -236,7 +242,34 @@ const rooms=document.createElement('div');rooms.className='floor-rooms';rooms.ap
 view.scrollTop=scroll;details(selected());draw(lastFrame);renderOverview();
 if(scrollToSession){const floor=[...view.querySelectorAll('.tower-floor')].find(f=>f.dataset.session===scrollToSession);if(floor)view.scrollTop=floor.offsetTop-5;scrollToSession=null}trackPosition();
 }
-function acceptSnapshot(value){if(!value||!Array.isArray(value.projects))return;data=value;freshness();render()}
+function trackTowerArrivals(value){
+ const fresh=!value.error&&Date.now()/1000-value.updatedAt<=12;
+ if(!fresh){towerAgentIds.clear();towerArrivals.clear();return}
+ const live=new Set(value.projects.map(p=>p.id));
+ for(const id of towerAgentIds.keys())if(!live.has(id)){towerAgentIds.delete(id);towerArrivals.delete(id)}
+ for(const p of value.projects){
+  const before=towerAgentIds.get(p.id),current=new Set(),queue=towerArrivals.get(p.id)||[];
+  for(const room of p.rooms)occupants(room).forEach((agent,index)=>{
+   if(agent.status==='completed')return;current.add(agent.id);
+   if(before&&!before.has(agent.id)&&agent.status==='active'&&viewMode==='overview'&&!reducedMotion())queue.push({agent,index,since:performance.now()+queue.length*130});
+  });
+  towerAgentIds.set(p.id,current);towerArrivals.set(p.id,queue);
+ }
+}
+function drawTowerArrivals(frame){
+ const now=performance.now();
+ for(const wrapper of $('overview').querySelectorAll('.project-tower')){
+  const canvas=wrapper.querySelector('.tower-arrivals'),ctx=canvas.getContext('2d');ctx.clearRect(0,0,220,90);ctx.imageSmoothingEnabled=false;
+  const queue=(towerArrivals.get(wrapper.dataset.project)||[]).filter(a=>now-a.since<1500&&!reducedMotion());towerArrivals.set(wrapper.dataset.project,queue);canvas.dataset.arrivals=queue.length;
+  const scale=Math.max(.4,parseFloat(wrapper.style.getPropertyValue('--tower-scale'))||1);
+  for(const item of queue){const t=Math.max(0,(now-item.since)/1500);if(now<item.since)continue;
+   const x=25+85*t,y=85-(7+8*scale)*t,w=20*scale,h=28*scale;
+   ctx.save();ctx.globalAlpha=t>.8?(1-t)/.2:Math.min(1,t*8);ctx.translate(x,y+Math.sin(frame*2)*scale);
+   ctx.drawImage(images['employee-'+employeeModel(item.agent,item.index)],-w/2,-h,w,h);ctx.restore();
+  }
+ }
+}
+function acceptSnapshot(value){if(!value||!Array.isArray(value.projects))return;trackTowerArrivals(value);data=value;freshness();render()}
 $('room-grid').onscroll=trackPosition;
 let dragStart=null,dragged=false;
 $('tower-view').addEventListener('pointerdown',e=>{if(e.button===0){dragStart={x:e.clientX,y:e.clientY};dragged=false}});
@@ -254,5 +287,5 @@ Promise.all([...Object.keys(window.RoomSkins).flatMap(id=>['room-'+id,'room-'+id
 images['ambient-layer']=document.createElement('canvas');images['ambient-layer'].width=193;images['ambient-layer'].height=224;
 const mask=images['tower-aligned-window-mask'],lit=document.createElement('canvas');lit.width=mask.width;lit.height=mask.height;const ctx=lit.getContext('2d');ctx.drawImage(mask,0,0);ctx.globalCompositeOperation='source-in';ctx.fillStyle='#efbf6a';ctx.fillRect(0,0,lit.width,lit.height);images['lit-windows']=lit;
 window.Tower.ready=true;render();bridge('ready')}).catch(()=>{$('source').textContent='Не удалось загрузить рисунки комнат'});
-setInterval(()=>{lastFrame++;if(lastFrame%7===0)freshness();if(window.Tower.ready&&viewMode==='rooms')draw(lastFrame)},140);
+setInterval(()=>{lastFrame++;if(lastFrame%7===0)freshness();if(window.Tower.ready){if(viewMode==='rooms')draw(lastFrame);else drawTowerArrivals(lastFrame)}},140);
 })();

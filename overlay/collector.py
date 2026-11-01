@@ -22,7 +22,11 @@ def apply_event(state, event):
     pending = state.setdefault('pending_requests', {})
     kind = payload.get('type')
     if event.get('type') == 'response_item':
-        if kind in ('function_call', 'custom_tool_call'):
+        if kind == 'message' and payload.get('role') == 'user':
+            pending.clear()
+            if state.get('status') != 'active':
+                state['status'] = 'idle'
+        elif kind in ('function_call', 'custom_tool_call'):
             name = str(payload.get('name', '')).split('.')[-1]
             if name in ('request_user_input', 'request_user_input_async'):
                 pending[payload.get('call_id', name)] = name.endswith('_async')
@@ -54,6 +58,7 @@ def apply_event(state, event):
 def earlier_lifecycle(path, end):
     """Backscan complete event lines when the current turn began before the tail."""
     events = []
+    saw_user_reply = False
     with path.open('rb') as stream:
         while end > 0:
             start=max(0,end-1024*1024)
@@ -70,11 +75,13 @@ def earlier_lifecycle(path, end):
                     kind = payload.get('type')
                     if event.get('type') == 'event_msg' and kind not in {*LIFECYCLE, 'user_message', 'approval_requested', 'approval_resolved', 'approval_response'}:
                         continue
-                    if event.get('type') == 'response_item' and kind not in ('function_call', 'custom_tool_call', 'function_call_output', 'custom_tool_call_output'):
+                    user_reply = event.get('type') == 'response_item' and kind == 'message' and payload.get('role') == 'user'
+                    if event.get('type') == 'response_item' and not user_reply and kind not in ('function_call', 'custom_tool_call', 'function_call_output', 'custom_tool_call_output'):
                         continue
                     events.append({'type':event.get('type'), 'timestamp':event.get('timestamp'),
-                                   'payload':{key:payload[key] for key in ('type','name','call_id','request_id') if key in payload}})
-                    if event.get('type')=='event_msg' and kind == 'user_message':
+                                   'payload':{key:payload[key] for key in ('type','role','name','call_id','request_id') if key in payload}})
+                    saw_user_reply = saw_user_reply or user_reply
+                    if event.get('type')=='event_msg' and (kind == 'user_message' or (saw_user_reply and kind in ('task_started', 'turn_started'))):
                         state = {'status':'unknown','seen':0}
                         for value in reversed(events):
                             apply_event(state, value)
@@ -174,6 +181,10 @@ def group_threads(projects, threads, parents, assignments):
     for tid, t in valid.items():
         if owners[tid] != tid:
             continue
+        # Non-interactive tool/review executions are not user chat floors.
+        # Keep them as employees when an explicit parent relationship exists.
+        if t.get('source') in ('exec', '"exec"') and t.get('has_user_event') == 0:
+            continue
         pid = t.get('project_id') if t.get('project_id') in by_id else assignments.get(tid)
         project = by_id.get(pid)
         if project is None:
@@ -210,8 +221,10 @@ def snapshot(home, journal, known_assignments=None):
         for row in connection.execute('SELECT project_id,path FROM project_roots'):
             if row['project_id'] in by_id:
                 by_id[row['project_id']]['roots'].append(row['path'])
+        columns = {r[1] for r in connection.execute('PRAGMA table_info(threads)')}
+        user_event = 'has_user_event' if 'has_user_event' in columns else '1 AS has_user_event'
         threads = [dict(r) for r in connection.execute(
-            "SELECT id,COALESCE(NULLIF(name,''),title) AS title,cwd,project_id,rollout_path,updated_at,archived,agent_nickname,agent_role,attached_thread_parent_id,source "
+            "SELECT id,COALESCE(NULLIF(name,''),title) AS title,cwd,project_id,rollout_path,updated_at,archived,agent_nickname,agent_role,attached_thread_parent_id,source," + user_event + " "
             'FROM threads WHERE archived=0 ORDER BY updated_at DESC')]
         parents = {r['child_thread_id']: r['parent_thread_id'] for r in connection.execute('SELECT * FROM thread_spawn_edges')}
     threads = [t for t in threads if not is_guardian(t.get('source', ''))]

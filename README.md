@@ -51,6 +51,7 @@ Windows, Windows PowerShell 5.1 с WPF, WebView2 Runtime и Python 3.11+.
 - У разработчиков, проверяющих и исследователей/дизайнеров по четыре облика. Главный агент — маг. Модель стабильно выбирается по ID.
 - Анимированы дыхание, рабочие движения, инструмент, песочные часы, облака за стеклом и свет свечей. Учитывается системное уменьшение движения.
 - Башни сохраняют участки на поле и занимают несколько рядов. Наведение слегка осветляет камень выбранного этажа.
+- Участки привязаны к правому краю, ближе к управлению, без пустой третьей колонки при двух проектах. При появлении нового работающего агента на открытом обзоре персонаж подходит к двери башни и входит; начальная загрузка и повторные обновления не воспроизводят этот вход.
 
 ## Данные
 
@@ -87,7 +88,7 @@ python -m task_tower audit --project C:/path/to/project --manifest examples/dial
 python -m unittest discover -s tests -v
 Push-Location overlay
 python -m unittest -v
-node --test test-web.cjs test-room-skins.cjs test-presence.cjs test-presence-browser.cjs test-scene-position.cjs
+node --test test-web.cjs test-room-skins.cjs test-presence.cjs test-presence-browser.cjs test-scene-position.cjs test-session-light.cjs test-tower-arrivals.cjs
 powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File overlay.ps1 -SmokeTest
 Pop-Location
 ```

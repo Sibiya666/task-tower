@@ -63,6 +63,27 @@ class JournalTests(unittest.TestCase):
         self.response({'type':'function_call_output','call_id':'q'})
         self.assertEqual(self.journal.read(self.path)['status'],'active')
 
+    def test_real_user_response_item_clears_old_async_wait_without_hiding_active_turn(self):
+        self.event('task_started')
+        self.response({'type':'function_call','name':'functions.request_user_input_async','call_id':'q'})
+        self.event('task_complete')
+        self.event('task_started')
+        self.response({'type':'message','role':'assistant','content':[]})
+        self.assertEqual(self.journal.read(self.path)['status'],'waiting')
+        self.response({'type':'message','role':'user','content':[]})
+        self.assertEqual(self.journal.read(self.path)['status'],'active')
+        self.assertEqual(Journal().read(self.path)['status'],'active')
+
+    def test_backscan_recognizes_user_response_item_boundary(self):
+        self.event('task_started')
+        self.response({'type':'function_call','name':'functions.request_user_input_async','call_id':'q'})
+        self.event('task_complete')
+        self.event('task_started')
+        self.response({'type':'message','role':'user','content':[]})
+        with self.path.open('ab') as f:
+            f.write(b'{"type":"noise"}\n' * 300000)
+        self.assertEqual(Journal().read(self.path)['status'],'active')
+
     def test_restart_keeps_pending_input_before_large_tail(self):
         self.event('task_started')
         self.response({'type':'function_call','name':'functions.request_user_input_async','call_id':'q'})
@@ -93,6 +114,15 @@ class JournalTests(unittest.TestCase):
 
 
 class GroupTests(unittest.TestCase):
+    def test_headless_exec_without_user_messages_is_not_a_chat_floor(self):
+        projects=[{'id':'p','name':'P','roots':['C:/game']}]
+        chats=[{'id':'chat1','cwd':'C:/game','source':'vscode'}, {'id':'chat2','cwd':'C:/game','source':'vscode'}]
+        execution={'id':'review','cwd':'C:/game','source':'exec','has_user_event':0}
+        result=group_threads(projects,[*chats,execution],{}, {})
+        self.assertEqual([r['id'] for r in result[0]['rooms']],['chat1','chat2'])
+        attached=group_threads(projects,[*chats,execution],{'review':'chat2'}, {})
+        self.assertEqual([a['id'] for a in attached[0]['rooms'][1]['agents']],['review'])
+
     def test_confirmed_assignment_survives_missing_worktree(self):
         projects=[{'id':'p','name':'Dialoid','roots':['C:/game']}]
         result=group_threads(projects,[{'id':'a','cwd':'C:/deleted-worktree'}],{}, {'a':'p'})
