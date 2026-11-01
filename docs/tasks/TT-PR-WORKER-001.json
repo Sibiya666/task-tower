@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "id": "TT-PR-WORKER-001",
+  "title": "Run independently accepted PR merges through verified automatic postmerge closure",
+  "executor": "pr-worker-implementation-team",
+  "project_root": "../..",
+  "mode": "autonomous",
+  "status": "in_progress",
+  "spec": "../superpowers/specs/2026-11-02-pr-worker-design.md",
+  "plan": "../superpowers/plans/2026-11-02-pr-worker.md",
+  "acceptance_criteria": [
+    "A persistent worker admits only explicitly authorized project PR and Issue mappings under current private policy",
+    "A fresh independent readonly reviewer inspects the complete actual diff, task and genuine stage evidence; exact head/base/input acceptance is published in task-tower/pr-acceptance",
+    "Changed input, failed or unknown CI, blocking findings, unknown effects and unavailable enforced protections block merge without bypass",
+    "Actual operator-authorized exclusive writer scope is required; the implementation never claims expected-head API sha atomically binds base or silently changes repository rules",
+    "Durable per-repository barriers and separately fenced review, merge, receipt POST and Issue close actions survive restart without duplicate or blind replay",
+    "Pipeline receipt authority and legacy task-card proofs retain their separate provenance and existing v1 hashes; editable PR Markdown cannot grant acceptance",
+    "Required Task-Tower markers match private task identity; recovery from a historically merged missing/wrong marker uses actual immutable provenance",
+    "A real bounded pilot performs accepted PR to merge to exact-main independent postmerge to automatic Issue closure without chat merging, after genuine setup prerequisites",
+    "Fresh exact-head/base PR acceptance, current CI and exact-main postmerge acceptance precede verified automatic Issue17 closure"
+  ],
+  "stages": {
+    "spec": {
+      "status": "accepted",
+      "reviewer": "pr_worker_spec_review",
+      "evidence": "evidence/TT-PR-WORKER-001/spec-review.md",
+      "sha256": "d3d797705d72d592432743bf70197385024507d79a2f88c96bcab11017a3267e",
+      "hash_scheme": "sha256-utf8-lf-v1"
+    },
+    "development": {
+      "status": "pending"
+    },
+    "test": {
+      "status": "pending"
+    },
+    "postmerge": {
+      "status": "pending"
+    }
+  }
+}
