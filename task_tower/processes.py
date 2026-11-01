@@ -1,11 +1,13 @@
 """Bounded argument-array commands; raw output never enters JSON reports."""
 
 import hashlib
+import errno
 import os
 from pathlib import Path
 import shutil
 import signal
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -33,6 +35,7 @@ def run_command(argv, cwd, timeout_seconds, env=None):
         return result
     with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
         process = None
+        timeout_group_reaped = False
         try:
             if os.name == "nt":
                 from .windows_job import WindowsJobProcess
@@ -50,6 +53,7 @@ def run_command(argv, cwd, timeout_seconds, env=None):
                 else:
                     os.killpg(process.pid, signal.SIGKILL)
                 result["exit_code"] = process.wait(5)
+                timeout_group_reaped = os.name != "nt"
         except OSError:
             result["status"] = "unavailable"
         finally:
@@ -58,10 +62,25 @@ def run_command(argv, cwd, timeout_seconds, env=None):
                     if os.name == "nt":
                         process.close()  # Kill descendants even if the parent already exited.
                     else:
-                        try:
-                            os.killpg(process.pid, signal.SIGKILL)
-                        except ProcessLookupError:
-                            pass
+                        retry_deadline = None
+                        while True:
+                            try:
+                                os.killpg(process.pid, signal.SIGKILL)
+                                break
+                            except ProcessLookupError:
+                                break
+                            except PermissionError as error:
+                                if (sys.platform != "darwin" or not timeout_group_reaped
+                                        or error.errno != errno.EPERM):
+                                    raise
+                                # Darwin can retain a zombie-only group after SIGKILL
+                                # and report EPERM until its last child is reaped.
+                                if retry_deadline is None:
+                                    retry_deadline = time.monotonic() + .5
+                                remaining = retry_deadline - time.monotonic()
+                                if remaining <= 0:
+                                    raise
+                                time.sleep(min(.01, remaining))
                         process.wait(timeout=5)
                 except (OSError, subprocess.TimeoutExpired):
                     result["status"] = "cleanup_failed"

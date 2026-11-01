@@ -5,7 +5,7 @@
   "executor": "postmerge-worker-implementation-team",
   "project_root": "../..",
   "mode": "assisted",
-  "status": "awaiting_merge",
+  "status": "done",
   "spec": "../superpowers/specs/2026-11-01-postmerge-worker-design.md",
   "plan": "../superpowers/plans/2026-11-01-postmerge-worker.md",
   "acceptance_criteria": [
@@ -38,7 +38,17 @@
       "hash_scheme": "sha256-utf8-lf-v1"
     },
     "postmerge": {
-      "status": "pending"
+      "status": "accepted",
+      "reviewer": "postmerge-agent",
+      "evidence": "evidence/TT-POSTMERGE-WORKER-001/postmerge-5a219ce5dcec0be697d749cc5040fb49919d25ad.json",
+      "sha256": "fc061d384768b351a921427569200ab2609182b2be63720d86f8ec4f143a8aab",
+      "hash_scheme": "sha256-utf8-lf-v1",
+      "commit": "5a219ce5dcec0be697d749cc5040fb49919d25ad",
+      "main_ref": "refs/remotes/origin/main"
     }
+  },
+  "postmerge_state": {
+    "status": "accepted",
+    "commit": "5a219ce5dcec0be697d749cc5040fb49919d25ad"
   }
 }
