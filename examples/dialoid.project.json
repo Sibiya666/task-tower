@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "project": "dialoid",
+  "required_paths": [
+    "AGENTS.md",
+    "README.md",
+    "docs/tasks/README.md",
+    "docs/agents.md",
+    "core/Dialoid.sln",
+    "game/project.godot"
+  ],
+  "superpowers_skill": ".agents/skills/superpowers/using-superpowers/SKILL.md",
+  "tools": [
+    {"name": "dotnet", "argv": ["dotnet", "--version"]},
+    {"name": "codex", "argv": ["codex", "--version"]}
+  ],
+  "checks": [
+    {
+      "name": "core-tests",
+      "argv": ["dotnet", "test", "core/Dialoid.sln", "--no-restore"],
+      "timeout_seconds": 600
+    }
+  ]
+}
