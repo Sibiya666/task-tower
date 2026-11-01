@@ -2,6 +2,7 @@
 from copy import deepcopy
 import json
 import os
+import re
 from pathlib import Path
 import sys
 
@@ -12,7 +13,24 @@ FRAME_LIMIT = 8 * 1024 * 1024
 STREAM_LIMIT = 64 * 1024 * 1024
 FRAME_COUNT = 32
 ENTRY_LIMIT = 10000
-ENTRY_FIELDS = frozenset('id repository number project book title source status remote_state verification description phase blockers blocked_by results history relationships stages remote_attempt created_at updated_at capture path commit artifact_state declaration_source issues milestone available'.split())
+ENTRY_FIELDS = frozenset('id repository number project book title source status remote_state verification description phase blockers blocked_by results history relationships stages remote_attempt created_at updated_at capture path commit artifact_state declaration_source issues milestone available migrations'.split())
+
+
+def _migrations(value):
+    if not isinstance(value, list) or len(value) > 100: raise ValueError()
+    result = []
+    for row in value:
+        if not isinstance(row, dict): raise ValueError()
+        public = {key: deepcopy(row[key]) for key in ('number', 'source_sha256', 'status', 'issue_url')}
+        number, url = public['number'], public['issue_url']
+        if number is not None and (type(number) is not int or number < 1): raise ValueError()
+        if not isinstance(public['source_sha256'], str) or not re.fullmatch('[a-f0-9]{64}', public['source_sha256']): raise ValueError()
+        if public['status'] not in ('current', 'stale', 'pending'): raise ValueError()
+        if number is None:
+            if url is not None: raise ValueError()
+        elif not isinstance(url, str) or len(url) > 8192 or not re.fullmatch(r'https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/issues/' + str(number), url): raise ValueError()
+        result.append(public)
+    return result
 
 
 def _failure(message='Books source unavailable'):
@@ -26,6 +44,8 @@ def _public(report):
     rows = report['entries']
     if not isinstance(rows, list) or len(rows) > ENTRY_LIMIT: raise ValueError()
     rows = [{key: deepcopy(value) for key, value in row.items() if key in ENTRY_FIELDS} for row in rows]
+    for row in rows:
+        if 'migrations' in row: row['migrations'] = _migrations(row['migrations'])
     errors = [{key: row[key] for key in ('project', 'source', 'error')} for row in report['errors']]
     if any(not isinstance(value, str) for row in errors for value in row.values()): raise ValueError()
     pending = any(row.get('verification') == 'pending' for row in rows)

@@ -12,7 +12,7 @@ Books are containers and projections of these concepts, not separate copies of G
 
 Feature progress shows accepted child work separately from merged or merely closed Issues. A parent is not automatically accepted because its children are closed: its own acceptance criteria and exact-main postmerge acceptance still apply. Completed work and its artifacts remain accessible.
 
-This hierarchy is a target requirement for Issues #22/#23. The current CLI/HTML renderer still produces a flat snapshot with project/book filters and three entries per page; it does not yet render milestone groups or expandable feature trees.
+The overlay implements this hierarchy through its Books dialog. The standalone CLI/HTML renderer retains its flat snapshot with project/book filters and three entries per page. Native, browser and source-proof acceptance are separate gates; see the Issue #23 evidence before treating the feature as accepted in main.
 
 Connections belong to the installation, outside the product checkout (or inside ignored `runtime/`). They contain no credentials. Commands require an explicit path and never save your list in the product source by default. Checkout paths must be existing absolute directories. IDs and repositories are unique; GitHub Project URLs are optional.
 
@@ -46,4 +46,31 @@ Managed task lifecycle updates are read from bounded append-only Task Tower Issu
 
 For explicit, retryable GitHub Project board projection and trusted status-field mapping, see [board configuration](github-board.md).
 
-Explicit session capture, same-Issue promotion and provenance-only legacy migration are documented in [session capture](session-capture.md). Migration retains active card bytes and historical worker evidence; GitHub remains editable task truth. Books attach migration hash/status to the canonical Issue without exposing private source paths or creating duplicate tasks. Changed local bytes are shown as stale provenance, never silently synchronized. The flat renderer exposes session/native relationship links; expandable hierarchy remains #23.
+Explicit session capture, same-Issue promotion and provenance-only legacy migration are documented in [session capture](session-capture.md). Migration retains active card bytes and historical worker evidence; GitHub remains editable task truth. Books attach migration hash/status to the canonical Issue without exposing private source paths or creating duplicate tasks. Changed local bytes are shown as stale provenance, never silently synchronized. The flat renderer exposes session/native relationship links; the overlay adds expandable hierarchy.
+
+## Overlay setup and refresh
+
+Create the private connections file using the commands above, then set its absolute path in the environment of the overlay launcher:
+
+```powershell
+$env:TASK_TOWER_CONNECTIONS = 'C:/TaskTower/connections.json'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File overlay/overlay.ps1
+```
+
+Use the scene context menu's «Книги проекта» action or Ctrl+B, including the physical B key under a Russian layout. Escape closes details before the dialog. Books share the existing window and preserve its placement and session activity. The project filter uses explicit connection identities rather than guessing a connection from a tower title.
+
+First opening starts one refresh; explicit Refresh starts another after the previous attempt ends. There is no background Books polling. Known Issue identities and repository artifacts render before fresh completion verification. Pending verification cannot display accepted completion. A new attempt invalidates previous proof claims; successful final output and process exit are required before advancing the last-success time. The 120-second deadline retains valid partial data as interrupted/stale. Snapshots become stale after 300 seconds, and failed refreshes mark them stale immediately. Missing fields, unavailable relationships and truncated lists are visibly distinct from empty values.
+
+Public snapshot limits are 8 MiB and 10,000 entries per frame, 64 MiB and 32 frames per attempt. Bodies are limited to 32 KiB; phase/blocker labels to 256 characters; blocker/result/history arrays to 100 items. Fixed diagnostics indicate limits without exposing private configuration, paths, credentials or transport exceptions.
+
+Only the native host opens source links. It permits the configured GitHub repositories' Issue, PR and milestone URLs, immutable 40-hex-commit Markdown blob URLs, and each exact configured Project URL. Queries, fragments, user information, lookalike hosts, foreign repositories and arbitrary session URLs are rejected. Markdown and Issue text are displayed as text; the WebView does not fetch GitHub data or execute source content.
+
+## Explicit artifact versions
+
+An optional repository file `docs/task-tower-library.json` declares artifact versions. It is bounded to 256 KiB and 1,000 entries and has this schema:
+
+```json
+{"version":1,"artifacts":[{"path":"docs/specs/example.md","commit":"0123456789abcdef0123456789abcdef01234567","state":"working","issues":["example/sample#1"],"milestone":{"repository":"example/sample","number":1}}]}
+```
+
+Use only the exact schema accepted by `task_tower/book_library.py`; unavailable blobs and invalid declarations produce visible diagnostics. States `working`, `accepted` and `superseded` are explicitly labeled declared states. They do not grant task acceptance. Unindexed Markdown remains visible with unknown state. Version identity includes repository, path and immutable commit, so historical versions remain separate and traceable. Associations must refer to explicitly connected repositories; names never imply a task or milestone link.

@@ -161,13 +161,29 @@ public sealed class BooksBridge : IDisposable
         if(value["fetched_at"]!=null && !(value["fetched_at"] is string))throw new FormatException();
         var entries=value["entries"] as object[];var errors=value["errors"] as object[];
         if(entries==null || entries.Length>10000 || errors==null)throw new FormatException();
-        var fields=new HashSet<string>("id repository number project book title source status remote_state verification description phase blockers blocked_by results history relationships stages remote_attempt created_at updated_at capture path commit artifact_state declaration_source issues milestone available".Split(' '));
+        var fields=new HashSet<string>("id repository number project book title source status remote_state verification description phase blockers blocked_by results history relationships stages remote_attempt created_at updated_at capture path commit artifact_state declaration_source issues milestone available migrations".Split(' '));
         foreach(var item in entries){
             var entry=item as Dictionary<string,object>;
             if(entry==null || entry.Keys.Any(k=>!fields.Contains(k)))throw new FormatException();
             foreach(string key in new[]{"id","repository","project","book","source","title","status"})if(!entry.ContainsKey(key)||!(entry[key] is string))throw new FormatException();
             string repo=(string)entry["repository"];
             if(!repositories.Contains(repo) || !IsAllowedSource((string)entry["source"]))throw new FormatException();
+            object migrations;
+            if(entry.TryGetValue("migrations",out migrations)){
+                var records=migrations as object[];if(records==null || records.Length>100)throw new FormatException();
+                foreach(var record in records){
+                    var migration=record as Dictionary<string,object>;
+                    var migrationKeys=new[]{"number","source_sha256","status","issue_url"};
+                    if(migration==null || migration.Count!=4 || migrationKeys.Any(k=>!migration.ContainsKey(k)))throw new FormatException();
+                    var hash=migration["source_sha256"] as string;
+                    if(hash==null || !Regex.IsMatch(hash,@"\A[a-f0-9]{64}\z") || !new[]{"current","stale","pending"}.Contains(migration["status"] as string))throw new FormatException();
+                    if(migration["number"]==null){if(migration["issue_url"]!=null)throw new FormatException();}
+                    else{
+                        long number=Integer(migration["number"]);
+                        if(number<1 || !(migration["issue_url"] is string) || (string)migration["issue_url"]!="https://github.com/"+repo+"/issues/"+number)throw new FormatException();
+                    }
+                }
+            }
             if((string)entry["book"]!="library"){
                 if(!new[]{"ideas","tasks"}.Contains((string)entry["book"]) || !entry.ContainsKey("number") || Integer(entry["number"])<1 ||
                     (string)entry["id"]!=repo+"#"+Integer(entry["number"]) || (string)entry["source"]!="https://github.com/"+repo+"/issues/"+Integer(entry["number"]))throw new FormatException();

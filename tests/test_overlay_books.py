@@ -77,7 +77,7 @@ class OverlayBooksTests(unittest.TestCase):
             return True
         def aggregate(connections, include_library, on_update):
             return real_aggregate(connections, lambda c: store, include_library, on_update=on_update)
-        with tempfile.TemporaryDirectory(prefix='books config Ю ') as directory:
+        with tempfile.TemporaryDirectory(prefix='books config Р® ') as directory:
             path = Path(directory) / 'private connections.json'
             path.write_text(json.dumps(dict(version=1, projects=[dict(id='p',repository='a/b',checkout=directory,runner_label='local')])), encoding='utf-8')
             with patch.object(module, 'aggregate', aggregate), patch('task_tower.project_worker.issue_lifecycle', return_value=dict(version=1,kind='task',status='done')), patch('task_tower.project_worker.verified_done', side_effect=proof):
@@ -119,6 +119,32 @@ class OverlayBooksTests(unittest.TestCase):
             self.assertEqual(value['state'],'unavailable')
             self.assertNotIn('SECRET',json.dumps(value))
             self.assertNotIn(directory,json.dumps(value))
+
+
+
+
+    def test_real_aggregate_migration_survives_public_helper_without_private_registry(self):
+        from tests.books_overlay_fixture import projection
+        value = projection()
+        self.assertIn('migrations', value['entries'][0])
+        migration = value['entries'][0]['migrations'][0]
+        self.assertEqual(set(migration), {'number', 'source_sha256', 'status', 'issue_url'})
+        self.assertEqual(migration['status'], 'current')
+        self.assertEqual(len(migration['source_sha256']), 64)
+        self.assertNotIn('PRIVATE', json.dumps(value))
+
+    def test_migration_boundary_excludes_unknown_nested_keys_and_bounds_records(self):
+        module = self.module()
+        row = dict(migrations=[dict(number=1, source_sha256='a'*64, status='current', issue_url='https://github.com/a/b/issues/1', source_path='PRIVATE', token='SECRET')])
+        report = dict(entries=[row], errors=[], fetched_at=None)
+        public = module._public(report)['entries'][0]
+        self.assertIn('migrations', public)
+        migration = public['migrations'][0]
+        self.assertEqual(set(migration), {'number', 'source_sha256', 'status', 'issue_url'})
+        self.assertNotIn('PRIVATE', json.dumps(migration))
+        for bad in ([row['migrations'][0]]*101, [dict(row['migrations'][0], source_sha256='bad')]):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                module._public(dict(report, entries=[dict(migrations=bad)]))
 
 
 if __name__ == '__main__': unittest.main()

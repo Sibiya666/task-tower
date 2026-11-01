@@ -33,7 +33,13 @@ def frame(sequence, final=False, state='partial', library=False):
  if library: rows.append(dict(id='owner/repo:README.md@'+'a'*40,repository='owner/repo',project='p',book='library',title='README.md',path='README.md',commit='a'*40,source='https://github.com/owner/repo/blob/'+'a'*40+'/README.md',status='source',artifact_state='accepted',available=True))
  return dict(kind='books',version=1,sequence=sequence,final=final,state=state,fetched_at='2026-11-01T00:00:00Z',entries=rows,errors=[])
 def send(value): print(json.dumps(value),flush=True)
-if mode=='invalidutf8': sys.stdout.buffer.write(b'\xff\n');sys.stdout.buffer.flush()
+if mode=='projection':
+ sys.path.insert(0,os.getcwd())
+ from tests.books_overlay_fixture import projection
+ print(json.dumps(projection()),flush=True)
+elif mode=='migrationprivate':
+ value=frame(1,True,'ready');value['entries'][0]['migrations']=[dict(number=1,source_sha256='a'*64,status='current',issue_url='https://github.com/owner/repo/issues/1',source_path='PRIVATE')];send(value)
+elif mode=='invalidutf8': sys.stdout.buffer.write(b'\xff\n');sys.stdout.buffer.flush()
 elif mode=='malformed': print('{bad',flush=True)
 elif mode=='missingfinal': send(frame(1))
 elif mode=='nonmonotonic': send(frame(2));send(frame(1,True))
@@ -87,6 +93,14 @@ public static class NativeBooksTest {
  string action,urlOut;Check(BooksBridge.TryMessage("https://tower.local/index.html","{\"action\":\"books-refresh\"}",out action,out urlOut),"refresh message");
  foreach(string source in new[]{"https://tower.local/other.html","https://tower.local/index.html?q","https://tower.local/index.html#x","https://tower.local.evil/index.html"})Check(!BooksBridge.TryMessage(source,"{\"action\":\"books-refresh\"}",out action,out urlOut),"origin");
  foreach(string msg in new[]{"{\"action\":\"books-refresh\",\"url\":\"x\"}","{\"action\":\"books-open-source\",\"url\":\"x\",\"extra\":1}","{\"action\":\"books-refresh\",\"action\":\"books-refresh\"}","{\"action\":\"books-refresh\",\"x\":\""+new string('x',16384)+"\"}"})Check(!BooksBridge.TryMessage("https://tower.local/index.html",msg,out action,out urlOut),"exact message");
+ using(var projected=new BooksBridge(new[]{"a/b"},new string[0])){
+  await projected.RefreshAsync(Start("projection",Path.Combine(dir,"projection")),s=>{},5000);
+  var projectedValue=Parse(projected.LatestJson);Check(projectedValue["state"].ToString()=="ready","real producer migration frame admitted");
+  var row=(Dictionary<string,object>)((object[])projectedValue["entries"])[0];
+  var migration=(Dictionary<string,object>)((object[])row["migrations"])[0];
+  Check(migration.Count==4 && migration["status"].ToString()=="current" && migration["source_sha256"].ToString().Length==64,"public migration survives native boundary");
+  Check(!projected.LatestJson.Contains("PRIVATE") && !projected.LatestJson.Contains("source_path"),"native public producer privacy");
+ }
  // Windows CRT argv roundtrip through the actual Python executable, with no shell.
  string quotes=Path.Combine(dir,"argv.py");File.WriteAllText(quotes,"import json,sys; print(json.dumps(sys.argv[1:],ensure_ascii=True))");
  string[] args={"", "space path Ю", "quote\"value", "trailing\\", "space and trailing\\", "& calc.exe | $()"};
@@ -103,7 +117,7 @@ public static class NativeBooksTest {
  var timed=b.RefreshAsync(Start("block",barrier),raw=>{receive(raw);if(Parse(raw)["state"].ToString()=="loading"){var entries=(object[])Parse(raw)["entries"];invalidated=((Dictionary<string,object>)entries[0])["verification"].ToString()=="pending";}},700);
  await timed;Check(invalidated,"old proof invalidated at new refresh");Check(b.LastSuccessUtc==success,"timeout last-success unchanged");var retained=Parse(b.LatestJson);Check(retained["state"].ToString()=="partial" && (bool)retained["stale"],"timeout stale partial");Check(((object[])retained["entries"]).Length==2,"timeout keeps library");Check(!b.IsRefreshing,"timeout reaped");
  int before;lock(messages)before=messages.Count;File.WriteAllText(barrier,"");await Task.Delay(80);lock(messages)Check(messages.Count==before,"late timed-out proof discarded");File.Delete(barrier);
- foreach(string mode in new[]{"malformed","invalidutf8","missingfinal","nonmonotonic","afterfinal","provenance","privatefield","entries","linecap","frames","totalcap"}){await b.RefreshAsync(Start(mode,barrier),receive,10000);Check(b.LastSuccessUtc==success,"invalid stream no success "+mode);Check((bool)Parse(b.LatestJson)["stale"],"invalid stream stale "+mode);}
+ foreach(string mode in new[]{"malformed","invalidutf8","missingfinal","nonmonotonic","afterfinal","provenance","privatefield","migrationprivate","entries","linecap","frames","totalcap"}){await b.RefreshAsync(Start(mode,barrier),receive,10000);Check(b.LastSuccessUtc==success,"invalid stream no success "+mode);Check((bool)Parse(b.LatestJson)["stale"],"invalid stream stale "+mode);}
  var closing=b.RefreshAsync(Start("block",barrier),receive,5000);await Task.Delay(200);int childId=Int32.Parse(File.ReadAllText(barrier+".pid"));b.Dispose();await closing;Check(!b.IsRefreshing,"close cleanup");
  bool alive=false;try{using(var child=Process.GetProcessById(childId))alive=!child.HasExited;}catch(ArgumentException){}Check(!alive,"closed helper actually reaped");
  Console.WriteLine("native books harness passed");
