@@ -19,3 +19,20 @@ Local raw log SHA-256 (logs remain untracked runtime evidence):
 - `runtime-final-acceptor-suite.log`: `a9b20a79018639ae0ff6bc42320f396825d37c80be4b8b46f3c2e5bc244c6833`
 - `runtime-final-acceptor-suite-default-temp.log`: `62d42bc2fafe3b5c2c21d04cf9ef5acf01daf9052d002f10b36f0efa88659350`
 - `runtime-final-acceptor-probes.log`: `c5b03321ec82b1400b746b05609be300a5699fef8c3a3395f3c600e75cea0cad`
+
+## 2026-11-01 updated-main/fixture supplement — ACCEPTED (local test stage)
+
+Independent executor_final_test re-reviewed the frozen integration after main advanced to `f7ce385b89cdddda089985404ce11fffc36a0797`. This supplement supersedes the prior source binding, preserving its full-suite result and historical failure/correction. Regenerated membership and all canonical hashes before and after focused verification: **116 files**, unchanged within this review, aggregate **918e4bf14e57f35407259583c3ed8134ab6acd7c69f8f6a628fdd44288e60a1c** using the same inventory/encoding rules above. Exactly four inventory files differ from the previous binding; all production Python files and all other tests/docs are unchanged.
+
+The two test files contain exactly three expression substitutions: `sys.executable`/`os.sys.executable` becomes `str(Path(...).resolve())` when supplying the reviewer-owned Python executable to integration/worker fixtures. No assertion, production guard or invocation policy changed. This accepts the real interpreter path on installations whose executable traverses a symlink, consistent with the existing queue/temp-path fixture treatment; it does not authorize raw aliased production configuration. Independent Windows junction probe created an executable-directory alias: raw aliased executable was rejected by real `load_executor_config`, and resolving that fixture executable succeeded. The junction was explicitly removed before fixture cleanup. POSIX execution is still established only by current platform CI, not this Windows probe.
+
+The only changed docs, `docs/development-process.md` and `docs/session-capture.md`, add the exact standalone task marker/head-base mapping gate and explain same-Issue reviewed recovery for the omitted capture merge-event identity. They preserve genuine unbound event history and prohibit fabricated receipts, journal resets or manual closure as substitutes. They do not modify executor behavior or weaken serialized postmerge acceptance. No blocking finding.
+
+Fresh independent command `python -m unittest tests.test_executor_integration tests.test_executor_worker tests.test_executor_profiles -v`: **44 tests in 22.521s, OK (1 unavailable symlink privilege skip)**, exit 0. Combined with the prior complete 429-test result and verification that all production and remaining tests are byte-equivalent canonically, this is sufficient for this narrow local test-stage supplement; no redundant second full run is claimed. Changed file canonical hashes:
+
+- `docs/development-process.md`: `c0a5cdb73ceb45b855064e408e9f2ecb55ff520b76cd83b079cd05a3a54a09c9`
+- `docs/session-capture.md`: `dea1a154d545ef99f7c393d27d1be8e5d5c7ed26e69044e5303c4788ee73c822`
+- `tests/test_executor_integration.py`: `01964a00cd94172a95a8960dbaf369de89ad6cff36f24b8c1d30ced1bb790740`
+- `tests/test_executor_worker.py`: `9f9ab044a602084aec74bd93b072e285d952bbd2eff619fab15893e9d8b9ad2a`
+
+Focused log SHA-256: `722a4338733e1bf599ce039fec16f42ab3f8bd4a6d964f115a05389c36383f69`. Current all-platform CI, fresh exact head/base PR acceptance, exact-main postmerge acceptance and automatic Issue closure remain separate. No source/test edits or commits by this reviewer.

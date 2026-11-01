@@ -12,6 +12,8 @@ Two Issues may run concurrently when their behavior and data contracts are indep
 
 Specification, implementation, testing, independent stage acceptance and PR checks may proceed in parallel across Issues. Only one merge and its main acceptance cycle may be active per repository. After main changes, update the waiting branch, resolve conflicts, rerun applicable CI and obtain a fresh PR verdict bound to its actual head and base. Green checks or a stale approval never bypass this gate.
 
+Before merging a managed task PR, require its exact standalone `Task-Tower: TT-...` marker in the current PR body and match every marker to the private Issue/task mapping. Persist this task-event binding alongside the exact head/base verdict. Successful CI without the expected marker cannot authorize that merge. Do not use GitHub closing keywords as a substitute for independent postmerge publication.
+
 Completion requires the intended result in main, successful exact-main CI, independent postmerge acceptance and verified GitHub Issue closure. Then update its Project/books projection and automatically choose the next eligible work. Large features remain parent Issues with sub-issues; milestones remain implementation stages rather than execution slots.
 
 ## Persistent runtime contract and current capability
@@ -25,3 +27,9 @@ Currently the active agent chat coordinates parallel project work under explicit
 ## Escalation and continued work
 
 Ask for human input only when an actual decision or action falls outside the saved authorization, such as destructive work, irreversible migration, new credential/ACL scope or an unresolved product choice that changes the goal. Preserve the concrete reviewable result and blocker. Continue other independent authorized work while the question is pending. Do not stop merely because one Issue, plan step or review cycle completed, and do not repeatedly ask whether to continue.
+
+## Missing merge-event identity recovery
+
+GitHub Actions reruns retain the original merge-event payload. Editing a merged PR body does not repair previously emitted artifacts; verify genuine downloaded event contents instead of assuming a rerun refreshes metadata. Never edit or synthesize Actions bundles, forge acceptance, reset journal state or close the Issue manually to conceal a missing marker. Preserve the original unbound event and its audit history.
+
+If a merged task PR omitted its marker, keep the same Issue open. A bounded reviewed follow-up PR for that same Issue can document or fix the omission and emit a new correctly marked merge event. Verify the prior exact-main CI and independent source baseline before this serialized recovery merge. Require the follow-up exact head/base acceptance and all current CI; its new main commit must independently pass postmerge acceptance/publication before the Issue is done. This recovery continues the same in-flight Issue and does not release its execution slot early. Other independent task development may continue; unrelated automatic merges wait.

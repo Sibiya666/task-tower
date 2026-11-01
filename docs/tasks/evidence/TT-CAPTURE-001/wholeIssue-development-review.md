@@ -148,3 +148,38 @@ Current sourceHash: `d0e73aa33a484b3380df529ab33f9bed0185787ee03fc14cdb0440aa853
 | `tests/test_capture_cli.py` | `8f87bb0cff1bee4a1ca041141e557bdf54cfa50fb113f727c39e45b06298fec8` |
 | `tests/test_capture_migration.py` | `60fbd21c816b35402dab3f62d07553a6cb2c68759f61f9c23588d6b23aa289b3` |
 | `tests/test_dispatcher.py` | `041a03f10bd61f5a0a1204875f08c890ef83d2041cfd1261ec82efe562808c6d` |
+
+## Same-Issue22 merge-identity recovery documentation (CURRENT)
+
+Verdict: ACCEPTED for the bounded documentation follow-up and current 22-input development manifest below. No production changes or unresolved documentation blockers. Earlier exact-source findings/acceptance remain historical. Existing accepted coordinator scope includes process and session-capture documentation; no capture specification/plan contract or API change is introduced.
+
+Reviewed the entire two-file diff against main cd0927810683edfbc93caf6b6d4db67338aba6f8. It requires the exact standalone Task-Tower marker to match private task/Issue mapping before merge and records that binding with head/base acceptance. Genuine PR37 event remains unbound with task_ids=[]; green CI cannot imply task acceptance or completion. The runbook preserves the original artifact/refusal history and forbids synthesized bundles, forged receipts, journal reset or manual closure. A correctly marked bounded reviewed follow-up continues the same open Issue22 and keeps its slot occupied. Unrelated merges remain blocked until the recovery commit independently passes exact-main acceptance/publication and automatic closure; development may continue independently. This is a repair of the unfinished current integration cycle, not permission to skip it or start a replacement task.
+
+Independent baseline evidence: Git diff between accepted PR37 head 4cb5ec79003ff92965ce71d9d9fb518ec3cb4c8f and merge cd0927810683edfbc93caf6b6d4db67338aba6f8 is empty. GitHub run 41336591697 attempt2 is completed/success on all three platforms; logs explicitly check out cd092781 and run 348 tests per platform. The genuine downloaded Linux artifact identifies cd092781, passed checks and empty task_ids. See private runtime/pr-acceptance/main-37-recovery-barrier.md for the strictly scoped independent source/CI baseline verdict. No synthetic task-bound postmerge acceptance is created. No new test run was needed for this documentation-only diff; fresh git diff --check exited0.
+
+Current sourceHash: `70f5904fd44d9ee42b02af5bfdef5c735351b40dcc9b7b8c9f1823ff4596d915`. Same canonical UTF-8/LF algorithm; evidence/cards/runtime state excluded.
+
+| CURRENT stable input | Canonical SHA-256 |
+|---|---|
+| `AGENTS.md` | `29c2d287fff80873a6b034f1c7cd8f8259b85b744e45a2cf62ae193dae7f4311` |
+| `README.md` | `eb42ec82b900bc80e67e8b5234002d664cbc21e52325a6e2a3f3f1799ec688e2` |
+| `docs/development-process.md` | `c0a5cdb73ceb45b855064e408e9f2ecb55ff520b76cd83b079cd05a3a54a09c9` |
+| `docs/dispatcher.md` | `82076f3284e8c4b380a6d32a0b4efc21b5ae8dafb68dae73da857b18d583de00` |
+| `docs/github-books.md` | `0da864ae878de40cb5066a505b675a9a636a8d042f71d7f7ff268adc9dab4171` |
+| `docs/roadmap.md` | `8448c15f88a2997d068a24282853271084bd8d7fdb2cde3fcede641d1aa12974` |
+| `docs/session-capture.md` | `dea1a154d545ef99f7c393d27d1be8e5d5c7ed26e69044e5303c4788ee73c822` |
+| `docs/superpowers/plans/2026-11-01-session-capture.md` | `52e8a0263b5755cc3acdb36c9824fb74de34e736d7055593262c26502e9ae746` |
+| `docs/superpowers/specs/2026-11-01-agent-development-architecture-design.md` | `dc8de3c2d0b8b8551498b3c652f89e4ee32cd903cb7bf5c8c5ce3832199833ac` |
+| `docs/superpowers/specs/2026-11-01-session-capture-design.md` | `bf601bcd82206b61c85f735be88d87d3ec49e7eafc6b41b701dcd8737db2488c` |
+| `task_tower/__main__.py` | `b233be3d4570816c4178d8e3a21af0cea6ac772fb2927eeb8c549a3844f75cdb` |
+| `task_tower/books.py` | `d838086f3a340a657b2635f2f559296945f5b2a4b4ece3ece0e82a0c55e30e87` |
+| `task_tower/capture.py` | `aecb96e7ae4e9bd8fafbcd85f44ae548a183a4a6ef3a22192247321a93f3f331` |
+| `task_tower/capture_cli.py` | `ea41cf183930a513eba501652b2ba80d89b118f58be6eea67c5f5c1f37c19c8e` |
+| `task_tower/capture_migration.py` | `d8c5c26d6e7ca8b6be77d1543cd679d8bb38d1440563753f8669a766753c09b7` |
+| `task_tower/creation_journal.py` | `c5c6be3332276d038d151d99d101893e00bf1a6638af7a1b64be336d340412e3` |
+| `task_tower/dispatcher.py` | `b070801cf3085362b730b0adc8028ea91b2d56951be9398037ba3e017d9790e4` |
+| `task_tower/github_tasks.py` | `7a59f38382fb9676536c1307fc863edca331be93cdd2858d3ebcfe8a85911519` |
+| `tests/test_capture.py` | `92997f5da84d2fc8ed0078fdbc119b852fb94a74e5b77820b28bf0cf660af830` |
+| `tests/test_capture_cli.py` | `8f87bb0cff1bee4a1ca041141e557bdf54cfa50fb113f727c39e45b06298fec8` |
+| `tests/test_capture_migration.py` | `60fbd21c816b35402dab3f62d07553a6cb2c68759f61f9c23588d6b23aa289b3` |
+| `tests/test_dispatcher.py` | `041a03f10bd61f5a0a1204875f08c890ef83d2041cfd1261ec82efe562808c6d` |

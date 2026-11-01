@@ -66,7 +66,7 @@ class ExecutorIntegrationTests(unittest.TestCase):
         self.connections = load_connections(connections)
         policy = self.root / 'executor.json'
         profile = dict(kind='custom', trusted=True, repository='Owner/Repo',
-            checkout=str(self.source), runner_label='local', argv=[sys.executable, str(helper)],
+            checkout=str(self.source), runner_label='local', argv=[str(Path(sys.executable).resolve()), str(helper)],
             source_ref=self.sha, timeout_seconds=10, log_max_bytes=128, max_attempts=2,
             runs_dir=str(self.root / 'runs'), superpowers=dict(root=str(pins), revision='a' * 40,
             manifest=manifest, manifest_sha256=profile_fingerprint(manifest)))

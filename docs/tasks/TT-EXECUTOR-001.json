@@ -20,23 +20,23 @@
   "stages": {
     "spec": {
       "status": "accepted",
-      "reviewer": "executor_spec_acceptance",
+      "reviewer": "executor_whole_development",
       "evidence": "evidence/TT-EXECUTOR-001/spec-review.md",
-      "sha256": "262f9e69ef7014574b45ca8bb49956ff664516fce2e7b56bbaf33b780848ac93",
+      "sha256": "9cce0e3bb1f5cfe635f2399a950017a6261e59b26675e72ff96451133cdf89a2",
       "hash_scheme": "sha256-utf8-lf-v1"
     },
     "development": {
       "status": "accepted",
       "reviewer": "executor_whole_development",
       "evidence": "evidence/TT-EXECUTOR-001/wholeIssue-development-review.md",
-      "sha256": "ae33cc3c789a474d13b06b320747751830458940c29ea3735ab48feebd7b0bfa",
+      "sha256": "cc7006bf399b9b06bd2bd50bb1837c824e859b154b3872076fb1beff56cf2c07",
       "hash_scheme": "sha256-utf8-lf-v1"
     },
     "test": {
       "status": "accepted",
       "reviewer": "executor_final_test",
       "evidence": "evidence/TT-EXECUTOR-001/test-review.md",
-      "sha256": "39d1b052b6c0a836bf591c5b6b50f132e45be2bfa0a70ee3e9aa39ed7e60ed18",
+      "sha256": "f6e8786e95803a7dd5ffd37b0dd08a79014ecfa2f7d9c202553748f7f597a05a",
       "hash_scheme": "sha256-utf8-lf-v1"
     },
     "postmerge": {

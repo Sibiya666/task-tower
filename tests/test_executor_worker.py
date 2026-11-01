@@ -42,7 +42,7 @@ class WorkerTests(unittest.TestCase):
             manifest={'SKILL.md':hashlib.sha256(b'instructions\n').hexdigest()}
             helper=root/'helper.py'
             helper.write_text('import argparse,json,os,pathlib\np=argparse.ArgumentParser();p.add_argument("--request");p.add_argument("--result");a=p.parse_args();r=json.loads(pathlib.Path(a.request).read_text());assert "GH_TOKEN" not in os.environ and "GITHUB_TOKEN" not in os.environ;pathlib.Path("file").write_text("isolated");v={k:r[k] for k in ("run_id","attempt_id","source_sha")};v.update(version=1,status="completed",summary="ok");pathlib.Path(a.result).write_text(json.dumps(v));print("output")\n')
-            profile=dict(kind='custom',trusted=True,argv=[os.sys.executable,str(helper)],checkout=str(source),source_ref=git('rev-parse','HEAD'),runs_dir=str(root/'runs'),superpowers=dict(root=str(pins),revision='a'*40,manifest=manifest,manifest_sha256=profile_fingerprint(manifest)),timeout_seconds=10,log_max_bytes=128)
+            profile=dict(kind='custom',trusted=True,argv=[str(Path(os.sys.executable).resolve()),str(helper)],checkout=str(source),source_ref=git('rev-parse','HEAD'),runs_dir=str(root/'runs'),superpowers=dict(root=str(pins),revision='a'*40,manifest=manifest,manifest_sha256=profile_fingerprint(manifest)),timeout_seconds=10,log_max_bytes=128)
             queue=ExecutionQueue(root/'queue.db')
             request=dict(operation='submit',delivery_id=str(uuid.uuid4()),repository='Owner/Repo',issue=15,task_id='TT-15',runner_label='local')
             receipt=queue.submit(request,profile_fingerprint(profile),profile_id='custom')
@@ -88,7 +88,7 @@ class WorkerFaultTests(unittest.TestCase):
         manifest={'SKILL.md':hashlib.sha256(b'instructions\n').hexdigest()}
         self.helper=self.root/'helper.py'
         self.helper.write_text('import argparse,json,pathlib\np=argparse.ArgumentParser();p.add_argument("--request");p.add_argument("--result");a=p.parse_args();r=json.loads(pathlib.Path(a.request).read_text());v={k:r[k] for k in ("run_id","attempt_id","source_sha")};v.update(version=1,status="completed",summary="ok");pathlib.Path(a.result).write_text(json.dumps(v))\n')
-        self.profile=dict(kind='custom',trusted=True,approve_for_me=False,repository='Owner/Repo',runner_label='local',argv=[os.sys.executable,str(self.helper)],checkout=str(self.source),source_ref=self.git('rev-parse','HEAD'),runs_dir=str(self.root/'runs'),superpowers=dict(root=str(pins),revision='a'*40,manifest=manifest,manifest_sha256=profile_fingerprint(manifest)),timeout_seconds=5,log_max_bytes=128,max_attempts=2)
+        self.profile=dict(kind='custom',trusted=True,approve_for_me=False,repository='Owner/Repo',runner_label='local',argv=[str(Path(os.sys.executable).resolve()),str(self.helper)],checkout=str(self.source),source_ref=self.git('rev-parse','HEAD'),runs_dir=str(self.root/'runs'),superpowers=dict(root=str(pins),revision='a'*40,manifest=manifest,manifest_sha256=profile_fingerprint(manifest)),timeout_seconds=5,log_max_bytes=128,max_attempts=2)
         self.queue=ExecutionQueue(self.root/'queue.db')
         request=dict(operation='submit',delivery_id=str(uuid.uuid4()),repository='Owner/Repo',issue=15,task_id='TT-15',runner_label='local')
         self.run=self.queue.submit(request,profile_fingerprint(self.profile),profile_id='custom')['receipt_id']
