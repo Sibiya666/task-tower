@@ -22,6 +22,14 @@
 
 ## Запуск
 
+Выбор установленного Codex / Claude Code / OpenCode / собственного harness после clone:
+
+```sh
+python bootstrap.py
+```
+
+Python 3.11+; также доступны `start.cmd` на Windows и `sh start.sh` на macOS/Linux. Выбор и контекст Superpowers сохраняются локально. [Настройка, ограничения и первая задача Task Tower](docs/bootstrap.md).
+
 Windows, Windows PowerShell 5.1 с WPF, WebView2 Runtime и Python 3.11+.
 
 ```powershell

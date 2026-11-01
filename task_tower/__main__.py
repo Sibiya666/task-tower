@@ -34,6 +34,10 @@ def run_baseline(root, manifest, report):
 
 
 def main(argv=None):
+    supplied = sys.argv[1:] if argv is None else argv
+    if supplied and supplied[0] == "bootstrap":
+        from .bootstrap import main as bootstrap_main
+        return bootstrap_main(supplied[1:])
     parser = argparse.ArgumentParser(description="Task Tower project readiness")
     commands = parser.add_subparsers(dest="command", required=True)
     command = commands.add_parser("audit", help="Inspect a project environment")
@@ -42,8 +46,26 @@ def main(argv=None):
     command.add_argument("--run-checks", action="store_true",
                          help="Execute trusted manifest tool probes and baseline commands")
     command.add_argument("--output", type=Path, help="UTF-8 JSON report outside the project")
+    task_parser = commands.add_parser("task", help="File-backed pilot task records")
+    task_commands = task_parser.add_subparsers(dest="task_command", required=True)
+    show = task_commands.add_parser("show")
+    show.add_argument("path", type=Path)
+    accept = task_commands.add_parser("accept")
+    accept.add_argument("path", type=Path)
+    accept.add_argument("--stage", choices=("spec", "development", "test", "postmerge"), required=True)
+    accept.add_argument("--reviewer", required=True)
+    accept.add_argument("--evidence", type=Path, required=True)
+    accept.add_argument("--commit")
     args = parser.parse_args(argv)
     try:
+        if args.command == "task":
+            from .tasks import load_task, accept_task
+            card = load_task(args.path) if args.task_command == "show" else accept_task(
+                args.path, args.stage, args.reviewer, args.evidence, args.commit)
+            if hasattr(sys.stdout, "reconfigure"):
+                sys.stdout.reconfigure(encoding="utf-8")
+            print(json.dumps(card, ensure_ascii=False, indent=2))
+            return 0
         root = args.project.resolve()
         if args.output:
             output = args.output.resolve()
