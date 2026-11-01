@@ -37,3 +37,23 @@ Configured checks use host-only attempt role host_check in test/checking, not a 
 A publisher may pass an ephemeral task-policy copy with _host_evidence mapping exact safe Markdown paths to canonical hashes. This is never an installed JSON key or model-provided authority. Ordinary role input validation rejects evidence changes. The publishing freeze only accepts the exact host-attested BOM-free <=1MiB files under the configured evidence directory and includes them in its private index while preserving the accepted product digest. All stage/history/owner gates still apply.
 
 The private projection manifest is canonical JSON {version:1,run_id,task_id,product_sha256,files:[{path,scheme,sha256}]}, with sorted public Markdown entries; it excludes itself and cards. Its digest binds final freeze. The private JSON is not published. Task5 derives actual evidence from journal-accepted receipts rather than accepting model prose or mutating the normalized policy.
+
+## Ruling 7 — safe ready continuation
+
+The registered live owner may resume its own ready run. Another owner may take a positively dead ready run only after validating the manifest/history and resolving every attempt and effect intent, using an atomic owner handoff on the same run. Preserve its deadline, counters, component locks and task slot. A null, unknown or live PID and unresolved intent never authorize takeover. Recovery must not rerun a completed role or reset unknown work into ready.
+
+## Ruling 8 — applied rework boundaries
+
+Only durable journal-owned rework_applied events define contribution boundaries, through target_stage, generation_floor and, for an actual rejected verdict, receipt_id. Merely storing a valid stale rejected receipt as superseded history must not invalidate a replacement executor. An actually applied reject remains a boundary even after its receipt becomes superseded. Task2 independently reproduced both directions before acceptance.
+
+## Ruling 9 — detached reviewer preparation
+
+After durable begin_attempt, prepare the reviewer checkout under the private attempt directory as review-worktree. Verify actual Git directory, head and fingerprints before and after execution. Existing paths or uncertain preparation must be fenced rather than overwritten. Task4 need not precreate an additional reviewer-path field. Executor changes within permitted scope are legitimate output; read-only reviewer and test mutations remain failures.
+
+## Ruling 10 — host check manifest
+
+The host check manifest binds version 1, checkpoint_sha, product_sha256, policy_sha256, execution_local and checks. Each configured check has its id, check_sha256, status, exit_code, started, cleanup_confirmed, duration_seconds, source_unchanged and captured byte counts, plus stdout/stderr digest, byte count, truncation and unknown-tail evidence. It preserves all configured rows, including not_started rows after an unsafe failure. Raw command arguments and private paths are not public evidence. A model verdict cannot conceal an actual failed check.
+
+## Ruling 11 — existing CI authority
+
+CI substitution requires the existing authoritative GitHubSource verified merged bundle for the exact checkpoint and every configured required platform. A flag, invented check-run validator or model claim cannot grant success. An unpublished checkpoint normally has no qualifying bundle. Preserve the closed journal reason schema by recording environment_unavailable with ci_unavailable detail. Any accepted substitution remains host-validated, provenance-bound evidence with execution_local false; Task4 must still revalidate freshness. Never turn a reviewer's needs_input into approval.
