@@ -6,16 +6,22 @@ let controller=null,currentLight=null,weatherMix=1,lastWeather=settings.weather,
 const sky=document.createElement('canvas'),weather=document.createElement('canvas');
 sky.id='world-sky';weather.id='world-weather';sky.setAttribute('aria-hidden','true');weather.setAttribute('aria-hidden','true');document.body.prepend(sky,weather);
 const menu=document.createElement('section');menu.id='world-menu';menu.hidden=true;menu.setAttribute('role','dialog');menu.setAttribute('aria-label','Настройки сцены');document.body.append(menu);
+let menuAnchor={x:4,y:4};
+function placeMenu(){menu.style.left=Math.max(4,Math.min(menuAnchor.x,innerWidth-menu.offsetWidth-4))+'px';menu.style.top=Math.max(4,Math.min(menuAnchor.y,innerHeight-menu.offsetHeight-4))+'px'}
+window.addEventListener('resize',()=>{if(!menu.hidden)placeMenu()});
 const atlases={};for(const name of ['clouds','rain','fog']){const image=new Image();image.src='assets/world-'+name+'.png';atlases[name]=image}
 function save(){try{localStorage.setItem('world-settings',JSON.stringify(settings));localStorage.setItem('world-idle',JSON.stringify(visibility.serialize()))}catch{}}
 function label(text){const title=document.createElement('strong');title.textContent=text;menu.append(title)}
+function phaseText(date){const hour=date.getHours()+date.getMinutes()/60,name={day:'День',night:'Ночь',dawn:'Рассвет',dusk:'Сумерки'}[api.phase(hour,settings.mode)];return 'Сейчас: '+name+' · '+(settings.mode==='auto'?'местное время '+date.toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'}):'ручной режим')}
 function select(title,key,options){const row=document.createElement('label');row.textContent=title;const select=document.createElement('select');select.dataset.setting=key;for(const [value,text] of options){const option=document.createElement('option');option.value=value;option.textContent=text;select.append(option)}select.value=String(settings[key]);select.onchange=()=>{settings[key]=key==='idleMinutes'?Number(select.value):select.value;save();controller?.refresh();};row.append(select);menu.append(row)}
 function openMenu(x,y,project=null){
+ window.chrome?.webview?.postMessage({action:'fit-window'});menuAnchor={x,y};
  menu.replaceChildren();label(project?'Этажи проекта':'Настройки мира');
  if(project){
   const expand=document.createElement('button');expand.textContent=controller.isExpanded(project.id)?'Компактная башня':'Показать все этажи на башне';expand.onclick=()=>{controller.expand(project.id);menu.hidden=true};menu.append(expand);
   project.rooms.slice().sort((a,b)=>String(a.id).localeCompare(String(b.id))).reverse().forEach((room,i)=>{const button=document.createElement('button');button.textContent=(project.rooms.length-i)+' · '+(room.title||'Без названия');button.onclick=()=>{controller.open(project.id,room.id);menu.hidden=true};menu.append(button)});
  }else{
+  const status=document.createElement('p');status.id='world-time-status';status.textContent=phaseText(new Date());menu.append(status);
   select('Освещение','mode',[['auto','По местному времени'],['day','День'],['night','Ночь']]);
   select('Погода','weather',[['clear','Ясно'],['clouds','Облачно'],['rain','Дождь'],['fog','Туман']]);
   select('Скрывать после простоя','idleMinutes',[[0,'Не скрывать'],[10,'10 минут'],[30,'30 минут'],[60,'1 час']]);
@@ -24,22 +30,36 @@ function openMenu(x,y,project=null){
   }
  }
  const close=document.createElement('button');close.textContent='Закрыть';close.onclick=()=>{menu.hidden=true};menu.append(close);
- menu.hidden=false;menu.style.left=Math.max(4,Math.min(x,innerWidth-menu.offsetWidth-4))+'px';menu.style.top=Math.max(4,Math.min(y,innerHeight-menu.offsetHeight-4))+'px';menu.querySelector('select,button,input')?.focus();
+ menu.hidden=false;placeMenu();menu.querySelector('select,button,input')?.focus();
 }
 document.addEventListener('contextmenu',e=>{if(e.target.closest('#world-menu'))return;e.preventDefault();openMenu(e.clientX,e.clientY)});
 document.addEventListener('pointerdown',e=>{if(!menu.contains(e.target))menu.hidden=true});document.addEventListener('keydown',e=>{if(e.key==='Escape')menu.hidden=true});
-function sheet(ctx,image,t,count,columns,w,h,alpha){if(!image.complete||!image.naturalWidth)return;const n=Math.floor(t*6)%count;ctx.globalAlpha=alpha;ctx.drawImage(image,(n%columns)*320,Math.floor(n/columns)*180,320,180,0,0,w,h);ctx.globalAlpha=1}
+function sheet(ctx,image,t,count,columns,w,h,alpha,sourceHeight=180){if(!image.complete||!image.naturalWidth)return;const n=Math.floor(t*6)%count;ctx.globalAlpha=alpha;ctx.drawImage(image,(n%columns)*320,Math.floor(n/columns)*180,320,sourceHeight,0,0,w,h);ctx.globalAlpha=1}
+function celestial(ctx,light,phase,w){
+ const moon=phase==='night',ox=24,oy=24;
+ ctx.save();
+ if(moon){for(let i=0;i<12;i++){ctx.fillStyle='#6e8497';ctx.fillRect(Math.round(45+(i*41)%(Math.max(70,w)-50)),12+(i*13)%39,1,1)}}
+ const pattern=moon?['000111100','001111000','011110000','111100000','111100000','111110000','011111000','001111110','000111100']:['000010000','010000010','001111100','001111100','101111101','001111100','001111100','010000010','000010000'];
+ for(let y=0;y<9;y++)for(let x=0;x<9;x++)if(pattern[y][x]==='1'){
+  ctx.fillStyle=moon?'#172f48':'#79512b';ctx.fillRect(ox+x-1,oy+y-1,3,3);
+ }
+ for(let y=0;y<9;y++)for(let x=0;x<9;x++)if(pattern[y][x]==='1'){ctx.fillStyle=moon?(x+y<7?'#e1e7df':'#a7bfd0'):(phase==='day'?'#ffe3a0':'#e7a66c');ctx.fillRect(ox+x,oy+y,1,1)}
+ ctx.restore();
+}
 function draw(){
  if(document.hidden)return;frame++;const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
  const date=new Date(),hour=date.getHours()+date.getMinutes()/60+date.getSeconds()/3600,target=api.daylight(hour,settings.mode);
+ const phase=api.phase(hour,settings.mode),status=document.getElementById('world-time-status');if(status)status.textContent=phaseText(date);sky.dataset.phase=phase;
  currentLight=currentLight===null||reduced?target:currentLight+(target-currentLight)*.08;
  document.documentElement.style.setProperty('--world-brightness',(.82+currentLight*.3).toFixed(2));
  document.documentElement.style.setProperty('--world-saturation',String(.8+currentLight*.2));
  const overview=document.body.classList.contains('overview-mode'),w=Math.ceil(innerWidth/2),h=Math.ceil(innerHeight/2);
  for(const canvas of [sky,weather]){if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h}canvas.getContext('2d').clearRect(0,0,w,h)}
- if(!overview||!settings.effects)return;
+ if(!overview)return;
+ const ctx=sky.getContext('2d');ctx.imageSmoothingEnabled=false;celestial(ctx,currentLight,phase,w);
+ if(!settings.effects)return;
  if(reduced){lastWeather=settings.weather;weatherMix=1}else if(lastWeather!==settings.weather){weatherMix=Math.max(0,weatherMix-.15);if(weatherMix===0)lastWeather=settings.weather}else weatherMix=Math.min(1,weatherMix+.08);
- const selected=lastWeather,t=reduced?0:performance.now()/1000,ctx=sky.getContext('2d');ctx.imageSmoothingEnabled=false;
+ const selected=lastWeather,t=reduced?0:performance.now()/1000;
  if(selected!=='clear'){
   ctx.save();ctx.filter=currentLight>.5?'brightness(1.5) saturate(.25)':'none';
   // PixelFX sky at two depths, behind all towers. Transparent margins stay clear.
@@ -47,7 +67,8 @@ function draw(){
   ctx.translate(w*.2,h*.08);sheet(ctx,atlases.clouds,t*.2+3,72,7,w*.8,h*.38,weatherMix*.2);ctx.restore();
  }
  const front=weather.getContext('2d');front.imageSmoothingEnabled=false;
- if(selected==='rain')sheet(front,atlases.rain,t,48,6,w,h,weatherMix*.55);
+ // Atlas ground splashes have no shared ground plane in the desktop diorama.
+ if(selected==='rain')sheet(front,atlases.rain,t,48,6,w,h,weatherMix*.55,160);
  if(selected==='fog')sheet(front,atlases.fog,t*.55,72,7,w,h,weatherMix*.38);
 }
 setInterval(()=>{if(document.hidden)return;draw();if(frame%70===0)controller?.refresh()},140);

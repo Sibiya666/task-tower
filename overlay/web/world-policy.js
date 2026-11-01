@@ -10,6 +10,7 @@ function daylight(hour,mode='auto'){
  const rise=Math.max(0,Math.min(1,(hour-6)/2)),set=Math.max(0,Math.min(1,(20-hour)/2));
  const t=Math.min(rise,set);return t*t*(3-2*t);
 }
+function phase(hour,mode='auto'){if(mode!=='auto')return mode;if(hour<6||hour>=20)return 'night';if(hour<8)return 'dawn';if(hour>=18)return 'dusk';return 'day'}
 function towerDetail(total,expanded=false){total=Math.max(1,total);return {total,levels:total>8&&!expanded?4:total,far:total>8}}
 function floorBand(index,total,levels){
  for(let level=0;level<levels;level++){
@@ -30,6 +31,6 @@ class WorldVisibility{
  }
  serialize(){return Object.fromEntries(this.records)}
 }
-const api={daylight,towerDetail,floorBand,WorldVisibility,normalizeSettings};
+const api={daylight,phase,towerDetail,floorBand,WorldVisibility,normalizeSettings};
 if(typeof module!=='undefined')module.exports=api;else root.WorldPolicy=api;
 })(globalThis);

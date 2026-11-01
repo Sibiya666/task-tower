@@ -152,6 +152,13 @@ $('tower-map').querySelectorAll('.map-floor').forEach(b=>b.setAttribute('aria-cu
 const atTop=view.scrollTop<8,atBase=view.scrollTop+view.clientHeight>=view.scrollHeight-8;
 const label=$('tower-map').querySelector('.map-position');if(label)label.textContent=atTop?'Верх\nбашни':atBase?'У\nоснования':'Этаж\n'+nearest.dataset.number;
 }
+function layoutPlots(){
+ const root=$('overview'),district=$('overview-towers');if(!district)return 1;
+ const width=root.clientWidth||innerWidth,columns=Math.max(1,Math.min(3,Math.floor((width-14)/196))),plotWidth=Math.min(220,(width-30-(columns-1)*16)/columns);
+ district.style.gridTemplateColumns='repeat('+columns+','+plotWidth+'px)';district.style.width='100%';district.style.columnGap='16px';district.style.justifyContent='end';
+ for(const wrapper of district.children){const slot=slotFor(wrapper.dataset.project);wrapper.style.gridColumn=String(columns-slot%columns);wrapper.style.gridRow=String(Math.floor(slot/columns)+1);wrapper.style.width=plotWidth+'px'}
+ return columns;
+}
 function renderOverview(){
 const returning=sentViewMode==='rooms'&&viewMode==='overview';
 if(sentViewMode==='overview'&&viewMode==='rooms')overviewPosition={left:$('overview').scrollLeft,top:$('overview').scrollTop};
@@ -160,17 +167,16 @@ if(sentViewMode!==viewMode){sentViewMode=viewMode;bridge(viewMode==='overview'?'
 overviewScenes=[];
 const root=$('overview');let district=root.querySelector('#overview-towers');if(!district){district=document.createElement('div');district.id='overview-towers';root.append(district)}
 const oldFieldWidth=district.offsetWidth,oldFieldScroll=root.scrollLeft;
-const columns=Math.max(1,...data.projects.map(p=>slotFor(p.id)%3+1));
-district.style.gridTemplateColumns='repeat('+columns+',220px)';district.style.width='max(100%,'+(columns*220+(columns-1)*25+30)+'px)';district.style.justifyContent='end';
+const columns=layoutPlots();
 const allRooms=data.projects.flatMap(p=>p.rooms),lit=allRooms.filter(r=>occupants(r).some(a=>state(a)==='active')).length,total=allRooms.reduce((n,r)=>n+occupants(r).filter(a=>state(a)==='active').length,0);
 const liveProjects=new Set(data.projects.map(p=>p.id));for(const node of [...district.children])if(!liveProjects.has(node.dataset.project))node.remove();
 for(const p of data.projects){
 const ordered=sessions(p),detail=WorldPolicy.towerDetail(ordered.length,expandedTowers.has(p.id)),signature=ordered.map(r=>r.id).join('|')+':'+detail.levels,previous=[...district.children].find(n=>n.dataset.project===p.id);
-if(previous&&previous.dataset.signature===signature){previous.style.gridColumn=String(columns-slotFor(p.id)%3);previous.querySelector('.project-tower-name').textContent=p.name;overviewScenes.push({canvas:previous.querySelector('.tower-art-canvas'),ordered});continue}
+if(previous&&previous.dataset.signature===signature){previous.querySelector('.project-tower-name').textContent=p.name;overviewScenes.push({canvas:previous.querySelector('.tower-art-canvas'),ordered});continue}
 const wrapper=document.createElement('section');wrapper.className='project-tower';wrapper.dataset.project=p.id;wrapper.dataset.signature=signature;wrapper.setAttribute('aria-label','Башня проекта '+p.name);
 wrapper.dataset.detailLevels=detail.levels;wrapper.dataset.floorCount=ordered.length;
 const arrivals=document.createElement('canvas');arrivals.className='tower-arrivals';arrivals.width=220;arrivals.height=90;arrivals.setAttribute('aria-hidden','true');wrapper.append(arrivals);
-const slot=slotFor(p.id);wrapper.style.gridColumn=String(columns-slot%3);wrapper.style.gridRow=String(Math.floor(slot/3)+1);
+const slot=slotFor(p.id);wrapper.style.gridColumn=String(columns-slot%columns);wrapper.style.gridRow=String(Math.floor(slot/columns)+1);
 wrapper.style.setProperty('--tower-ratio',Math.max(1,ordered.length)/Math.max(1,...data.projects.map(p=>p.rooms.length)));
 wrapper.style.setProperty('--floor-count',Math.max(1,ordered.length));
 const heading=document.createElement('button');heading.className='project-tower-name';heading.textContent=p.name;heading.title=p.name+' · сессий: '+ordered.length;heading.onclick=()=>{viewMode='rooms';projectId=p.id;selectedId=ordered.at(-1)?.id;scrollToSession=selectedId;render()};
@@ -220,15 +226,16 @@ ctx.drawImage(images['tower-aligned-base'],0,roof+n*floor,134,base);
 }
 function layoutTowerArt(){
 if(viewMode!=='overview')return;
+layoutPlots();
 document.querySelectorAll('.project-tower').forEach(wrapper=>{
 const n=Math.max(1,wrapper.querySelectorAll('.overview-floor').length);
 const levels=Number(wrapper.dataset.detailLevels)||n;
 const artStyle=getComputedStyle(document.documentElement);
 const naturalHeight=parseFloat(artStyle.getPropertyValue('--tower-roof-h'))+levels*parseFloat(artStyle.getPropertyValue('--tower-floor-h'))+parseFloat(artStyle.getPropertyValue('--tower-base-h'));
-const available=Math.max(80,wrapper.clientHeight-32);
+const depthLift=n>8?48:0,available=Math.max(80,wrapper.clientHeight-32-depthLift);
 let scale=Math.min(1,(wrapper.clientWidth-42)/134,available/naturalHeight);
 const distance=Math.round((1-scale)*22);
-scale=Math.min(scale,(available-distance)/naturalHeight);
+scale=Math.min(scale,(wrapper.clientHeight-32-distance-depthLift)/naturalHeight);
 if(n>8){scale=Math.min(scale,.46);wrapper.style.setProperty('--depth-lift','48px')}else wrapper.style.setProperty('--depth-lift','0px');
 wrapper.querySelector('.overview-tower').style.height=naturalHeight+'px';
 wrapper.style.setProperty('--tower-scale',scale);
@@ -292,6 +299,7 @@ $('pin').onclick=()=>{const on=$('pin').getAttribute('aria-pressed')!=='true';$(
 window.Tower={ready:false,acceptSnapshot};
 WorldView.connect({refresh:()=>{if(window.Tower.ready)render()},isExpanded:id=>expandedTowers.has(id),expand:id=>{expandedTowers.has(id)?expandedTowers.delete(id):expandedTowers.add(id);render()},open:(pid,rid)=>{projectId=pid;selectedId=rid;viewMode='rooms';render()}});
 new ResizeObserver(layoutTowerArt).observe($('overview'));
+window.addEventListener('resize',layoutTowerArt);
 window.chrome?.webview?.addEventListener('message',e=>acceptSnapshot(e.data));
 Promise.all([...Object.keys(window.RoomSkins).flatMap(id=>['room-'+id,'room-'+id+'-glass']),'ambient-clouds','ambient-candle','ambient-glass-mask','book','forge','map','hero-book','hero-forge','hero-map','gothic-interior','employee-scholar','employee-smith','employee-ranger','employee-mage',...['scholar','smith','ranger'].flatMap(group=>[1,2,3].map(n=>'employee-'+group+'-'+n)),'tower-aligned-roof','tower-aligned-floor','tower-aligned-base','tower-aligned-window-mask'].map(name=>new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>{images[name]=img;resolve()};img.onerror=reject;img.src='assets/'+name+'.png'}))).then(()=>{
 images['ambient-layer']=document.createElement('canvas');images['ambient-layer'].width=193;images['ambient-layer'].height=224;

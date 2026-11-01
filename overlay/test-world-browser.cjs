@@ -17,10 +17,12 @@ test('World controls, compact real floors, weather, hiding and revival work toge
   await long.locator('.tower-capacity').click();await page.locator('#world-menu button').filter({hasText:'16 · Floor 16'}).click();assert.equal(await page.locator('.session-floor').getAttribute('data-session'),'floor-15');await page.locator('#back-icon').click();
   await page.mouse.click(15,15,{button:'right'});assert.equal(await page.locator('#world-menu').isVisible(),true);
   await page.locator('[data-setting="mode"]').selectOption('day');await page.locator('[data-setting="weather"]').selectOption('clouds');await page.keyboard.press('Escape');await page.waitForTimeout(250);
+  assert.equal(await page.locator('#world-sky').getAttribute('data-phase'),'day');
   assert.equal(await page.locator('#world-menu').isVisible(),false);assert.equal(await page.locator('html').evaluate(e=>getComputedStyle(e).getPropertyValue('--world-brightness')),'1.12');
   await page.screenshot({path:path.join(__dirname,'runtime/world-day-clouds.png'),omitBackground:true});
   await page.mouse.click(15,15,{button:'right'});await page.locator('[data-setting="mode"]').selectOption('night');await page.locator('[data-setting="weather"]').selectOption('rain');await page.keyboard.press('Escape');await page.waitForTimeout(250);
   await page.screenshot({path:path.join(__dirname,'runtime/world-night-rain.png'),omitBackground:true});
+  assert.equal(await page.locator('#world-sky').getAttribute('data-phase'),'night');await page.mouse.click(15,15,{button:'right'});assert.match(await page.locator('#world-time-status').textContent(),/Ночь.*ручной режим/);await page.keyboard.press('Escape');
   data.projects[2].rooms[0].status='active';await push();assert.equal(await sleeping.isVisible(),true);
   data.updatedAt=1;data.projects[0].rooms[0].status='completed';data.projects[0].rooms[0].lastEvent=old;await push();assert.equal(await page.locator('.project-tower[data-project="live"]').isVisible(),true);
   assert.deepEqual(errors,[]);

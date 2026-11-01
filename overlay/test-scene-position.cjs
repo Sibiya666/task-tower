@@ -8,7 +8,7 @@ test('Overview scroll survives entering, moving through a compact viewport, upda
   const data={updatedAt:Date.now()/1000,projects:Array.from({length:12},(_,i)=>({id:'p'+i,name:'P'+i,rooms:[{id:'r'+i,title:'Room',status:'active',label:'Working',agents:[]}]}))};
   await page.evaluate(d=>window.Tower.acceptSnapshot(d),data);
   const saved=await page.locator('#overview').evaluate(e=>{e.scrollLeft=90;e.scrollTop=470;return {left:e.scrollLeft,top:e.scrollTop}});
-  assert.ok(saved.top>0&&saved.left>0);
+  assert.ok(saved.top>0);assert.equal(saved.left,0,'Responsive plots must not require horizontal scrolling');
   await page.locator('.overview-floor[data-session="r4"]').evaluate(e=>e.click());
   await page.setViewportSize({width:340,height:300});await page.evaluate(d=>window.Tower.acceptSnapshot(d),data);
   await page.locator('#back-icon').click();await page.setViewportSize({width:650,height:560});await page.waitForTimeout(150);
