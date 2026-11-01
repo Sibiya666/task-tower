@@ -158,3 +158,12 @@ class TickIntegrationTests(unittest.TestCase):
         report=self.run_tick()
         self.assertEqual([(r['operation'],r['issue']) for r in self.calls],[('lookup',9),('submit',18)])
         self.assertFalse(report['operational_failure'])
+
+class AuthenticatedSourceTests(unittest.TestCase):
+    def test_default_factory_resolves_and_forwards_existing_host_authentication(self):
+        from types import SimpleNamespace
+        with patch('task_tower.github_source.resolve_token', return_value='host-token') as resolve, patch.object(dispatcher, 'GitHubSource') as source:
+            result = dispatcher._source(SimpleNamespace(repository='Owner/Repo'))
+        resolve.assert_called_once_with()
+        source.assert_called_once_with('Owner/Repo', token='host-token')
+        self.assertIs(result, source.return_value)
