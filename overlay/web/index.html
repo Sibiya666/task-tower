@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; script-src 'self'; style-src 'self'; img-src 'self' file: data:; connect-src 'none'; object-src 'none'; base-uri 'none'">
-<title>Башня агентов</title><link rel="stylesheet" href="tower.css"><link rel="stylesheet" href="tower-art.css"></head>
+<title>Башня агентов</title><link rel="stylesheet" href="tower.css"><link rel="stylesheet" href="tower-art.css"><link rel="stylesheet" href="world.css"></head>
 <body>
 <header id="titlebar"><span>♜ &nbsp;БАШНЯ АГЕНТОВ</span><nav aria-label="Окно"><button id="back-icon" title="Назад к башням" aria-label="Назад к башням">←</button><button id="pin" title="Поверх других окон" aria-label="Поверх других окон" aria-pressed="true">◆</button><button id="collapse" title="Свернуть" aria-label="Свернуть">−</button><button id="close" title="Закрыть" aria-label="Закрыть">×</button></nav></header>
 <main>
@@ -9,4 +9,4 @@
 <div id="tower-view"><section id="overview" aria-label="Вся башня проектов"></section><section id="room-grid" aria-label="Башня проектов" tabindex="0"></section><aside id="tower-map" aria-label="Положение в башне"></aside></div>
 <section id="details" aria-live="polite"><h1 id="task-title">Подключение к Codex…</h1><p id="task-status"></p><p id="agent-names"></p></section>
 <footer id="source">Локальный Codex · только чтение</footer>
-</main><script src="room-skins.js"></script><script src="agent-presence.js"></script><script src="tower.js"></script></body></html>
+</main><script src="room-skins.js"></script><script src="agent-presence.js"></script><script src="world-policy.js"></script><script src="world-view.js"></script><script src="tower.js"></script></body></html>
