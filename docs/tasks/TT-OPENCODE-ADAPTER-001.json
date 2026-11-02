@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "id": "TT-OPENCODE-ADAPTER-001",
+  "title": "Add a version-qualified OpenCode adapter and common custom harness example",
+  "executor": "opencode-adapter-implementation-team",
+  "project_root": "../..",
+  "mode": "autonomous",
+  "status": "in_progress",
+  "spec": "../superpowers/specs/2026-11-02-opencode-adapter-design.md",
+  "plan": "../superpowers/plans/2026-11-02-opencode-adapter.md",
+  "acceptance_criteria": [
+    "Official version-qualified OpenCode API/CLI research and independent accepted spec/plan precede implementation",
+    "Installation-owned executable/config/tool/environment policy preserves the existing actual model and performs no hidden install, update or authentication changes",
+    "Full60 pinned instructions, bounded stdin/events/logs/argv and strict run/attempt/source results use the existing executor protocol without weakening legacy behavior",
+    "Contained timeout/cancel and local reconciliation fence uncertain outcomes without implicit resume or replay",
+    "Actual native authorized task and distinct native reviewer plus trusted custom example are evidenced separately from fixtures",
+    "Current complete suite and three-platform CI, independent exact-head/base PR acceptance, serialized exact-main postmerge acceptance and automatic Issue closure are verified",
+    "Current installed OpenCode/custom and new native stdin/cleanup qualification is Windows-only; unsupported adapter execution fails before child launch; portable parsing/policy/CI remain and POSIX native qualification is deferred to Issue62"
+  ],
+  "stages": {
+    "spec": {
+      "status": "accepted",
+      "reviewer": "windows_scope_spec_acceptance",
+      "evidence": "evidence/TT-OPENCODE-ADAPTER-001/spec-review.md",
+      "sha256": "d9d55fe6e5c9bf4182e1060a6b0227637c44457d13ba4de6517aa435245bcd4f",
+      "hash_scheme": "sha256-utf8-lf-v1"
+    },
+    "development": {
+      "status": "pending"
+    },
+    "test": {
+      "status": "pending"
+    },
+    "postmerge": {
+      "status": "pending"
+    }
+  }
+}
