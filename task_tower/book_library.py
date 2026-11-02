@@ -7,8 +7,11 @@ from .book_projection import ISSUE
 
 
 def markdown_path(path):
+    if not isinstance(path,str):return False
+    try:path.encode('utf-8')
+    except UnicodeError:return False
     return (isinstance(path,str) and path.lower().endswith('.md') and '\\' not in path
-            and not any(ord(c)<32 or ord(c)==127 for c in path)
+            and not any(ord(c)<32 or 127<=ord(c)<=159 for c in path)
             and all(part not in ('','.','..') for part in path.split('/'))
             and ':' not in path)
 
@@ -18,16 +21,22 @@ def project_library(connection, store, *, connected_repositories=None):
     errors=[]; entries={}
     def error(message): errors.append(dict(project=connection.id,source=root,error=message))
     def entry(path,commit,state='unknown',declaration=None,issues=None,milestone=None,available=True):
+        # A literal percent triplet could acquire structural meaning after a
+        # second URL decode. Keep its artifact visible without a launch URL.
+        source=None if re.search(r'%[0-9a-fA-F]{2}',path) else root+'/blob/'+commit+'/'+quote(path,safe='/')
+        if source is None: error('Markdown filename source unavailable')
         return dict(id=f'{repository}:{path}@{commit}',project=connection.id,repository=repository,
-                    book='library',title=path,path=path,commit=commit,source=root+'/blob/'+commit+'/'+quote(path,safe='/'),
+                    book='library',title=path,path=path,commit=commit,source=source,
                     status='source',artifact_state=state,declaration_source=declaration,
-                    issues=issues or [],milestone=milestone,available=available)
+                    issues=issues or [],milestone=milestone,available=available and source is not None)
     try:
         tree=store.library()
         for row in tree:
             path=row.get('path'); commit=row.get('commit')
-            if not markdown_path(path) or not isinstance(commit,str) or not re.fullmatch('[0-9a-f]{40}',commit): raise ValueError()
+            if not markdown_path(path) or not isinstance(commit,str) or not re.fullmatch('[0-9a-f]{40}',commit):
+                error('Library entry unavailable or invalid');continue
             value=entry(path,commit); entries[value['id']]=value
+        if getattr(store,'library_invalid_paths',0):error('Library Markdown paths unavailable')
     except Exception:
         error('Library unavailable or incomplete'); return list(entries.values()),errors
     commit=getattr(store,'library_commit',None) or (tree[0]['commit'] if tree else None)
@@ -56,7 +65,7 @@ def project_library(connection, store, *, connected_repositories=None):
     for identity,value in declarations.items():
         try: available=store.markdown_exists(value['commit'],value['path']) is True
         except Exception: available=False
-        value['available']=available
+        value['available']=available and value['source'] is not None
         if not available: error('Declared Markdown version unavailable')
         entries[identity]=value
     return list(entries.values()),errors

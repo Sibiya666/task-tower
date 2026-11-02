@@ -213,6 +213,7 @@ class GitHubTasks:
         return reconcile_and_repair(issue)
 
     def library(self):
+        self.library_invalid_paths = 0
         repository = self.request('GET', '/')
         branch = repository.get('default_branch')
         if not isinstance(branch, str): raise GitHubSourceError('Default branch unavailable')
@@ -222,6 +223,7 @@ class GitHubTasks:
         tree = self.request('GET', '/git/trees/' + commit + '?recursive=1')
         if tree.get('truncated') is not False or not isinstance(tree.get('tree'), list): raise GitHubSourceError('Library tree incomplete')
         from .book_library import markdown_path
+        self.library_invalid_paths = sum(1 for item in tree['tree'] if item.get('type') == 'blob' and isinstance(item.get('path'),str) and item['path'].lower().endswith('.md') and not markdown_path(item['path']))
         return [dict(title=item['path'], repository=self.repository, path=item['path'], commit=commit, source='https://github.com/' + self.repository + '/blob/' + commit + '/' + quote(item['path'], safe='/')) for item in tree['tree'] if item.get('type') == 'blob' and markdown_path(item.get('path'))]
 
     def library_index(self, commit):

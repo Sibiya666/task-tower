@@ -30,5 +30,14 @@ def projection():
         return dict(_public(report), sequence=1, final=True)
 
 
+def escaped_library_projection():
+    from types import SimpleNamespace
+    from task_tower.book_library import project_library
+    names=['docs/ordinary.md','docs/a#b.md','docs/a?b.md','docs/100%.md',"docs/a!()'*~.md",'docs/Ю space.md','docs/a%2fb.md','docs/a%252e.md','docs/🚀 space.md','docs/a\u0085.md','docs/a\u009f.md','docs/after.md']
+    store=SimpleNamespace(library=lambda:[dict(path=p,commit='a'*40) for p in names],library_index=lambda c:None)
+    rows,errors=project_library(SimpleNamespace(repository='a/b',id='p'),store)
+    return dict(_public(dict(entries=rows,errors=errors,fetched_at='2026-11-02T00:00:00Z')),sequence=1,final=True)
+
+
 if __name__ == '__main__':
     print(json.dumps(projection(), ensure_ascii=True))

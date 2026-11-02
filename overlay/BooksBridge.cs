@@ -81,12 +81,22 @@ public sealed class BooksBridge : IDisposable
         if(Regex.IsMatch(path,@"\A(?:issues|pull|milestone)/[1-9][0-9]*\z"))return true;
         var blob=Regex.Match(path,@"\Ablob/[0-9a-fA-F]{40}/(.+)\z");if(!blob.Success)return false;
         string relative=blob.Groups[1].Value;
-        if(Regex.IsMatch(relative,@"%(?:2f|5c|2e|25)",RegexOptions.IgnoreCase))return false;
         // Invalid percent escapes and decoded controls must not reach a browser.
         if(Regex.IsMatch(relative,@"%(?![0-9a-fA-F]{2})"))return false;
         string decoded=Uri.UnescapeDataString(relative);
-        if(!decoded.EndsWith(".md",StringComparison.OrdinalIgnoreCase) || decoded.Any(c=>Char.IsControl(c)||c=='\\'||c==':'||c=='?'||c=='#'))return false;
-        return decoded.Split('/').All(part=>part!="" && part!="." && part!="..");
+        if(!SafeMarkdownPath(decoded) || Regex.IsMatch(decoded,@"%[0-9a-fA-F]{2}"))return false;
+        // Python quote(safe='/') uses RFC3986, unlike .NET Framework's legacy
+        // EscapeDataString spelling for !'()*. Require one canonical decode.
+        try{return String.Join("/",decoded.Split('/').Select(QuoteSegment))==relative;}catch{return false;}
+    }
+    static bool SafeMarkdownPath(string path)
+    {
+        return path!=null && path.EndsWith(".md",StringComparison.OrdinalIgnoreCase) &&
+            !path.Any(c=>Char.IsControl(c)||c=='\\'||c==':') && path.Split('/').All(p=>p!="" && p!="." && p!="..");
+    }
+    static string QuoteSegment(string segment)
+    {
+        return Uri.EscapeDataString(segment).Replace("!","%21").Replace("'","%27").Replace("(","%28").Replace(")","%29").Replace("*","%2A");
     }
     public bool OpenSource(string url,Action<string> opener)
     {
@@ -165,9 +175,10 @@ public sealed class BooksBridge : IDisposable
         foreach(var item in entries){
             var entry=item as Dictionary<string,object>;
             if(entry==null || entry.Keys.Any(k=>!fields.Contains(k)))throw new FormatException();
-            foreach(string key in new[]{"id","repository","project","book","source","title","status"})if(!entry.ContainsKey(key)||!(entry[key] is string))throw new FormatException();
+            foreach(string key in new[]{"id","repository","project","book","title","status"})if(!entry.ContainsKey(key)||!(entry[key] is string))throw new FormatException();
             string repo=(string)entry["repository"];
-            if(!repositories.Contains(repo) || !IsAllowedSource((string)entry["source"]))throw new FormatException();
+            bool inert=(string)entry["book"]=="library" && entry.ContainsKey("available") && entry["available"] is bool && !(bool)entry["available"] && entry.ContainsKey("source") && entry["source"]==null;
+            if(!repositories.Contains(repo) || (!inert && (!entry.ContainsKey("source") || !(entry["source"] is string) || !IsAllowedSource((string)entry["source"]))))throw new FormatException();
             object migrations;
             if(entry.TryGetValue("migrations",out migrations)){
                 var records=migrations as object[];if(records==null || records.Length>100)throw new FormatException();
@@ -192,10 +203,10 @@ public sealed class BooksBridge : IDisposable
                 if(state=="ready" && (string)proof=="pending")throw new FormatException();
             }else{
                 if(!entry.ContainsKey("commit") || !(entry["commit"] is string) || !Regex.IsMatch((string)entry["commit"],@"\A[0-9a-f]{40}\z") ||
-                    !entry.ContainsKey("path") || !(entry["path"] is string) || (string)entry["id"]!=repo+":"+(string)entry["path"]+"@"+(string)entry["commit"])throw new FormatException();
+                    !entry.ContainsKey("path") || !(entry["path"] is string) || !SafeMarkdownPath((string)entry["path"]) || !entry.ContainsKey("available") || !(entry["available"] is bool) || (string)entry["id"]!=repo+":"+(string)entry["path"]+"@"+(string)entry["commit"])throw new FormatException();
                 string prefix="https://github.com/"+repo+"/blob/"+(string)entry["commit"]+"/";
                 string source=(string)entry["source"];
-                if(!source.StartsWith(prefix,StringComparison.Ordinal) || Uri.UnescapeDataString(source.Substring(prefix.Length))!=(string)entry["path"])throw new FormatException();
+                if(!inert && (!source.StartsWith(prefix,StringComparison.Ordinal) || Uri.UnescapeDataString(source.Substring(prefix.Length))!=(string)entry["path"]))throw new FormatException();
             }
         }
         foreach(var item in errors){var error=item as Dictionary<string,object>;if(error==null || error.Count!=3 || new[]{"project","source","error"}.Any(k=>!error.ContainsKey(k)||!(error[k] is string)))throw new FormatException();}

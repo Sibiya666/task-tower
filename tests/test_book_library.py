@@ -6,6 +6,46 @@ from types import SimpleNamespace
 
 
 class LibraryTests(unittest.TestCase):
+    def test_authenticated_tree_filtered_controls_report_diagnostic_and_reset(self):
+        from task_tower.github_tasks import GitHubTasks
+        from task_tower.book_library import project_library
+        connection=SimpleNamespace(repository='a/b',id='p')
+        paths=['docs/ordinary.md','docs/a\u0085.md','docs/a\u009f.md','docs/after.md'];calls=[]
+        def transport(method,url,headers,payload,limit):
+            self.assertEqual(headers['Authorization'],'Bearer TEST_TOKEN');calls.append(url)
+            if '/contents/' in url:raise urllib.error.HTTPError(url,404,'missing',{},None)
+            if '/git/trees/' in url:return json.dumps(dict(truncated=False,tree=[dict(type='blob',path=p) for p in paths])).encode()
+            if '/commits/' in url:return json.dumps(dict(sha='a'*40)).encode()
+            return json.dumps(dict(default_branch='main')).encode()
+        store=GitHubTasks(connection,token='TEST_TOKEN',transport=transport)
+        rows,errors=project_library(connection,store)
+        self.assertEqual([r['path'] for r in rows],['docs/ordinary.md','docs/after.md'])
+        self.assertEqual([e['error'] for e in errors],['Library Markdown paths unavailable'])
+        self.assertEqual(store.library_invalid_paths,2)
+        paths[:]=['docs/ordinary.md']
+        rows,errors=project_library(connection,store)
+        self.assertEqual(len(rows),1);self.assertEqual(errors,[]);self.assertEqual(store.library_invalid_paths,0)
+        self.assertTrue(calls)
+    def test_escaped_filenames_and_inert_unsupported_percent_triplets(self):
+        from tests.books_overlay_fixture import escaped_library_projection
+        from urllib.parse import quote
+        value=escaped_library_projection();rows=value['entries']
+        self.assertEqual(len(rows),10)
+        self.assertIn('docs/after.md',[r['path'] for r in rows])
+        self.assertFalse(any('\u0085' in r['path'] or '\u009f' in r['path'] for r in rows))
+        for row in rows:
+            if row['path'] in ('docs/a%2fb.md','docs/a%252e.md'):
+                self.assertIsNone(row['source']);self.assertFalse(row['available'])
+            else:
+                self.assertTrue(row['available'])
+                self.assertEqual(row['source'],'https://github.com/a/b/blob/'+'a'*40+'/'+quote(row['path'],safe='/'))
+        self.assertEqual(len(value['errors']),4)
+        self.assertEqual(value['state'],'partial')
+        declared,errors=self.project(dict(version=1,artifacts=[dict(path='docs/a%2fb.md',commit='b'*40,state='accepted')]))
+        unavailable=next(r for r in declared if r['path']=='docs/a%2fb.md')
+        self.assertIsNone(unavailable['source']);self.assertFalse(unavailable['available'])
+        self.assertEqual((unavailable['commit'],unavailable['artifact_state'],unavailable['status']),('b'*40,'accepted','source'))
+        self.assertTrue(errors)
     def project(self, index, exists=True, connected=None):
         from task_tower.book_library import project_library
         commit='a'*40

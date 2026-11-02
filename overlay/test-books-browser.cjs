@@ -29,3 +29,41 @@ test('real Python projection statuses remain filterable across progressive updat
   await filter.selectOption('open');await p.locator('.books-card').getByRole('button',{name:'Подробнее'}).click();const migration=await p.locator('[data-field="migrations"]').textContent();assert.match(migration,/source_sha256/);assert.match(migration,/current/);assert.doesNotMatch(migration,/PRIVATE|source_path/);assert.equal(await p.locator('[data-field="status"]').textContent(),'open');assert.notEqual(await p.locator('[data-field="verification"]').textContent(),'verified');
  }finally{await b.close()}
 });
+
+test('real producer escaped Markdown filenames keep ordinary sibling and exact safe native actions',async()=>{
+ const {spawnSync}=require('node:child_process');const os=require('node:os');
+ const python=path.join(os.homedir(),'.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe');
+ const produced=spawnSync(python,['-c','import json;from tests.books_overlay_fixture import escaped_library_projection;print(json.dumps(escaped_library_projection()))'],{cwd:path.join(__dirname,'..'),encoding:'utf8'});
+ assert.equal(produced.status,0,produced.stderr);const value=JSON.parse(produced.stdout),ordinary=value.entries[0];
+ const b=await chromium.launch({headless:true,channel:'msedge'});try{
+  const p=await b.newPage(),errors=[];p.on('pageerror',e=>errors.push(e.message));
+  await p.addInitScript(()=>{window.actions=[];window.chrome={webview:{postMessage:v=>actions.push(v),addEventListener:()=>{}}}});
+  await p.goto('file:///'+path.join(__dirname,'web/index.html').replaceAll('\\','/'));await p.keyboard.press('Control+b');
+  for(const entry of value.entries.slice(1)){
+   await p.evaluate(v=>BooksView.acceptSnapshot(v),{...value,entries:[ordinary,entry]});
+   await p.locator('[data-filter="book"]').selectOption('library');
+   assert.equal(await p.locator('.books-card').count(),2);
+   await p.locator('.books-card').filter({hasText:entry.title}).getByRole('button',{name:'Подробнее',exact:true}).click();
+   assert.match(await p.locator('#books-detail').textContent(),new RegExp(entry.path.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')));
+   const open=p.locator('#books-detail').getByRole('button',{name:'Открыть источник',exact:true});
+   if(entry.source===null){assert.equal(await open.count(),0);assert.match(await p.locator('#books-detail').textContent(),/available.*false/s);}
+   else{await open.click();assert.deepEqual(await p.evaluate(()=>actions.at(-1)),{action:'books-open-source',url:entry.source});}
+   await p.keyboard.press('Escape');
+  }assert.deepEqual(errors,[]);
+ }finally{await b.close();}
+});
+
+test('source URL canonical encoding rejects structural and repeated decoding spellings in real Edge',async()=>{
+ const b=await chromium.launch({headless:true,channel:'msedge'});try{
+  const p=await b.newPage();await p.goto('file:///'+path.join(__dirname,'web/index.html').replaceAll('\\','/'));await p.keyboard.press('Control+b');
+  const commit='a'.repeat(40),prefix='https://github.com/o/r/blob/'+commit+'/';
+  const bad=['docs/a#b.md','docs/a?b.md','docs/100%.md','docs/a%3fb.md','docs/a%2Eb.md','docs/a%2Fb.md','docs/a%5Cb.md','docs/a%252fb.md','docs/a%252eb.md','docs/a%2525b.md','docs/a%00b.md','docs/a%C2%85b.md','docs/a%C2%9Fb.md','docs/a%3Ab.md','docs/a!b.md','docs/%FF.md','docs/../a.md','docs/%2e%2e/a.md'];
+  for(const tail of bad){const row={id:`o/r:docs/a.md@${commit}`,repository:'o/r',project:'p',book:'library',title:'Document',path:'docs/a.md',commit,artifact_state:'working',available:true,source:prefix+tail};
+   await p.evaluate(v=>BooksView.acceptSnapshot(v),frame([row]));await p.locator('[data-filter="book"]').selectOption('library');await p.getByRole('button',{name:'Подробнее',exact:true}).click();
+   assert.equal(await p.locator('#books-detail').getByRole('button',{name:'Открыть источник',exact:true}).count(),0,tail);await p.keyboard.press('Escape');
+  }
+  assert.equal(await p.evaluate(v=>{try{BooksPolicy.normalizeEnvelope(v);return false}catch{return true}},frame([issue(1,{source:null})])),true);
+  const valid={id:`o/r:docs/a.md@${commit}`,repository:'o/r',project:'p',book:'library',title:'Document',path:'docs/a.md',commit,artifact_state:'working',available:true,source:null};
+  assert.equal(await p.evaluate(v=>{try{BooksPolicy.normalizeEnvelope(v);return false}catch{return true}},frame([valid])),true);
+ }finally{await b.close()}
+});

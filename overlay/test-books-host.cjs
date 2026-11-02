@@ -33,7 +33,12 @@ def frame(sequence, final=False, state='partial', library=False):
  if library: rows.append(dict(id='owner/repo:README.md@'+'a'*40,repository='owner/repo',project='p',book='library',title='README.md',path='README.md',commit='a'*40,source='https://github.com/owner/repo/blob/'+'a'*40+'/README.md',status='source',artifact_state='accepted',available=True))
  return dict(kind='books',version=1,sequence=sequence,final=final,state=state,fetched_at='2026-11-01T00:00:00Z',entries=rows,errors=[])
 def send(value): print(json.dumps(value),flush=True)
-if mode=='projection':
+if mode=='escaped':
+ sys.path.insert(0,os.getcwd())
+ from tests.books_overlay_fixture import escaped_library_projection
+ print(json.dumps(escaped_library_projection()),flush=True)
+ raise SystemExit(1) # Production producer partial frames have exit 1.
+elif mode=='projection':
  sys.path.insert(0,os.getcwd())
  from tests.books_overlay_fixture import projection
  print(json.dumps(projection()),flush=True)
@@ -88,6 +93,8 @@ public static class NativeBooksTest {
  }
  foreach(string tail in new[]{"issues/1","pull/2","milestone/3","blob/"+new string('a',40)+"/docs/a%20b.md"})Check(b.IsAllowedSource(root+tail),"allowed source "+tail);
  Check(b.IsAllowedSource("https://github.com/users/owner/projects/1"),"configured project");
+ foreach(string tail in new[]{"docs/a%23b.md","docs/a%3Fb.md","docs/100%25.md","docs/a%21%28%29%27%2A~.md","docs/%D0%AE%20space.md"})Check(b.IsAllowedSource(root+"blob/"+new string('a',40)+"/"+tail),"RFC3986 filename parity");
+ foreach(string tail in new[]{"docs/a#b.md","docs/a?b.md","docs/100%.md","docs/a%3fb.md","docs/a%2Eb.md","docs/a%2Fb.md","docs/a%5Cb.md","docs/a%252fb.md","docs/a%252eb.md","docs/a%2525b.md","docs/a%00b.md","docs/a%C2%85b.md","docs/a%C2%9Fb.md","docs/a%3Ab.md","docs/a!b.md","docs/%FF.md"})Check(!b.IsAllowedSource(root+"blob/"+new string('a',40)+"/"+tail),"noncanonical or structural filename rejected");
  foreach(string url in new[]{root+"issues/0",root+"issues/1?x",root+"issues/1#x",root+"issues/1/",root+"blob/main/a.md",root+"blob/"+new string('a',40)+"/../a.md",root+"blob/"+new string('a',40)+"/%2e%2e/a.md",root+"blob/"+new string('a',40)+"/a%2fb.md",root+"blob/"+new string('a',40)+"/a%5cb.md",root+"blob/"+new string('a',40)+"/a%252fb.md","https://github.com:443/owner/repo/issues/1","https://x@github.com/owner/repo/issues/1","https://github.com.evil/owner/repo/issues/1","https://github.com/other/repo/issues/1","https://github.com/users/owner/projects/2","https://github.com/owner/repo/issues/1\n","https://github.com\\owner/repo/issues/1","file:///x"})Check(!b.IsAllowedSource(url),"rejected source "+url);
  int opened=0;Check(b.OpenSource(root+"issues/1",s=>{opened++;}),"open allowed");Check(!b.OpenSource("https://evil.invalid",s=>{opened++;}),"reject opener");Check(opened==1,"injected opener");
  string action,urlOut;Check(BooksBridge.TryMessage("https://tower.local/index.html","{\"action\":\"books-refresh\"}",out action,out urlOut),"refresh message");
@@ -100,6 +107,20 @@ public static class NativeBooksTest {
   var migration=(Dictionary<string,object>)((object[])row["migrations"])[0];
   Check(migration.Count==4 && migration["status"].ToString()=="current" && migration["source_sha256"].ToString().Length==64,"public migration survives native boundary");
   Check(!projected.LatestJson.Contains("PRIVATE") && !projected.LatestJson.Contains("source_path"),"native public producer privacy");
+ }
+ using(var escaped=new BooksBridge(new[]{"a/b"},new string[0])){
+  await escaped.RefreshAsync(Start("escaped",Path.Combine(dir,"escaped")),s=>{},5000);
+  var value=Parse(escaped.LatestJson);var entries=(object[])value["entries"];
+  Check(entries.Length==10 && value["state"].ToString()=="partial","complete real producer escaped library frame retained");
+  int inert=0;foreach(var item in entries){var row=(Dictionary<string,object>)item;
+   if(row["source"]==null){inert++;Check(row["available"] is bool && !(bool)row["available"],"inert unavailable filename");}
+   else Check(escaped.IsAllowedSource((string)row["source"]),"canonical Python quote accepted by native");
+  }Check(inert==2,"only unsupported percent-triplet filenames inert");
+  var validate=typeof(BooksBridge).GetMethod("Frame",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic);
+  foreach(var item in entries){var row=(Dictionary<string,object>)item;if(row["source"]!=null)continue;
+   row["available"]=true;bool rejected=false;try{validate.Invoke(escaped,new object[]{json.Serialize(value),(long)0});}catch{rejected=true;}
+   Check(rejected,"null source requires explicit unavailable");row["available"]=false;
+  }
  }
  // Windows CRT argv roundtrip through the actual Python executable, with no shell.
  string quotes=Path.Combine(dir,"argv.py");File.WriteAllText(quotes,"import json,sys; print(json.dumps(sys.argv[1:],ensure_ascii=True))");

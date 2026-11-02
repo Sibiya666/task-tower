@@ -4,7 +4,18 @@ const el=(tag,text,parent)=>{const n=document.createElement(tag);if(text!==undef
 const modal=el('section');modal.id='books-dialog';modal.hidden=true;modal.setAttribute('role','dialog');modal.setAttribute('aria-modal','true');modal.setAttribute('aria-label','Книги проекта');document.body.append(modal);
 function send(value){window.chrome?.webview?.postMessage(value)}
 function button(text,parent,fn){const b=el('button',text,parent);b.type='button';b.onclick=fn;return b}
-function safeSource(url,e){if(typeof url!=='string'||/[\\\x00-\x20\x7f]/.test(url))return false;try{const u=new URL(url);if(u.protocol!=='https:'||u.hostname!=='github.com'||u.port||u.username||u.password||u.search||u.hash)return false;const repo=e.repository.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');return new RegExp('^/'+repo+'/(issues|pull|milestone)/[1-9]\\d*$').test(u.pathname)||new RegExp('^/'+repo+'/blob/[a-f0-9]{40}/').test(u.pathname)&&u.pathname.toLowerCase().endsWith('.md')&&!/%(?:2f|5c|2e)/i.test(u.pathname)}catch{return false}}
+function safeSource(url,e){
+ if(typeof url!=='string'||/[\\\x00-\x20\x7f-\x9f]/.test(url)||url.includes('?')||url.includes('#'))return false;
+ try{const prefix='https://github.com/'+e.repository+'/';if(!url.startsWith(prefix))return false;
+ const u=new URL(url);if(u.protocol!=='https:'||u.hostname!=='github.com'||u.port||u.username||u.password)return false;
+ const path=url.slice(prefix.length);if(/^(issues|pull|milestone)\/[1-9]\d*$/.test(path))return true;
+ const match=/^blob\/[a-f0-9]{40}\/(.+)$/.exec(path);if(!match)return false;
+ const relative=match[1],decoded=decodeURIComponent(relative);
+ if(!decoded.toLowerCase().endsWith('.md')||/[\\\x00-\x1f\x7f-\x9f:]/.test(decoded)||/%[0-9a-f]{2}/i.test(decoded)||decoded.split('/').some(x=>!x||x==='.'||x==='..'))return false;
+ const quote=x=>encodeURIComponent(x).replace(/[!'()*]/g,c=>'%'+c.charCodeAt(0).toString(16).toUpperCase());
+ return decoded.split('/').map(quote).join('/')===relative;
+ }catch{return false}
+}
 function source(url,e,parent){if(!url)return;if(safeSource(url,e))button('Открыть источник',parent,()=>send({action:'books-open-source',url}));el('p',url,parent)}
 function updateHealth(){const health=document.getElementById('books-health');if(opened&&health)health.textContent=snapshot?`${snapshot.state} · ${P.isStale(snapshot)?'Устаревшие данные':'Данные свежие'} · Последний успех: ${lastSuccess||'неизвестен'}`:'Данные ещё не загружены'}
 function refresh(){requested=true;if(snapshot){snapshot=P.normalizeEnvelope({...snapshot,state:'loading',stale:true});}render();send({action:'books-refresh'})}

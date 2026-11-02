@@ -74,3 +74,9 @@ An optional repository file `docs/task-tower-library.json` declares artifact ver
 ```
 
 Use only the exact schema accepted by `task_tower/book_library.py`; unavailable blobs and invalid declarations produce visible diagnostics. States `working`, `accepted` and `superseded` are explicitly labeled declared states. They do not grant task acceptance. Unindexed Markdown remains visible with unknown state. Version identity includes repository, path and immutable commit, so historical versions remain separate and traceable. Associations must refer to explicitly connected repositories; names never imply a task or milestone link.
+
+### Escaped Markdown filenames
+
+Immutable Markdown source URLs use canonical RFC3986 UTF-8 encoding per path segment. Filenames containing literal `#`, `?`, `%`, spaces and Unicode remain valid; their escaped spelling is decoded once and must round-trip exactly at both native and browser boundaries. Raw URL query/fragment, traversal, encoded separators, controls (including Unicode C1), malformed UTF-8 and noncanonical encodings remain rejected.
+
+A filename containing a literal percent triplet (for example `a%2fb.md`) is retained as an explicit unavailable artifact with its immutable path/commit/declared state, `available:false` and `source:null`, plus a fixed source-unavailable diagnostic. It has no external-open action and never poisons healthy sibling records. Only unavailable library entries may carry a null source; Issue/task source URLs remain mandatory and strictly validated. Unsafe control-bearing tree paths are rejected with a fixed unavailable-path diagnostic while healthy entries remain visible. The GitHub store keeps its safe-row return contract and reports a fresh derived count of rejected Markdown paths to the projection; no unsafe path or URL is returned. Neither source availability nor a declared accepted artifact changes task acceptance.

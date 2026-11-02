@@ -5,7 +5,7 @@
   "executor": "overlay-books-implementation-team",
   "project_root": "../..",
   "mode": "autonomous",
-  "status": "awaiting_merge",
+  "status": "in_progress",
   "spec": "../superpowers/specs/2026-11-01-overlay-books-design.md",
   "plan": "../superpowers/plans/2026-11-01-overlay-books.md",
   "acceptance_criteria": [
@@ -27,17 +27,13 @@
     },
     "development": {
       "status": "accepted",
-      "reviewer": "pr_reviewer_review",
+      "reviewer": "books_pr_acceptance",
       "evidence": "evidence/TT-BOOKS-UI-001/development-review.md",
-      "sha256": "79f77b1187a3a783977f38368d5544a55ea195b9646c772cb8820d425a6688d1",
+      "sha256": "0a19a18c145142cde5477e8ee91d39868e2d1e12ad36598243d25e9897ea422c",
       "hash_scheme": "sha256-utf8-lf-v1"
     },
     "test": {
-      "status": "accepted",
-      "reviewer": "pr_reviewer_review",
-      "evidence": "evidence/TT-BOOKS-UI-001/test-review.md",
-      "sha256": "8d08cfb9ba0063e7d479e08bbe4ef4fa76a67b0ba816ae5f121d78e3a8e017f3",
-      "hash_scheme": "sha256-utf8-lf-v1"
+      "status": "pending"
     },
     "postmerge": {
       "status": "pending"

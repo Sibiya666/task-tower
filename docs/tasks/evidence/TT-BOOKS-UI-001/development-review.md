@@ -195,3 +195,25 @@ Fresh reviewer `/root/pr_reviewer_review` accepts the exact test-only correction
 Raw test SHA-256 `d4e5230965fe67143aac738d01550dc5c0778bc022de7a3588015dcf387657d9`; existing development manifest UTF-8-sig/LF canonical SHA-256 `939763125a5a2283be58997e8b62649898c4916ae6d4fbf48c8b844885d0c136`. Independently rebound all34paths: exactly that test differs from prior current-head acceptance; TowerHost remains the accepted final native fix and all other32bindings remain identical. Complete R2 table with the current TowerHost and this test replacement hashes to sorted path<TAB>hash<LF> SHA-256 `e803c1b032406c8fac7d509093a41c944304c20fb26cef733596ef6fb97f5218`.
 
 Current whole development acceptance remains valid with these explicit replacements. Whole TEST stage remains PENDING until current exact-head three-OS CI is successful; local focused GREEN does not substitute for macOS. No product edits, commits, pushes or live external writes by reviewer. Prior verdicts and complete local455/18/42/native evidence remain preserved.
+
+
+## Escaped Markdown correction independent development revalidation — 2026-11-02
+
+Fresh reviewer `/root/books_pr_acceptance` **ACCEPTS current whole development/source scope** with the ten explicit replacements bound in escaped-library-review.md. Reviewed the entire actual correction over168f5b9 against the previously reviewed whole PR scope, including producer/native/browser and authenticated tree diagnostic compatibility; the original PR rejection remains preserved. Its P2 escaped-filename frame rejection is corrected, with independent original probes now accepting ordinary/#/?/% complete frames and strict URI negatives retained. Fresh68Python tests0.663s and29Node tests21130.5875ms passed; current remote CI and TEST/PR/main gates remain pending.
+
+Independently recomputed all34 R2-table paths under its UTF-8-sig/CRLF-and-CR→LF text scheme/rawPNG scheme. The ten correction paths are the only changes against current accepted manifeste803c1b032406c8fac7d509093a41c944304c20fb26cef733596ef6fb97f5218. Their complete canonical replacements are:
+
+| File | SHA-256 |
+| --- | --- |
+| `docs/github-books.md` | `781d8cd455e3866355cbb8ae0811650b7440879dce0903f5215dd506116b1ab8` |
+| `overlay/BooksBridge.cs` | `3e3ac7d1c518a6ff94ff11f1caec65b2cde9a731940c82724433d802567f8bbb` |
+| `overlay/test-books-browser.cjs` | `7554f27c678418f9a36d146f010391a13dd0fec9a5ed37b04087cad56dec5708` |
+| `overlay/test-books-host.cjs` | `9e587cd592591023f3bb5446904896cfe9060393240804935ccc8a4732f88e71` |
+| `overlay/web/books-policy.js` | `72ec8b606aaf17c7cdb83642764bd46b4a0a9888142d3261da433e4954d54bbb` |
+| `overlay/web/books-view.js` | `7132348dd3b38d7c52255de1e19f57acf7784f95682739d12a67a809df0fa9e2` |
+| `task_tower/book_library.py` | `b13d1270761eb79b656ca0fd28963fb38d0752730a4169974f26468888e0f0f6` |
+| `task_tower/github_tasks.py` | `8a1b6a84b7e26f9fb8e8bd7e4cc4faaebcda784bfe103519fa1a07d34f3675a8` |
+| `tests/books_overlay_fixture.py` | `17be4790c063aeba6c81afc5b5e9e64b5a4be41338ea19fe25504177ce9e8403` |
+| `tests/test_book_library.py` | `5485384e40b6b1daedfaea56bc0bf8df51fc229e143264ff18cefe3f8cd3c280` |
+
+All24other table hashes remain identical to the previous current-head binding. Complete current34-path sorted path<TAB>hash<LF> SHA-256: `36639be437031bc366bbaabc44a5d59b5f67bc9137d1d6a3527c0710e6565613`. TowerHost remains final rawadb87c95d8b13ba9ef0e065243974ca14838d589359ca9e3b914a7b21502765a; recorded physical Ctrl+B success remains limited to that unchanged source. No full genuine source-refresh success, new human blanket approval or native interaction is inferred. Changing a bound file invalidates this development binding.

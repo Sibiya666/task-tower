@@ -61,10 +61,10 @@ function entry(v){
  const e={id:text(v.id,2048),project:text(v.project,2048),book:text(v.book,32),repository:text(v.repository,2048)};
  if(!repositoryId.test(e.repository)||!['ideas','tasks','library'].includes(e.book))fail();
  // Every copied scalar is validated before assignment; structured fields use dedicated projections.
- for(const k of ['title','status','source','created_at','updated_at'])if(own(v,k))e[k]=text(v[k],8192);
+ for(const k of ['title','status','source','created_at','updated_at'])if(own(v,k))e[k]=text(v[k],8192,k==='source'&&v.book==='library'&&v.available===false);
  if(e.book==='library'){
   e.path=text(v.path,8192);e.commit=text(v.commit,40);e.artifact_state=text(v.artifact_state,32);
-  if(!/^[a-f0-9]{40}$/.test(e.commit)||e.id!==e.repository+':'+e.path+'@'+e.commit||!e.path.toLowerCase().endsWith('.md')||e.path.split('/').some(p=>!p||p==='.'||p==='..')||/[\\\x00-\x1f]/.test(e.path)||!['working','accepted','superseded','unknown'].includes(e.artifact_state)||typeof v.available!=='boolean')fail();
+  if(!/^[a-f0-9]{40}$/.test(e.commit)||e.id!==e.repository+':'+e.path+'@'+e.commit||!e.path.toLowerCase().endsWith('.md')||e.path.split('/').some(p=>!p||p==='.'||p==='..')||/[\\\x00-\x1f\x7f-\x9f]/.test(e.path)||!['working','accepted','superseded','unknown'].includes(e.artifact_state)||typeof v.available!=='boolean')fail();
   e.available=v.available;e.status='source';
   if(own(v,'declaration_source'))e.declaration_source=text(v.declaration_source,8192,true);
   if(own(v,'issues')){if(!Array.isArray(v.issues)||v.issues.length>10000)fail();e.issues=v.issues.map(qualified);}

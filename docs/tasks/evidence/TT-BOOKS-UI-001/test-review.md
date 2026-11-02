@@ -56,3 +56,8 @@ Current [CI run41398204309](https://github.com/Sibiya666/task-tower/actions/runs
 The previously completed independent455-test CLI,18-test overlay Python,42-test Node and final native composition smoke results remain applicable; the sole subsequent fixture change was independently reviewed and its9-test module passed0.157s. Current macOS success now closes the concrete portability gate rather than inferring it from Windows. User final physical Ctrl+B confirmation and limited genuine partial-source observation are included as narrowly recorded above. No full live verified refresh, new human blanket approval or unobserved native-detail interaction is claimed.
 
 This grants **TEST-stage acceptance only**. Evidence/card finalization will change the PR head and still requires a fresh separate whole actual diff acceptor bound to the final exact head/base, required successful current CI and mergeability, serialized expected-head merge, independent exact-main postmerge acceptance and automatic Issue23 closure. No product changes, commits, pushes or GitHub writes by this reviewer.
+
+
+## Escaped Markdown correction — TEST revalidation pending
+
+2026-11-02. Source changed after the earlier accepted616d226/current168f5b9 source binding. Development correction is independently accepted in escaped-library-review.md at complete34-path manifest `36639be437031bc366bbaabc44a5d59b5f67bc9137d1d6a3527c0710e6565613`; fresh68Python/29Node checks pass. Earlier TEST verdict remains historical for its old source. Current whole TEST stage is **PENDING** until the corrected committed source passes current required remote CI. No previous green run is borrowed for the changed head. Root owns pending card/status updates; final PR/main/postmerge remain separate.
