@@ -341,6 +341,9 @@ class HostCheckProcessTests(unittest.TestCase):
                 return dict(attempt_id=str(uuid.uuid4()),instance_id=str(uuid.uuid4()))
             def finish_attempt(this,attempt_id,owner,evidence): this.finished.append(evidence); return dict(state=evidence['status'])
             def status(this,run_id): return dict(cancel_requested=False)
+            def operation_deadline(this,deadline):
+                from contextlib import nullcontext
+                return nullcontext()
         journal=Journal()
         with patch('task_tower.pipeline_roles._authority',return_value=(task,self.config['profiles']['local'])):
             result=run_checks(self.config,run,dict(checkpoint_sha=manifest['checkpoint_sha'],product_sha256=manifest['product_sha256']),journal,self.owner)

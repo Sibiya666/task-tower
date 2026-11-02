@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import sys
+import time
 from pathlib import Path
 import uuid
 from datetime import datetime, timezone
@@ -95,7 +96,8 @@ def _process(argv,cwd,timeout,env,directory,paths,config,profile,journal,run):
         current=datetime.now(timezone.utc)
         if current<last_clock: raise ValueError('Backward task clock')
         last_clock=current
-        return current>=deadline or bool(journal.status(run['run_id'])['cancel_requested'])
+        with journal.operation_deadline(time.monotonic()+1.0):
+            return current>=deadline or bool(journal.status(run['run_id'])['cancel_requested'])
     result=run_command(argv,cwd,min(timeout,config['role_timeout_seconds'],profile['timeout_seconds'],remaining),env,
         cancel_requested=cancel_requested,
         capture=dict(directory=logs,max_bytes_per_stream=min(config['log_max_bytes'],profile['log_max_bytes'])))

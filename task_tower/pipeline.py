@@ -23,7 +23,7 @@ from .dispatch_delivery import DeliveryJournal, backend_fingerprint
 from .dispatch_selection import load_dispatch_config
 from .executor import _paths, _unique, _write
 from .executor_profiles import load_executor_config, profile_fingerprint
-from .executor_queue import validate_request, _private_stat
+from .executor_queue import validate_request
 from .executor_queue import _dead
 from .pipeline_journal import PipelineJournal, ACTIVE, STATES, REASONS
 from .pipeline_policy import load_pipeline_config
@@ -63,7 +63,9 @@ def _parser():
             for key in ('dispatch-config','dispatch-journal'):command.add_argument('--'+key,type=Path,required=True)
         if name=='adapter':
             for key in ('request','result'):command.add_argument('--'+key,type=Path,required=True)
-        if name in ('_action','_dispatch'):command.add_argument('--host-result',type=Path,required=True)
+        if name in ('_action','_dispatch'):
+            command.add_argument('--host-result',type=Path,required=True)
+            command.add_argument('--host-scope-id')
         if name=='_action':command.add_argument('--host-owner',required=True)
         if name=='work':command.add_argument('--once',action='store_true',required=True)
         if name in ('cancel','reconcile'):command.add_argument('--run-id',required=True)
@@ -214,19 +216,25 @@ class _Host:
     def __init__(self,args,kind,timeout,stop):
         self.stop=stop;self.done=threading.Event();self.outcome=None;self.result=None
         self._budget_deadline=None
+        self._cleanup_deadline=None
+        self.scope_id=str(uuid.uuid4()) if os.name=='posix' else None
         self.kind=kind
         self.journal=PipelineJournal(args.journal)
         self.owner=str(uuid.uuid4()) if kind=='_action' else None
         self.directory=tempfile.TemporaryDirectory(prefix='task-tower-host-',dir=args.journal.parent)
         self.path=Path(self.directory.name)/'host-result.json'
         self.argv=_fixed(args,kind)+['--host-result',str(self.path)]
+        if self.scope_id:self.argv+=['--host-scope-id',self.scope_id]
         if self.owner:self.argv+=['--host-owner',self.owner]
         self.timeout=timeout
         self.thread=threading.Thread(target=self.run,daemon=True);self.thread.start()
     def run(self):
         try:
+            containment={} if self.scope_id is None else dict(_cooperative=dict(
+                scope_id=self.scope_id,result_path=self.path,
+                cleanup_deadline=lambda:self._cleanup_deadline))
             self.outcome=processes.run_command(self.argv,Path(__file__).resolve().parent.parent,self.timeout,env=dict(os.environ),
-                cancel_requested=self.cancelled)
+                cancel_requested=self.cancelled,**containment)
             if self.outcome['status']=='passed' and self.outcome['cleanup_confirmed']:
                 self.result=_host_result(_read(self.path),self.kind)
         except (OSError,ValueError,KeyError,TypeError,AttributeError):pass
@@ -317,9 +325,11 @@ def watch_tick(config,journal,*,dispatch_tick=dispatcher.tick):
 
 
 def _shutdown(config,journal,state,*,cancel_runs=True):
-    state['stop'].set()  # Always request contained termination before touching DB.
     deadline=time.monotonic()+4.8
     hosts=[*state['workers']]+([state['dispatcher']] if state['dispatcher'] else [])
+    for host in hosts:
+        if hasattr(host,'_cleanup_deadline'):host._cleanup_deadline=deadline
+    state['stop'].set()  # Always request contained termination before touching DB.
     db_done=threading.Event();hosts_done=threading.Event();proof=dict(hosts=False,db=False)
     state['_shutdown_journal_done']=db_done
     def finish_journal():
@@ -329,10 +339,8 @@ def _shutdown(config,journal,state,*,cancel_runs=True):
         try:
             shutdown_journal=PipelineJournal(journal.path,checkouts=journal.checkouts,forbidden_paths=journal.forbidden_paths)
             with shutdown_journal.operation_deadline(deadline),ExitStack() as existing:
-                shutdown_journal._wait_seconds()
-                try:identity=_private_stat(shutdown_journal.path)
-                except FileNotFoundError:identity=None
-                shutdown_journal._wait_seconds()
+                identity=existing.enter_context(shutdown_journal._pinned_database())
+                if identity is not None:existing.enter_context(shutdown_journal._existing_database(identity))
                 fallback=False
                 try:runs=shutdown_journal.status()['runs']
                 except ValueError as error:
@@ -341,7 +349,6 @@ def _shutdown(config,journal,state,*,cancel_runs=True):
                     hosts_done.wait(max(0,deadline-time.monotonic()))
                     if not proof['hosts'] or any(not h.done.is_set() or not h.outcome or not h.outcome.get('cleanup_confirmed') for h in hosts):return
                     if identity is None:return
-                    existing.enter_context(shutdown_journal._existing_database(identity))
                     shutdown_journal._recover_existing()
                     runs=shutdown_journal.status()['runs']
                     fallback=True
@@ -353,8 +360,9 @@ def _shutdown(config,journal,state,*,cancel_runs=True):
                 if state['owner'] is not None:
                     shutdown_journal.controller_tick(state['owner'],dict(ticks=state['ticks'],read_failures=_watch_read_failures(state),workers=0,dispatcher=0))
                     shutdown_journal.release_controller(state['owner'])
-                if fallback:shutdown_journal._assert_existing()
-                proof['db']=True
+                if identity is not None:shutdown_journal._assert_existing()
+            if time.monotonic()>=deadline:return
+            proof['db']=True
         except (ValueError,OSError):pass
         finally:db_done.set()
     threading.Thread(target=finish_journal,daemon=True).start()
@@ -383,6 +391,14 @@ def watch(config,journal):
 
 
 def main(argv=None):
+    args=_parser().parse_args(argv)
+    if os.name=='posix' and args.command in ('_action','_dispatch') and args.host_scope_id:
+        from .posix_scope import run_helper
+        return run_helper(lambda:_main(argv),args.host_scope_id,args.host_result)
+    return _main(argv)
+
+
+def _main(argv=None):
     args=_parser().parse_args(argv)
     try:
         connections,journal,config=_runtime(args)

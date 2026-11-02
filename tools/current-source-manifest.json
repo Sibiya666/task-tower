@@ -1,0 +1,18 @@
+{
+  "baseline_pr_head": "a7e69ae364d892b44667e36af35e5c10bfbc3175",
+  "prior_diagnostic": "84e29810f2b291231e49d3203f4f259eb7557526",
+  "scope": "USER-DEFERRED vNext POSIX draft; not release qualification; manual workflow only",
+  "files": {
+    "task_tower/posix_scope.py": "8636b014de81b7e7fb1311cb3889d836dfd86247e0a300422aa7b25387f8c900",
+    "task_tower/posix_exec.py": "fc5eb47349cb42281a6ac9dc34fe0a1d42096cf0322b25a8ac82a1d0e3a090d4",
+    "task_tower/processes.py": "8731083453ccc78b07bf7fc1d01eee312ec963333b32f106b0a043d2d7fbb0f5",
+    "task_tower/pipeline_roles.py": "6118edb0749b8225ea246f73fe125e62293eb892640e32f9dd504d608bb2c18a",
+    "tests/test_posix_scope.py": "9a9354252738efc68ecce866aa5acccee46e86cce8bda6b7d0f1d70fa7b4a9eb",
+    "tests/fixtures/posix_scope_helper.py": "6fed70ca4424b3e29355fe4175aba02af48691e9a9379363944edf2c6d68acee",
+    "tests/test_pipeline_roles.py": "495c6578a790e964ecbdc0448b7b2f5cbe92ea3863958cb666223f0a3d7e50f7",
+    "task_tower/pipeline.py": "973a85ea9b506b9521e144d800af94a1471bc42fe420a40b30b7e65656fa3569",
+    "task_tower/pipeline_journal.py": "c86e51acc4ae87e199a08c6982f7fb0debcab4e0a7a2fd1e2d59ec3bbd13fa66",
+    "tests/test_pipeline_shutdown_recovery.py": "0056e4acc7c1f1b4c0e00caa2310bcc9507a48c73a68ac4e79ca6d9453a495dc"
+  },
+  "workflow_sha256": "6443d7fb780e2d17543be8968f76b9a33651c12427d40a0ba632a7ade1e2a2f0"
+}

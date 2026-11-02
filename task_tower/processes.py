@@ -155,13 +155,31 @@ def _capture_files(capture):
 _legacy_run_command = run_command
 
 
-def run_command(argv, cwd, timeout_seconds, env=None, *, cancel_requested=None, capture=None):
+def run_command(argv, cwd, timeout_seconds, env=None, *, cancel_requested=None, capture=None,
+                _cooperative=None):
     """Capture schema: {directory: private existing dir, max_bytes_per_stream: int}.
 
     Optional mode omits argv. Stream hashes/counts cover observed bytes, with
     tail_unknown set unless EOF was proved; .log files contain capped prefixes.
     The caller validates installation/checkouts exclusion of the directory.
     """
+    if os.name == 'posix':
+        from . import posix_scope
+        if _cooperative is not None or posix_scope.active_scope() is not None:
+            result = posix_scope.run_command(argv, cwd, timeout_seconds, env,
+                cancel_requested=cancel_requested, capture=capture, cooperative=_cooperative)
+            if cancel_requested is None and capture is None:
+                # The scope keeps its internal cleanup proof; legacy callers
+                # retain the original hashes/status-only return contract.
+                legacy = dict(argv=argv, status=result['status'], exit_code=result['exit_code'])
+                for key in ('duration_seconds', 'stdout_sha256', 'stdout_bytes',
+                            'stderr_sha256', 'stderr_bytes', 'reason'):
+                    if key in result:
+                        legacy[key] = result[key]
+                if result.get('reason') == 'shell_script_requires_explicit_interpreter':
+                    legacy.pop('duration_seconds', None)
+                return legacy
+            return result
     if cancel_requested is None and capture is None:
         return _legacy_run_command(argv, cwd, timeout_seconds, env)
     started = time.monotonic()

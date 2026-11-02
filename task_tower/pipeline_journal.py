@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import sqlite3
+import stat
 import time
 import uuid
 from .executor_queue import _uuid, _dead, validate_request, _private_stat
@@ -28,6 +29,36 @@ SCHEMAS={
 'controller':'CREATE TABLE controller(singleton INTEGER PRIMARY KEY CHECK(singleton=1), owner_id TEXT NOT NULL, owner_pid INTEGER, started_at TEXT NOT NULL, last_tick_at TEXT NOT NULL, policy_sha256 TEXT NOT NULL, health TEXT NOT NULL)'}
 
 def _now(): return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+def _open_database_pin(path):
+    """Read-only, noninheritable identity reference, with no SQLite side effects."""
+    if os.name=='nt':
+        import ctypes as C
+        from ctypes import wintypes as W
+        import msvcrt
+        kernel=C.WinDLL('kernel32',use_last_error=True)
+        kernel.CreateFileW.argtypes=[W.LPCWSTR,W.DWORD,W.DWORD,C.c_void_p,W.DWORD,W.DWORD,W.HANDLE]
+        kernel.CreateFileW.restype=W.HANDLE
+        kernel.CloseHandle.argtypes=[W.HANDLE];kernel.CloseHandle.restype=W.BOOL
+        handle=kernel.CreateFileW(str(path),0x80000000,7,None,3,0x00200000,None)
+        if handle==C.c_void_p(-1).value:raise C.WinError(C.get_last_error())
+        try:fd=msvcrt.open_osfhandle(handle,os.O_RDONLY|os.O_BINARY)
+        except BaseException:
+            kernel.CloseHandle(handle)
+            raise
+    else:fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|getattr(os,'O_CLOEXEC',0))
+    try:os.set_inheritable(fd,False)
+    except BaseException:
+        try:os.close(fd)
+        except OSError:pass
+        raise
+    return fd
+
+def _pin_identity(info):
+    if (not stat.S_ISREG(info.st_mode) or info.st_nlink!=1 or getattr(info,'st_file_attributes',0)&0x400
+            or type(info.st_dev) is not int or info.st_dev<0 or type(info.st_ino) is not int or info.st_ino<=0):
+        raise ValueError('Invalid existing pipeline file identity')
+    return info
 def _dump(value): return canonical_json(value).decode('ascii')
 def _sha(value,size=64,nullable=False):
     if nullable and value is None: return
@@ -88,6 +119,31 @@ class PipelineJournal:
         if remaining<=0:raise ValueError('Pipeline journal operation deadline exhausted')
         return remaining
     @contextmanager
+    def _pinned_database(self):
+        self._wait_seconds();self._safe();self._wait_seconds()
+        try:initial=_pin_identity(_private_stat(self.path))
+        except FileNotFoundError:
+            self._wait_seconds()
+            yield None
+            return
+        self._wait_seconds()
+        fd=_open_database_pin(self.path)
+        previous=getattr(self,'_pinned_database_fd',None);failed=True
+        try:
+            self._wait_seconds()
+            opened=_pin_identity(os.fstat(fd));self._wait_seconds()
+            current=_pin_identity(_private_stat(self.path));self._wait_seconds()
+            if not os.path.samestat(initial,opened) or not os.path.samestat(initial,current):
+                raise ValueError('Existing pipeline database replaced while opening pin')
+            self._pinned_database_fd=fd
+            yield initial
+            failed=False
+        finally:
+            self._pinned_database_fd=previous
+            try:os.close(fd)
+            except OSError:
+                if not failed:raise
+    @contextmanager
     def _existing_database(self,identity):
         previous=getattr(self,'_existing_database_identity',None)
         self._existing_database_identity=identity
@@ -96,9 +152,13 @@ class PipelineJournal:
             yield
         finally:self._existing_database_identity=previous
     def _assert_existing(self):
-        self._wait_seconds();self._safe()
+        self._wait_seconds();self._safe();self._wait_seconds()
         identity=getattr(self,'_existing_database_identity',None)
-        if identity is None or not os.path.samestat(identity,_private_stat(self.path)):
+        fd=getattr(self,'_pinned_database_fd',None)
+        if identity is None or fd is None:raise ValueError('Existing pipeline database is not pinned')
+        opened=_pin_identity(os.fstat(fd));self._wait_seconds()
+        current=_pin_identity(_private_stat(self.path));self._wait_seconds()
+        if not os.path.samestat(identity,opened) or not os.path.samestat(identity,current):
             raise ValueError('Existing pipeline database missing or replaced')
         self._wait_seconds()
     def _safe(self):

@@ -1,9 +1,9 @@
-name: Diagnostic POSIX recovery observation (not qualification)
-on: [push]
+name: Diagnostic current POSIX containment (not release qualification)
+on: [workflow_dispatch]
 permissions:
   contents: read
 jobs:
-  unittest:
+  native-controls:
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -17,15 +17,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: python tools/observe_posix_recovery.py
-      - name: Observe actual SQLite path identity and read-only descriptor pin
+      - name: Actual scoped capture legacy ownership and receipt controls
+        run: python -m unittest tests.test_posix_scope -v
+      - name: Actual delayed cancellation watch controls with failure-only owned PID observation
         if: always()
-        run: python tools/observe_db_pin.py --repo . --output "${{ runner.temp }}/pr42-db-pin" --cases 20
-      - name: Retain bounded private fixture evidence
+        run: python tools/observe_posix_recovery.py
+      - name: Actual strict SQLite shutdown recovery and normal-path guards
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: pr42-db-pin-${{ matrix.os }}
-          path: ${{ runner.temp }}/pr42-db-pin
-          retention-days: 7
-          if-no-files-found: error
+        run: python -m unittest tests.test_pipeline_shutdown_recovery -v
