@@ -217,3 +217,17 @@ Independently recomputed all34 R2-table paths under its UTF-8-sig/CRLF-and-CR→
 | `tests/test_book_library.py` | `5485384e40b6b1daedfaea56bc0bf8df51fc229e143264ff18cefe3f8cd3c280` |
 
 All24other table hashes remain identical to the previous current-head binding. Complete current34-path sorted path<TAB>hash<LF> SHA-256: `36639be437031bc366bbaabc44a5d59b5f67bc9137d1d6a3527c0710e6565613`. TowerHost remains final rawadb87c95d8b13ba9ef0e065243974ca14838d589359ca9e3b914a7b21502765a; recorded physical Ctrl+B success remains limited to that unchanged source. No full genuine source-refresh success, new human blanket approval or native interaction is inferred. Changing a bound file invalidates this development binding.
+
+
+## Pending migration/null-source independent development revalidation — 2026-11-02
+
+Fresh reviewer `/root/books_pr_acceptance` **ACCEPTS the current whole development/source binding** after independently reading the full two-file delta overbbb312ce9d3e52f5541f0d13999f21ad4e489429. pending-migration-review.md records the exact null/null collision correction, broad read-only consumer audit and independently passing47Python+20migration+29Node checks, plus a two-repository isolation/public/HTML probe. No new blocking development finding identified. Earlier escaped-source correction remains accepted and all its ten raw source hashes are unchanged. Original rejection/failure history remains preserved.
+
+Recomputed all34 product/test/doc paths under the established UTF-8-sig/LF/rawPNG scheme. Only replacements from complete accepted manifest36639be437031bc366bbaabc44a5d59b5f67bc9137d1d6a3527c0710e6565613 are:
+
+| File | SHA-256 |
+| --- | --- |
+| `task_tower/books.py` | `bc18f88c54aa86c11b0840715b6b077531090002eacea75ba57fe716bb89a28a` |
+| `tests/test_book_projection.py` | `9fde760b86fde5506547709a1a5c0f5415d5b2d4875e99e2c45ad7c19e85750e` |
+
+All32other previous current bindings are identical. Complete current sorted path<TAB>hash<LF> SHA-256: `1423d84f4cbce7eaaecc95d244249c50624f2a944fe6ff8726cc2aebc1d77873`. Changed source invalidates the prior TEST/PR head binding: current TEST remains PENDING new exact committed-head CI, and final PR/base, merge/main/postmerge/closure gates remain separate. This development verdict does not grant them.

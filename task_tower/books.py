@@ -67,8 +67,13 @@ def aggregate(connections, store_factory=GitHubTasks, include_library=False, *, 
                 from .capture_migration import book_migrations
                 for migration in book_migrations(connection):
                     found=False
+                    number=migration['number']
+                    canonical_source=f'https://github.com/{connection.repository}/issues/{number}' if type(number) is int and number>0 else None
                     for entry in report['entries']:
-                        if entry['project']==connection.id and entry['source']==migration['issue_url']:
+                        if (canonical_source is not None and migration['issue_url']==canonical_source
+                                and entry['project']==connection.id and entry['book'] in ('tasks','ideas')
+                                and entry.get('repository')==connection.repository and entry.get('number')==number
+                                and entry['id']==f'{connection.repository}#{number}' and entry['source']==canonical_source):
                             found=True
                             entry.setdefault('migrations',[]).append(migration)
                             if 'relationships' not in entry:

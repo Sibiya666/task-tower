@@ -61,3 +61,8 @@ This grants **TEST-stage acceptance only**. Evidence/card finalization will chan
 ## Escaped Markdown correction — TEST revalidation pending
 
 2026-11-02. Source changed after the earlier accepted616d226/current168f5b9 source binding. Development correction is independently accepted in escaped-library-review.md at complete34-path manifest `36639be437031bc366bbaabc44a5d59b5f67bc9137d1d6a3527c0710e6565613`; fresh68Python/29Node checks pass. Earlier TEST verdict remains historical for its old source. Current whole TEST stage is **PENDING** until the corrected committed source passes current required remote CI. No previous green run is borrowed for the changed head. Root owns pending card/status updates; final PR/main/postmerge remain separate.
+
+
+## Pending-migration compatibility correction — TEST pending
+
+2026-11-02. Current Python source changed afterbbb312c. Independent development delta acceptance is in pending-migration-review.md with complete34-path manifest `1423d84f4cbce7eaaecc95d244249c50624f2a944fe6ff8726cc2aebc1d77873`;47focusedPython,20migration and29Node checks pass. Earlier TEST decisions remain historical for their source. Current whole TEST stage is PENDING until the final committed source passes its required current CI; no old green run grants acceptance. Root owns card/commit/CI and final PR head/base revalidation.

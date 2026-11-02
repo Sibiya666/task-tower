@@ -29,7 +29,7 @@
       "status": "accepted",
       "reviewer": "books_pr_acceptance",
       "evidence": "evidence/TT-BOOKS-UI-001/development-review.md",
-      "sha256": "0a19a18c145142cde5477e8ee91d39868e2d1e12ad36598243d25e9897ea422c",
+      "sha256": "4d606537684fd29ec13de8c6ea635a3cf6b08dfb92a632faaafb2af4cb6b23d8",
       "hash_scheme": "sha256-utf8-lf-v1"
     },
     "test": {

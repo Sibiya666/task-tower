@@ -27,6 +27,30 @@ class Store:
 
 
 class ProjectionTests(unittest.TestCase):
+    def test_pending_migration_null_url_cannot_match_unavailable_library_source(self):
+        from task_tower.overlay_books import _public
+        from task_tower.books import render_html
+        class MixedStore(Store):
+            def library(self):
+                return [dict(path='docs/a%2fb.md',commit='a'*40),dict(path='docs/ordinary.md',commit='a'*40)]
+        c=connection();c.checkout='unused-private-checkout'
+        pending=dict(number=None,issue_url=None,status='pending',source_sha256='b'*64)
+        current=dict(number=1,issue_url='https://github.com/a/b/issues/1',status='current',source_sha256='c'*64)
+        with patch('task_tower.capture_migration.book_migrations',return_value=[pending,dict(pending,status='stale'),current]):
+            report=aggregate([c],lambda c:MixedStore(),True)
+        issue=next(r for r in report['entries'] if r['id']=='a/b#1')
+        inert=next(r for r in report['entries'] if r.get('path')=='docs/a%2fb.md')
+        self.assertEqual(issue['migrations'],[current])
+        self.assertIsNone(inert['source']);self.assertFalse(inert['available'])
+        self.assertNotIn('migrations',inert)
+        self.assertTrue(any(r.get('path')=='docs/ordinary.md' for r in report['entries']))
+        self.assertTrue(any('Legacy migration pending' in e['error'] for e in report['errors']))
+        self.assertTrue(any('Legacy migration stale' in e['error'] for e in report['errors']))
+        public=_public(report);self.assertEqual(public['state'],'partial')
+        self.assertEqual(len(public['entries']),3)
+        html=render_html(report)
+        self.assertNotIn('href="None"',html)
+        self.assertNotIn('a%252fb.md',html)
     def test_ordinary_native_links_and_closed_is_not_done(self):
         from task_tower.book_projection import project_issue
         row, errors = project_issue(connection(), Store(), Store().issue, None)
