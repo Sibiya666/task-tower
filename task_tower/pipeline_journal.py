@@ -9,9 +9,9 @@ import re
 import sqlite3
 import time
 import uuid
-from .executor_queue import _uuid, _dead, validate_request
+from .executor_queue import _uuid, _dead, validate_request, _private_stat
 from .pipeline_inputs import canonical_json, digest_manifest, validate_stage_manifest, _relative
-from .project_connections import safe_config_path
+from .project_connections import safe_config_path, REPOSITORY
 
 APP_ID=1414808656
 STAGES=('spec','development','test')
@@ -90,13 +90,12 @@ class PipelineJournal:
     def _safe(self):
         for path in [self.path,*(Path(str(self.path)+s) for s in ('-journal','-wal','-shm'))]:
             safe_config_path(path)
-            try:info=path.stat()
-            except FileNotFoundError:info=None
-            if info is not None and info.st_nlink!=1: raise ValueError('Linked pipeline journal')
+            try:_private_stat(path,transient=path!=self.path)
+            except FileNotFoundError:pass
             if any(path.resolve().is_relative_to(c) for c in self.checkouts): raise ValueError('Private pipeline state inside checkout')
             for other in self.forbidden_paths:
                 safe_config_path(other)
-                if other.exists() and other.stat().st_nlink!=1: raise ValueError('Unsafe private input')
+                if other.exists():_private_stat(other)
                 for alias in [other,*(Path(str(other)+s) for s in ('-journal','-wal','-shm'))]:
                     if str(path.resolve()).casefold()==str(alias.resolve()).casefold():raise ValueError('Pipeline private path collision')
                     try:same=path.exists() and alias.exists() and os.path.samefile(path,alias)
@@ -319,8 +318,41 @@ class PipelineJournal:
         self._owners.add(owner_id)
         try: yield owner_id
         finally: self._owners.remove(owner_id)
-    def claim(self,owner_id:str,max_active:int)->dict|None:
+    def deny_queued(self,expected:dict)->dict|None:
+        """Host denial only: an exact unstarted queue snapshot gains no owner."""
+        if not isinstance(expected,dict):raise ValueError('Invalid queued denial')
+        _uuid(expected.get('run_id'))
+        if not self.path.exists():return None
+        with self._db(True) as db:
+            saved=db.execute('SELECT * FROM runs WHERE run_id=?',(expected['run_id'],)).fetchone()
+            if saved is None:return None
+            row=self._run(saved)
+            if set(expected)!=set(row):raise ValueError('Invalid queued denial binding')
+            if any(type(expected[k]) is not type(row[k]) or expected[k]!=row[k] for k in row):return None
+            empty=('owner_id','owner_pid','deadline_at','admission','manifest','input_sha256','worktree','git_dir','source_sha','base_sha','checkpoint_sha','criteria_sha256','superpowers_sha256')
+            if row['state']!='queued' or row['process_count'] or row['cancel_requested'] or any(row[k] is not None for k in empty) or any(row['reworks'].values()):return None
+            if any(db.execute('SELECT 1 FROM '+table+' WHERE run_id=? LIMIT 1',(row['run_id'],)).fetchone() for table in ('attempts','effects','verdicts')):return None
+            now=_now()
+            if datetime.datetime.fromisoformat(now)<datetime.datetime.fromisoformat(row['updated_at']):raise ValueError('deadline')
+            changed=db.execute("UPDATE runs SET state='needs_input',reason='policy_revoked',updated_at=? WHERE run_id=? AND delivery_id=? AND repository=? AND issue=? AND task_id=? AND state='queued' AND owner_id IS NULL AND owner_pid IS NULL AND process_count=0 AND generation=? AND input_sha256 IS ? AND updated_at=?",(now,row['run_id'],row['delivery_id'],row['repository'],row['issue'],row['task_id'],row['generation'],row['input_sha256'],row['updated_at'])).rowcount
+            if changed!=1:raise ValueError('Queued denial changed')
+            self._event(db,row['run_id'],'transition','queued','needs_input','policy_revoked')
+            self._validate_db(db)
+            return self._run(db.execute('SELECT * FROM runs WHERE run_id=?',(row['run_id'],)).fetchone())
+
+    def claim(self,owner_id:str,max_active:int,*,queued_order=None)->dict|None:
         _uuid(owner_id); _integer(max_active,1,2)
+        priorities=None
+        if queued_order is not None:
+            if not isinstance(queued_order,list) or len(queued_order)>10000:raise ValueError('Invalid queued ordering')
+            priorities={}
+            for item in queued_order:
+                if not isinstance(item,dict) or set(item)!={'repository','issue','priority'}:raise ValueError('Invalid queued ordering')
+                repository=item['repository'];priority=item['priority']
+                if not isinstance(repository,str) or not re.fullmatch(REPOSITORY,repository) or repository!=repository.casefold():raise ValueError('Invalid queued repository')
+                issue=_integer(item['issue'],1,2**63-1)
+                if not isinstance(priority,str) or priority not in ('P0','P1','P2','P3') or (repository,issue) in priorities:raise ValueError('Invalid queued priority')
+                priorities[repository,issue]=int(priority[1])
         with self._db(True) as db:
             active=[self._run(r) for r in db.execute('SELECT * FROM runs') if r['state'] in ACTIVE]
             if owner_id in self._owners:
@@ -338,8 +370,11 @@ class PipelineJournal:
                     self._event(db,row['run_id'],'handoff','ready','ready',old_owner_id=row['owner_id'],new_owner_id=owner_id)
                     return self._run(db.execute('SELECT * FROM runs WHERE run_id=?',(row['run_id'],)).fetchone())
             if len(active)>=max_active: return None
-            for saved in db.execute("SELECT * FROM runs WHERE state='queued' AND cancel_requested=0 ORDER BY repository,issue"):
-                row=self._run(saved)
+            queued=[self._run(saved) for saved in db.execute("SELECT * FROM runs WHERE state='queued' AND cancel_requested=0 ORDER BY repository,issue")]
+            if priorities is not None:
+                queued=[row for row in queued if (row['repository'],row['issue']) in priorities]
+                queued.sort(key=lambda row:(priorities[row['repository'],row['issue']],row['repository'],row['issue']))
+            for row in queued:
                 if self._repository_busy(db,row):continue
                 if any(r['repository']==row['repository'] and ('*' in r['component_keys'] or '*' in row['component_keys'] or set(r['component_keys'])&set(row['component_keys'])) for r in active): continue
                 now=_now(); deadline=(datetime.datetime.fromisoformat(now)+datetime.timedelta(seconds=row['limits']['task_timeout_seconds'])).isoformat()

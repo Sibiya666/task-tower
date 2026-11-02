@@ -94,7 +94,7 @@ class WatchTests(unittest.TestCase):
     def test_shutdown_budget_with_external_sqlite_lock_and_live_owned_helper(self):
         task=self.config['tasks'][0]
         receipt=pipeline.adapter(dict(operation='submit',delivery_id=str(uuid.uuid4()),repository='owner/repo',issue=16,task_id=task['task_id'],runner_label='local'),self.config,self.journal)
-        value=json.loads(self.http.read_text());value.update(slow=True,started=str(self.root/'owned-started'))
+        value=json.loads(self.http.read_text());value.update(slow=True,started=str(self.root/'owned-started'),slow_after_claim=str(self.args.journal))
         self.http.write_text(json.dumps(value));self.start();state=self.config['_watch']
         host=pipeline._Host(self.args,'_action',30,state['stop']);state['workers'].append(host)
         end=time.monotonic()+10
@@ -122,7 +122,7 @@ class WatchTests(unittest.TestCase):
     def test_public_work_interrupt_under_exclusive_lock_stops_first_and_exits_uncertain(self):
         task=self.config['tasks'][0]
         receipt=pipeline.adapter(dict(operation='submit',delivery_id=str(uuid.uuid4()),repository='owner/repo',issue=16,task_id=task['task_id'],runner_label='local'),self.config,self.journal)
-        value=json.loads(self.http.read_text());value.update(slow=True,started=str(self.root/'work-interrupt-started'))
+        value=json.loads(self.http.read_text());value.update(slow=True,started=str(self.root/'work-interrupt-started'),slow_after_claim=str(self.args.journal))
         self.http.write_text(json.dumps(value));host=pipeline._Host(self.args,'_action',30,threading.Event())
         end=time.monotonic()+10
         while not (self.root/'work-interrupt-started').exists() and time.monotonic()<end:time.sleep(.02)
@@ -156,7 +156,7 @@ class WatchTests(unittest.TestCase):
     def test_watch_interrupt_uses_shared_shutdown_budget_and_preserves_unknown(self):
         task=self.config['tasks'][0]
         receipt=pipeline.adapter(dict(operation='submit',delivery_id=str(uuid.uuid4()),repository='owner/repo',issue=16,task_id=task['task_id'],runner_label='local'),self.config,self.journal)
-        value=json.loads(self.http.read_text());value.update(slow=True,started=str(self.root/'watch-started'))
+        value=json.loads(self.http.read_text());value.update(slow=True,started=str(self.root/'watch-started'),slow_after_claim=str(self.args.journal))
         self.http.write_text(json.dumps(value));real_tick=pipeline.watch_tick;interrupted=[]
         def tick(config,journal):
             result=real_tick(config,journal)
@@ -171,7 +171,7 @@ class WatchTests(unittest.TestCase):
     def test_cancelled_owned_action_is_contained_and_fenced(self):
         task=self.config['tasks'][0]
         receipt=pipeline.adapter(dict(operation='submit',delivery_id=str(uuid.uuid4()),repository='owner/repo',issue=16,task_id=task['task_id'],runner_label='local'),self.config,self.journal)
-        value=json.loads(self.http.read_text());value.update(slow=True,started=str(self.root/'action-started'))
+        value=json.loads(self.http.read_text());value.update(slow=True,started=str(self.root/'action-started'),slow_after_claim=str(self.args.journal))
         self.http.write_text(json.dumps(value))
         stop=threading.Event();host=pipeline._Host(self.args,'_action',30,stop)
         try:
@@ -190,7 +190,7 @@ class WatchTests(unittest.TestCase):
         _,self.journal,self.config=pipeline._runtime(self.args)
         task=self.config['tasks'][0]
         receipt=pipeline.adapter(dict(operation='submit',delivery_id=str(uuid.uuid4()),repository='owner/repo',issue=16,task_id=task['task_id'],runner_label='local'),self.config,self.journal)
-        value=json.loads(self.http.read_text());value.update(slow=True,started=str(self.root/'budget-started'))
+        value=json.loads(self.http.read_text());value.update(slow=True,started=str(self.root/'budget-started'),slow_after_claim=str(self.args.journal))
         self.http.write_text(json.dumps(value));started=time.monotonic()
         pipeline.work(self.config,self.journal)
         self.assertLess(time.monotonic()-started,5)

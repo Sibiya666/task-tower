@@ -77,3 +77,71 @@ Reviewed all five current shared/operator document deltas against the actual beh
 | docs/pipeline.md | `5503bfd50141e88dacbd4e3ea08369c1875bc013f0ea4b4479293a15d6debd73` | `f8848e8c29449a740c961a076a72cc0369cebc72697f33df311da784abb4ce95` |
 
 The docs distinguish qualified pilot source from the later authority guard, local different-repository overlap from same-repository serialization, fixture transport from live GitHub and ready_for_pr from integration completion. No broader credential or unattended claim is introduced. Only this review report was edited by this reviewer; no product/configuration/journal/model invocation/commit/push/GitHub write occurred. Changing bound source or documentation invalidates the affected acceptance and requires fresh review.
+
+
+## R2 whole-development and combined security review — current verdict
+
+2026-11-02, fresh combined review by the same independent development acceptor, distinct from implementers: **ACCEPT whole current development at the exact combined source/document bindings below.** No blocking development/security finding remains in this review. Original REJECT and R1 ACCEPT are preserved byte-for-byte as the prefix whose SHA256 is `da935ae536b6ae72c7c06771c2ee53660298b205d4d6006b4a5b6e4dfe3cbaa4`. This supersedes affected prior development bindings, not the separate TEST rejection or required current-head CI/PR/main gates.
+
+Reviewed the complete new combined diff against HEAD `a569285d1966e53a5abe52a8b7f368d43321cc75`, with accepted main base `56f8ab12f21ab91030ffe54de96520fcd979dc04`, in the context of the previously reviewed whole branch. Exact combined ten-file freeze: `runtime-task7-combined-residual-freeze.json`, SHA256 `7b1885011282c846266b8060ca1952fe4f7a326cd6c2d20414f7052bc212d4d5`. Independently verified every raw/canonical binding at entry and again after verification. These working-tree inputs, rather than HEAD alone, are the reviewed correction. Specification and plan were not amended or waived.
+
+| Combined file | Raw SHA256 | Canonical SHA256 |
+| --- | --- | --- |
+| task_tower/pipeline_worker.py | `8e64df3ff9d77c6b43631b07e3709725fd285c900a70248347f5c1801b3bc650` | `3ac0ab44af3b67862b310f252b915fd98ab29bec120066707123e68c3e036dcb` |
+| task_tower/pipeline_journal.py | `06f912afdd63a406ea29b60744dc1e33db5d76bebee1aff69cda063c842a5bf0` | same |
+| task_tower/pipeline.py | `54a8473512c534497f12f3eebcacc978d6f8e8bec82cb6514df737073410bf47` | same |
+| tests/test_pipeline_scheduling.py | `2ba9f1bb12999d500bf97c0129a86e04d526d56f36d87839ccb2b384b02a8ed2` | same |
+| tests/test_pipeline_watch.py | `56b35edb3589d4119544afa486c5efd024876c20533057c270396c9ee988b9dc` | same |
+| tests/fixtures/pipeline_http_site/sitecustomize.py | `e9ce2c0f8baf4323be00c9c929d843662c8dfee1125c2533e2708104fb9fb503` | same |
+| task_tower/executor.py | `1bfda46856c3137f78052aa52779b2c634f859c0ce53df9355cec5dfbdc0d801` | same |
+| tests/test_safe_config_race.py | `ec68ffff21642f49dcb5a20fe7aa9e5889c32e8929a7993725729733149e4f69` | same |
+| task_tower/executor_queue.py | `febd031b51a835900e1bc4fad8548f3779e09afff3caa35e3ae80e1a8acf01b3` | `ead14695dd319def66baa4ecbfab8e6259e8ab97edc49ac87f9c0419803dd11c` |
+| tests/test_private_sqlite_stat.py | `24d56bc226ea497da5e81f1d7580ad572c724a9e2af53e683b6876396cd3e211` | same |
+
+### Scheduling, source and private-state assessment
+
+Read the complete scheduling adjudication, earlier typed-transient security review and current test-review history. The adjudication correctly identifies the previous priority omission; its rejected priority-waiver alternative is not applied. Production queued claims now obtain genuine `collect_snapshot`/`select_ready` ordering outside the DB transaction, observe the real `verified_done` result/error state, and pass only a validated finite transient priority hint to the atomic claim. Safe ready continuation remains first. Queued priority then sorts P0-P3/repository/Issue, skips conflicts, and excludes arrivals absent from the source-pass queue snapshot. Private mapping, initial preparation and fresh continuation authority still govern execution; an ordering hint is not admission or effect authority. No priority is hidden in persisted fields and no DDL/protocol migration was introduced.
+
+Known clean queued revocation uses an exact full-row comparison under BEGIN IMMEDIATE and is restricted to unowned, zero-process, no-admission/no-worktree/no-deadline/no-attempt/effect/verdict rows. It creates a visible needs_input/policy_revoked outcome without fabricating frozen criteria or launching work. Stale, cancelled, active and unknown rows cannot be released this way. Criteria first bind at actual preparation. Unavailable source and captured partial dependency evidence leave uncertain candidates queued; later source polls cannot erase the verifier failure already observed for classification. Healthy independent work continues with a source warning. No-run source-unavailable reporting is bounded and unbound, not a new journal state or role-result schema. Public work returns exit1 for that unavailable result; internal transport may complete successfully. Queued read retries use the capped backoff, while eligible safe ready continuations bypass queued backoff.
+
+The explicit `_paths` transient role is derived only from actual DB arguments and their exact three sidecars. Merely naming a config/request/result/main file with a sidecar suffix does not confer that role. `_private_stat` is used by both queue/journal safety checks only for their own exact sidecars; zero-link acceptance requires observed regular non-reparse metadata and a no-follow current-leaf recheck. Main/input snapshots remain strict, including inputs whose names end -journal/-wal/-shm. Hardlink, directory, junction/symlink, collision and checkout guards remain active. Queue alias disappearance is tolerated only for its own sidecar while the forbidden input is rechecked strictly; initially missing optional outputs retain their old behavior. These are narrow transient observations, not descriptor-level immunity to hostile filesystem replacement.
+
+The five adjusted HTTP fault fixtures now delay only after read-only observation of actual matching process ownership. This keeps their existing post-claim cancellation/unknown assertions and timing limits meaningful after preclaim source selection was added. No journal write, weakened assertion, changed timeout or forced-true readiness verifier is used. The distinct preclaim cancellation case correctly expects an unowned queued row with no execution effects.
+
+### Fresh independent verification
+
+Used existing absolute Python `C:/Users/sibiya666/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe`:
+
+```text
+-m unittest tests.test_pipeline_scheduling tests.test_private_sqlite_stat tests.test_safe_config_race tests.test_executor_queue tests.test_pipeline_journal tests.test_pipeline_cli tests.test_pipeline_watch.WatchTests.test_real_dispatch_adapter_to_six_roles_and_host_tests tests.test_pipeline_watch.WatchTests.test_public_work_interrupt_under_exclusive_lock_stops_first_and_exits_uncertain -q
+```
+
+**124 tests in98.887s, OK, one unavailable-symlink privilege skip.** This independently exercises current genuine-source ordering/dependency/error handling, malformed hints, queued denial/CAS, strict sidecar/main/input roles and current replacements, capacity/unknown history, public unavailable exit/backoff/preclaim cancellation, and the actual six-role dispatcher/watch ready boundary.
+
+```text
+-m unittest tests.test_executor_adapter tests.test_pipeline_watch.WatchTests.test_shutdown_budget_with_external_sqlite_lock_and_live_owned_helper tests.test_pipeline_watch.WatchTests.test_watch_interrupt_uses_shared_shutdown_budget_and_preserves_unknown tests.test_pipeline_watch.WatchTests.test_cancelled_owned_action_is_contained_and_fenced tests.test_pipeline_watch.WatchTests.test_public_work_task_budget_stops_real_blocked_host -q
+```
+
+**7 tests in15.744s, OK, no skips.** Together these131 fresh focused tests preserve all five changed post-claim containment/cancellation/deadline regressions plus the legacy adapter. This is not a repeat of the earlier666-test complete run or a current full-suite/CI claim.
+
+Separate independent probes also passed. Reversed the priorities in the actual HTTP-backed WorkerOrdering fixture: fresh P0 Issue16 was selected ahead of the formerly higher-priority Issue20, confirming behavior follows current genuine source rather than delivery/cached ordering. Ran both actual `_safe` methods under fresh disposable SQLite counter-table churn, with no application schema/rows/effects involved: ExecutionQueue1169 checks/676 commits, PipelineJournal1013 checks/650 commits, zero errors, both writers stopped. This short independent churn did not instrument/count zero-link observations and is not represented as proving that event occurred during this probe. Deterministic supplied tests separately use actual deleted-file metadata at controlled observation seams.
+
+The author's frozen longer diagnostic observes old Queue28 errors (8 zero-link unsafe,20 disappearance), old Journal1 zero-link unsafe, and new Queue/Journal zero errors with13 actual zero-link observations combined; writers stopped. These are distinct author observations, not this reviewer's repeated counts. They support a demonstrated residual liveness correction, **not attribution of the original macOS generic policy_revoked failure**. That original cause remains unproven. Reported RED runs, earlier errors and later green runs remain distinct evidence.
+
+### Current documentation and remaining acceptance gates
+
+Reviewed all five current operator/shared documentation deltas against actual source and qualified pilot evidence. They describe priority/source-warning/unavailable/backoff behavior, preserve same-repository serialization and no fairness/distributed claim, and move live task phases to Issues/Project rather than embedding immediately stale active-Issue lists. Current exact bindings:
+
+| File | Raw SHA256 | Canonical SHA256 |
+| --- | --- | --- |
+| AGENTS.md | `37658c72eb33805fb63d1b17764aa351e46fe8469df2a9bc2e2fa3175d0e0f52` | `b5f0c8ce25a6d0c4266446be8865a150dd388c4232b9611589583b97fd284800` |
+| README.md | `a51a640a81bf863905b8afac8872e113a869b0526308652b2e8229084c1fc9a6` | `58cbf2d73e841cb0275df4a2a83e089c39a2c8e2de18287a2edf23eb4fea06a4` |
+| docs/roadmap.md | `3de88f1768b1738c96bab7bbc268706c044e2d1930ccf16fafb410e618b1609a` | `00dfeda5bc61f360a80d946dded9e9b0ecd6236ccc9cee16703cfe36db51f73a` |
+| docs/development-process.md | `4f451b70679f750036741c3bbb04ca0b0c37e2338af735ce03ced5657b3ee915` | `d875f616cc88d96734357e796084cef8958ca45e5ae977d2abf14a51c2e21c47` |
+| docs/pipeline.md | `76a4059996aff483b41e2c687a2172f2975bd95fd8a1e8d82c04769367c02cbc` | `48a007946b6bf7f97c2fdae04f910fa1f07158c60b32dae05f1295ad83b2b184` |
+
+The installed-model pilot remains qualified solely to source8981c6d and fixture GitHub transport, publication disabled. It does not test later checkpoint-authority, scheduler/source or SQLite-sidecar corrections. Original166+445+443 pilot files and their distinct outcomes remain preserved; this review did not launch a model or claim a new private1054-file audit. The original unrelated Task6 unknown and macOS failure remain unproven as to cause.
+
+The separate TEST review rejects a569 macOS CI despite its independent local666-test green run and Windows/Linux evidence. This development/security verdict does not turn that rejected head green. Required later work remains independent current-source testing/current three-OS CI, whole actual exact-head/base PR acceptance, serialized merge/main CI, independent postmerge acceptance and automatic Issue closure. No service/night/live-GitHub readiness is granted.
+
+Only this report was changed by this reviewer. No product/docs/card, private installed configuration or pilot journal, Git ref, commit/push, API write or installed-model execution was performed. Changed source or documentation invalidates affected content-bound acceptance.

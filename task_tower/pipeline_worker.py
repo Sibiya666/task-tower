@@ -20,7 +20,7 @@ from typing import Protocol
 from .pipeline_inputs import (canonical_artifact, canonical_text, digest_manifest, product_manifest,
                               stage_manifest, freeze_checkpoint)
 from .pipeline_journal import STAGES, ACTIVE
-from .executor_profiles import _pins
+from .executor_profiles import _pins, profile_fingerprint
 from .executor_worker import _git
 from .project_connections import safe_config_path
 
@@ -114,6 +114,7 @@ def _authority(config,run,journal,owner):
     current=journal.status(run['run_id'])
     if any(type(current[k]) is not type(run[k]) or current[k]!=run[k] for k in ('owner_id',*_CAS,'manifest','worktree','git_dir')):raise ValueError('Stale controller binding')
     snapshot=collect_snapshot(config['_connections'])
+    if any(project.get('error') for project in snapshot.values()):config['_scheduling_source_failed']=True
     if not continuation_authorized(config,run,snapshot):raise ValueError('policy_revoked')
     config['_issue_data']=copy.deepcopy(snapshot[run['repository']]['issues'][run['issue']])
     if current['owner_pid']!=os.getpid():raise ValueError('Foreign process owner')
@@ -324,13 +325,61 @@ def _checkpoint_action(config,run,journal,owner):
     return _record(journal,run,owner,state='ready',generation=manifest['generation'],manifest=manifest,reason=None)
 
 
+def _queued_selection(config,journal=None,queued=()):
+    """Fresh host ordering/denials, never permission to execute queued work."""
+    from .dispatch_selection import collect_snapshot,select_ready
+    from .project_worker import verified_done
+    from .pipeline_policy import admission_authorized,_current
+    denied=[]
+    try:
+        snapshot=collect_snapshot(config['_connections'])
+        evidence_unknown=False
+        # Observe the real verifier; subsequent polls can clear partial errors.
+        def verify(connection,store,source,issue):
+            nonlocal evidence_unknown
+            try:return verified_done(connection,store,source,issue)
+            finally:
+                if getattr(source,'errors',()):evidence_unknown=True
+        selected=select_ready(snapshot,config['tasks'],verify_done=verify)
+        if len(selected['ready'])>10000:return [],True,denied
+        source_unknown=any(row['status']=='unavailable' for row in selected['projects']) or evidence_unknown or any(getattr(project.get('source'),'errors',()) for project in snapshot.values())
+        failed=source_unknown or any(row['reason'] in {'source_unavailable','lifecycle_unavailable','invalid_priority','invalid_dependencies','task_identity_mismatch','issue_missing'} for row in selected['excluded'])
+        if journal is not None:
+            try:private_current=_current(config)
+            except (OSError,ValueError,TypeError,KeyError):private_current=None;failed=True
+            excluded={(r['repository'],r['issue']):r['reason'] for r in selected['excluded']}
+            for run in queued:
+                tasks=[t for t in config['tasks'] if t['repository'].casefold()==run['repository'] and all(t[k]==run[k] for k in ('issue','task_id','runner_label')) and t['executor_profile']==run['profile_id']]
+                profile=config['profiles'].get(run['profile_id'])
+                mismatch=len(tasks)!=1 or profile is None or run['policy_sha256']!=config['policy_sha256'] or run['profile_fingerprint']!=profile_fingerprint(profile)
+                reject=mismatch or private_current is False
+                reason=excluded.get((run['repository'],run['issue']))
+                project=snapshot.get(run['repository'])
+                # Do not re-poll away a known unknown while classifying denial.
+                if not reject and private_current is True and reason not in (None,'source_unavailable','lifecycle_unavailable') and not (reason=='dependency_unverified' and source_unknown) and project and not project['error']:
+                    reject=admission_authorized(config,tasks[0],snapshot) is None
+                if reject:
+                    result=journal.deny_queued(run)
+                    if result is not None:denied.append(result)
+            known={(r['repository'],r['issue']) for r in queued}
+            selected['ready']=[r for r in selected['ready'] if (r['repository'],r['issue']) in known]
+            if private_current is not True:selected['ready']=[]
+        return [{key:row[key] for key in ('repository','issue','priority')} for row in selected['ready']],failed,denied
+    except (OSError,ValueError,TypeError,KeyError):return [],True,denied
+
+
 def _step(config,journal,owner):
     runs=journal.status()['runs']
     matching=[r for r in runs if r['owner_id']==owner and r['state'] in ACTIVE and r['state']!='unknown']
     if len(matching)>1:raise ValueError('One action owner cannot own multiple runs')
     if matching and matching[0]['owner_pid']!=os.getpid():raise ValueError('Foreign process owner')
-    run=matching[0] if matching else journal.claim(owner,config['max_active'])
-    if run is None:return _public(None)
+    run=matching[0] if matching else journal.claim(owner,config['max_active'],queued_order=[])
+    denied=[]
+    if run is None:
+        order,failed,denied=_queued_selection(config,journal,[r for r in runs if r['state']=='queued'])
+        config['_scheduling_source_failed']=failed
+        run=journal.claim(owner,config['max_active'],queued_order=order)
+    if run is None:return _public(denied[0] if denied and not config['_scheduling_source_failed'] else None)
     action=next_action(run,journal.history(run['run_id']))
     if action is None:return _public(run)
     if action=='fence':
@@ -417,10 +466,13 @@ def step(config:dict,journal,*,owner_id:str|None=None)->dict:
     """Perform at most one role, checkpoint, check batch or publication action."""
     owner=owner_id or config.get('_owner_id') or str(uuid.uuid4())
     if not hasattr(journal,'_pipeline_clocks'):journal._pipeline_clocks={}
-    host=dict(config,_journal=journal,_owner_id=owner,_budget_clocks=journal._pipeline_clocks)
+    host=dict(config,_journal=journal,_owner_id=owner,_budget_clocks=journal._pipeline_clocks,_scheduling_source_failed=False)
     context=nullcontext() if owner in journal._owners else journal.owner(owner)
     with context:
         answer=_step(host,journal,owner)
+        if host['_scheduling_source_failed'] and answer['reason'] is None:
+            answer['reason']='source_unavailable'
+            if answer['run_id'] is None:answer['status']='unavailable'
         if answer['run_id']:
             history=journal.history(answer['run_id'])
             current=[v for v in history['verdicts'] if not v['superseded']]

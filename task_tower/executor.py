@@ -2,6 +2,7 @@
 import argparse
 import json
 import os
+import stat
 from pathlib import Path
 import sys
 import tempfile
@@ -27,21 +28,42 @@ def adapter(request,config,queue,*,authority_check=None):
     except (ValueError,OSError): return unknown
 
 
-def _paths(paths,connections):
+def _paths(paths,connections,*,transient_paths=()):
+    def key(raw):
+        try:value=os.fspath(raw)
+        except TypeError:raise ValueError('Invalid executor private path') from None
+        if not isinstance(value,str):raise ValueError('Invalid executor private path')
+        return os.path.abspath(value).casefold()
+    if not isinstance(transient_paths,(list,tuple,set,frozenset)):raise ValueError('Invalid executor transient paths')
+    paths=list(paths);members={key(path) for path in paths}
+    transient={key(path) for path in transient_paths}
+    suffixes=('-journal','-wal','-shm')
+    for path in transient:
+        suffix=next((s for s in suffixes if path.endswith(s)),None)
+        if path not in members or suffix is None or path[:-len(suffix)] not in members:raise ValueError('Invalid executor transient path')
     checked=[]
     for raw in paths:
         path=safe_config_path(raw)
         try:info=path.stat()
         except FileNotFoundError:
-            if not str(path).endswith(('-journal','-wal','-shm')) and path.exists():raise
+            if key(path) not in transient and path.exists():raise
             info=None
-        if info is not None and info.st_nlink!=1: raise ValueError('Unsafe executor private file')
+        if info is not None and info.st_nlink!=1:
+            if info.st_nlink!=0 or key(path) not in transient or not stat.S_ISREG(info.st_mode) or getattr(info,'st_file_attributes',0)&0x400:
+                raise ValueError('Unsafe executor private file')
+            # A stat can finish after SQLite unlinks its rollback sidecar.
+            # Recheck the current entry without following a replacement link.
+            safe_config_path(path)
+            try:current=path.lstat()
+            except FileNotFoundError:current=None
+            if current is not None and (not stat.S_ISREG(current.st_mode) or getattr(current,'st_file_attributes',0)&0x400 or current.st_nlink not in (0,1)):
+                raise ValueError('Unsafe executor private file')
         if any(path.resolve().is_relative_to(c.checkout) for c in connections): raise ValueError('Executor private files must be outside checkouts')
         for other in checked:
             if str(path.resolve()).casefold()==str(other.resolve()).casefold():raise ValueError('Executor private file collision')
             try:same=path.exists() and other.exists() and os.path.samefile(path,other)
             except FileNotFoundError:
-                if not any(str(p).endswith(('-journal','-wal','-shm')) for p in (path,other)):raise
+                if not any(key(p) in transient for p in (path,other)):raise
                 same=False
             if same:raise ValueError('Executor private file collision')
         checked.append(path)
@@ -84,7 +106,8 @@ def main(argv=None):
         inputs=[args.connections]
         if args.command in ('adapter','work','retry'): inputs.append(args.config)
         if args.command=='adapter': inputs.extend((args.request,args.result))
-        _paths([*inputs,args.queue,*(Path(str(args.queue)+s) for s in ('-journal','-wal','-shm'))],connections)
+        sidecars=[Path(str(args.queue)+s) for s in ('-journal','-wal','-shm')]
+        _paths([*inputs,args.queue,*sidecars],connections,transient_paths=sidecars)
         queue=ExecutionQueue(args.queue,checkouts=[c.checkout for c in connections],forbidden_paths=inputs)
         if args.command in ('status','cancel'):
             report=queue.status(args.run_id)

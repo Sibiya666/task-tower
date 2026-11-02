@@ -81,9 +81,10 @@ def _runtime(args):
         if value is not None:inputs.append(value)
     journals=[args.journal]+([args.dispatch_journal] if hasattr(args,'dispatch_journal') else [])
     paths=[*inputs,args.journal]
-    for journal in journals:paths.extend(Path(str(journal)+s) for s in ('-journal','-wal','-shm'))
+    sidecars=[Path(str(journal)+s) for journal in journals for s in ('-journal','-wal','-shm')]
+    paths.extend(sidecars)
     if any(not Path(path).is_absolute() for path in paths):raise ValueError('Private pipeline paths must be absolute')
-    _paths(paths,connections)
+    _paths(paths,connections,transient_paths=sidecars)
     journal=PipelineJournal(args.journal,checkouts=[c.checkout for c in connections],forbidden_paths=inputs)
     if not hasattr(args,'config'):return connections,journal,None
     saved={path:path.read_bytes() for path in (args.connections,args.config,args.executor_config)}
@@ -91,7 +92,7 @@ def _runtime(args):
     config=load_pipeline_config(args.config,connections,executor)
     def authority():
         try:
-            _paths(paths,connections)
+            _paths(paths,connections,transient_paths=sidecars)
             return all(path.read_bytes()==value for path,value in saved.items())
         except (ValueError,OSError):return False
     config['_authority_check']=authority
@@ -141,10 +142,12 @@ def _read(path):
 def _host_result(value,kind):
     if kind=='_action':
         keys={'run_id','status','stage','generation','reason','input_sha256','receipt_sha256','effect_sha256'}
-        if set(value)!=keys or value['status'] not in STATES|{'idle'} or value['reason'] not in REASONS:raise ValueError('Invalid action report')
+        if set(value)!=keys or value['status'] not in STATES|{'idle','unavailable'} or value['reason'] not in REASONS:raise ValueError('Invalid action report')
         if value['run_id'] is None:
-            if value['status']!='idle' or value['stage'] is not None or value['generation'] is not None:raise ValueError('Invalid idle report')
+            if value['status'] not in ('idle','unavailable') or value['stage'] is not None or value['generation'] is not None:raise ValueError('Invalid idle report')
+            if value['status']=='unavailable' and (value['reason']!='source_unavailable' or any(value[key] is not None for key in ('input_sha256','receipt_sha256','effect_sha256'))):raise ValueError('Invalid source failure report')
         else:
+            if value['status']=='unavailable':raise ValueError('Unavailable action cannot own a run')
             if str(uuid.UUID(value['run_id']))!=value['run_id'] or value['stage'] not in ('spec','development','test') or type(value['generation']) is not int or value['generation']<1:raise ValueError('Invalid action binding')
         for key in ('input_sha256','receipt_sha256','effect_sha256'):
             if value[key] is not None and (not isinstance(value[key],str) or not re.fullmatch('[a-f0-9]{64}',value[key])):raise ValueError('Invalid action digest')
@@ -262,6 +265,10 @@ def _remaining(config,journal):
     return config['task_timeout_seconds']
 
 
+def _watch_read_failures(state):
+    return state['failures']+max(state.get('action_failures',0),int(state.get('action_warning',False)))
+
+
 def watch_tick(config,journal,*,dispatch_tick=dispatcher.tick):
     """Poll contained hosts and refill; slow API operations remain off-loop."""
     state=config['_watch'];args=config['_cli_args']
@@ -270,7 +277,14 @@ def watch_tick(config,journal,*,dispatch_tick=dispatcher.tick):
     if fresh['policy_sha256']!=config['policy_sha256']:raise ValueError('Pipeline watch policy changed')
     journal.recover();now=time.monotonic()
     for host in list(state['workers']):
-        if host.done.is_set():host.close();state['workers'].remove(host)
+        if host.done.is_set():
+            result=host.result;host.close();state['workers'].remove(host)
+            if result:
+                state['action_warning']=result.get('reason')=='source_unavailable'
+                if result.get('status')=='unavailable':
+                    state['action_failures']=state.get('action_failures',0)+1
+                    state['next_queued_action']=now+_BACKOFF[min(state['action_failures']-1,4)]
+                else:state.update(action_failures=0,next_queued_action=0)
     helper=state['dispatcher']
     if helper and helper.done.is_set():
         result=helper.result;helper.close();state['dispatcher']=None
@@ -288,13 +302,13 @@ def watch_tick(config,journal,*,dispatch_tick=dispatcher.tick):
         busy=any(r['state']!='ready' or not _dead(r['owner_pid']) for r in others)
         if busy or run['cancel_requested']:continue
         if run['state']=='ready' and _dead(run['owner_pid']):eligible.add(run['repository'])
-        if run['state']=='queued' and len(active)<config['max_active'] and not any('*' in r['component_keys'] or '*' in run['component_keys'] or set(r['component_keys'])&set(run['component_keys']) for r in others):eligible.add(run['repository'])
+        if run['state']=='queued' and now>=state.get('next_queued_action',0) and len(active)<config['max_active'] and not any('*' in r['component_keys'] or '*' in run['component_keys'] or set(r['component_keys'])&set(run['component_keys']) for r in others):eligible.add(run['repository'])
     # Atomically claimed run/component capacity remains authoritative inside children.
     if eligible:
         for _ in range(min(config['max_active']-len(state['workers']),len(eligible))):
             state['workers'].append(_Host(args,'_action',_remaining(config,journal),state['stop']))
     state['ticks']+=1
-    health=dict(ticks=state['ticks'],read_failures=state['failures'],workers=len(state['workers']),dispatcher=int(state['dispatcher'] is not None))
+    health=dict(ticks=state['ticks'],read_failures=_watch_read_failures(state),workers=len(state['workers']),dispatcher=int(state['dispatcher'] is not None))
     journal.controller_tick(state['owner'],health)
     return health
 
@@ -318,7 +332,7 @@ def _shutdown(config,journal,state,*,cancel_runs=True):
                 shutdown_journal.recover()
                 if not proof['hosts']:return
                 if state['owner'] is not None:
-                    shutdown_journal.controller_tick(state['owner'],dict(ticks=state['ticks'],read_failures=state['failures'],workers=0,dispatcher=0))
+                    shutdown_journal.controller_tick(state['owner'],dict(ticks=state['ticks'],read_failures=_watch_read_failures(state),workers=0,dispatcher=0))
                     shutdown_journal.release_controller(state['owner'])
                 proof['db']=True
         except (ValueError,OSError):pass

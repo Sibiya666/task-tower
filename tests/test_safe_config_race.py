@@ -136,3 +136,106 @@ class SafeConfigRaceTests(unittest.TestCase):
             finally:
                 if link.exists():
                     link.rmdir()
+
+
+class ExecutorTransientLinkTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary=tempfile.TemporaryDirectory();self.addCleanup(self.temporary.cleanup)
+        self.root=Path(self.temporary.name).resolve()
+        self.base=self.root/'state.sqlite3';self.base.touch()
+
+    def unlinked_info(self,directory=False):
+        """Actual deleted-file metadata, injected only at the stat race seam."""
+        path=self.root/'held'
+        if directory:path.mkdir()
+        else:path.write_bytes(b'actual unlinked inode')
+        if os.name=='nt':
+            import ctypes as C
+            from ctypes import wintypes as W
+            import msvcrt
+            kernel=C.WinDLL('kernel32',use_last_error=True)
+            kernel.CreateFileW.argtypes=[W.LPCWSTR,W.DWORD,W.DWORD,C.c_void_p,W.DWORD,W.DWORD,W.HANDLE]
+            kernel.CreateFileW.restype=W.HANDLE
+            handle=kernel.CreateFileW(str(path),0x80000000,7,None,3,0x02000000 if directory else 0,None)
+            if handle==C.c_void_p(-1).value:raise C.WinError(C.get_last_error())
+            descriptor=msvcrt.open_osfhandle(handle,os.O_RDONLY)
+        else:descriptor=os.open(path,os.O_RDONLY)
+        try:
+            path.rmdir() if directory else path.unlink()
+            info=os.fstat(descriptor)
+            self.assertEqual(info.st_nlink,0)
+            return info
+        finally:os.close(descriptor)
+
+    def fault(self,path,info,replace=None):
+        original=Path.stat;observed=[]
+        def stat(candidate,*args,**kwargs):
+            if candidate==path and kwargs.get('follow_symlinks',True) and not observed:
+                observed.append(True)
+                if replace is not None:replace()
+                return info
+            return original(candidate,*args,**kwargs)
+        return patch.object(Path,'stat',stat)
+
+    def test_typed_sidecars_allow_genuine_unlinked_stat_snapshot(self):
+        from task_tower.executor import _paths
+        info=self.unlinked_info()
+        for suffix in ('-journal','-wal','-shm'):
+            sidecar=Path(str(self.base)+suffix)
+            with self.subTest(suffix=suffix),self.fault(sidecar,info):
+                self.assertEqual(_paths([self.base,sidecar],[],transient_paths=[sidecar]),[self.base,sidecar])
+
+    def test_main_config_inputs_and_untyped_suffix_zero_stay_rejected(self):
+        from task_tower.executor import _paths
+        info=self.unlinked_info()
+        for name in ('state.sqlite3','config.json','request.json','config-journal','config-wal','config-shm'):
+            path=self.root/name
+            with self.subTest(name=name),self.fault(path,info),self.assertRaises(ValueError):_paths([path],[])
+
+    def test_deleted_directory_snapshot_is_never_treated_as_sidecar(self):
+        from task_tower.executor import _paths
+        info=self.unlinked_info(directory=True);sidecar=Path(str(self.base)+'-journal')
+        with self.fault(sidecar,info),self.assertRaises(ValueError):
+            _paths([self.base,sidecar],[],transient_paths=[sidecar])
+
+    def test_main_and_all_sidecar_hardlinks_stay_rejected(self):
+        from task_tower.executor import _paths
+        for suffix in ('','-journal','-wal','-shm'):
+            path=Path(str(self.base)+suffix)
+            if suffix:path.touch()
+            alias=self.root/('alias'+suffix);os.link(path,alias)
+            try:
+                paths=[self.base,path] if suffix else [path]
+                with self.subTest(suffix=suffix),self.assertRaises(ValueError):
+                    _paths(paths,[],transient_paths=[path] if suffix else [])
+            finally:alias.unlink()
+
+    def test_replacement_hardlink_and_directory_stay_rejected(self):
+        from task_tower.executor import _paths
+        info=self.unlinked_info();sidecar=Path(str(self.base)+'-journal')
+        target=self.root/'input.json';target.touch();os.link(target,sidecar)
+        with self.fault(sidecar,info),self.assertRaises(ValueError):
+            _paths([self.base,sidecar],[],transient_paths=[sidecar])
+        sidecar.unlink()
+        with self.fault(sidecar,info,sidecar.mkdir),self.assertRaises(ValueError):
+            _paths([self.base,sidecar],[],transient_paths=[sidecar])
+
+    def test_replacement_symlink_or_junction_stays_rejected(self):
+        from task_tower.executor import _paths
+        info=self.unlinked_info();sidecar=Path(str(self.base)+'-journal')
+        target=self.root/'target';target.mkdir()
+        def replace():
+            if os.name=='nt':subprocess.run(['cmd','/c','mklink','/J',str(sidecar),str(target)],check=True,capture_output=True)
+            else:sidecar.symlink_to(target,target_is_directory=True)
+        try:
+            with self.fault(sidecar,info,replace),self.assertRaises(ValueError):
+                _paths([self.base,sidecar],[],transient_paths=[sidecar])
+        finally:
+            if sidecar.is_symlink():sidecar.unlink()
+            elif sidecar.exists():sidecar.rmdir()
+
+    def test_transient_roles_require_exact_membership_suffix_and_base(self):
+        from task_tower.executor import _paths
+        sidecar=Path(str(self.base)+'-journal')
+        for paths,typed in [([self.base],[sidecar]),([self.base],[self.base]),([sidecar],[sidecar]),([self.base,sidecar],str(sidecar))]:
+            with self.subTest(paths=paths,typed=typed),self.assertRaises(ValueError):_paths(paths,[],transient_paths=typed)

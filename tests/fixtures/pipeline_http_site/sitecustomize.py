@@ -3,6 +3,8 @@ import json
 import os
 from pathlib import Path
 import time
+import sqlite3
+from contextlib import closing
 from urllib.parse import urlsplit
 
 if os.environ.get('TT_HTTP_FIXTURE'):
@@ -10,7 +12,12 @@ if os.environ.get('TT_HTTP_FIXTURE'):
     import task_tower.github_source as source
     def transport(method,url,headers,payload,limit):
         fixture=json.loads(Path(os.environ['TT_HTTP_FIXTURE']).read_text(encoding='utf-8'))
-        if fixture.get('slow'):
+        slow=fixture.get('slow')
+        if slow and fixture.get('slow_after_claim'):
+            uri=Path(fixture['slow_after_claim']).resolve().as_uri()+'?mode=ro'
+            with closing(sqlite3.connect(uri,uri=True,timeout=.2)) as db:
+                slow=db.execute('SELECT 1 FROM runs WHERE owner_id IS NOT NULL AND owner_pid=?',(os.getpid(),)).fetchone() is not None
+        if slow:
             Path(fixture['started']).write_text('started',encoding='utf-8')
             time.sleep(60)
         if fixture.get('unavailable'):raise OSError('fixture unavailable')
