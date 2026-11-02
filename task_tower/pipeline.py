@@ -4,10 +4,12 @@ Only fixed host Python invocations inherit API credentials. Roles and checks
 continue to construct their own stripped environments in pipeline_roles.
 """
 import argparse
+from contextlib import ExitStack
 from datetime import datetime, timezone
 import json
 import os
 import re
+import sqlite3
 from pathlib import Path
 import stat
 import sys
@@ -21,7 +23,7 @@ from .dispatch_delivery import DeliveryJournal, backend_fingerprint
 from .dispatch_selection import load_dispatch_config
 from .executor import _paths, _unique, _write
 from .executor_profiles import load_executor_config, profile_fingerprint
-from .executor_queue import validate_request
+from .executor_queue import validate_request, _private_stat
 from .executor_queue import _dead
 from .pipeline_journal import PipelineJournal, ACTIVE, STATES, REASONS
 from .pipeline_policy import load_pipeline_config
@@ -232,7 +234,8 @@ class _Host:
     def cancelled(self):
         if self.stop.is_set():return True
         if self.owner:
-            with self.journal.operation_deadline(time.monotonic()+.2):runs=self.journal.status()['runs']
+            with self.journal.operation_deadline(time.monotonic()+1.0):runs=self.journal.status()['runs']
+            if self.stop.is_set():return True
             for run in runs:
                 if run['owner_id']==self.owner:
                     now=datetime.now(timezone.utc)
@@ -325,15 +328,32 @@ def _shutdown(config,journal,state,*,cancel_runs=True):
         # the same deadline. A late transaction must roll back before commit.
         try:
             shutdown_journal=PipelineJournal(journal.path,checkouts=journal.checkouts,forbidden_paths=journal.forbidden_paths)
-            with shutdown_journal.operation_deadline(deadline):
-                for run in shutdown_journal.status()['runs']:
-                    if cancel_runs and run['owner_id'] in {h.owner for h in state['workers']} and run['state'] in ACTIVE-{'unknown'}:shutdown_journal.cancel(run['run_id'])
+            with shutdown_journal.operation_deadline(deadline),ExitStack() as existing:
+                shutdown_journal._wait_seconds()
+                try:identity=_private_stat(shutdown_journal.path)
+                except FileNotFoundError:identity=None
+                shutdown_journal._wait_seconds()
+                fallback=False
+                try:runs=shutdown_journal.status()['runs']
+                except ValueError as error:
+                    cause=error.__cause__
+                    if not isinstance(cause,sqlite3.Error) or getattr(cause,'sqlite_errorcode',None)!=sqlite3.SQLITE_READONLY_ROLLBACK:raise
+                    hosts_done.wait(max(0,deadline-time.monotonic()))
+                    if not proof['hosts'] or any(not h.done.is_set() or not h.outcome or not h.outcome.get('cleanup_confirmed') for h in hosts):return
+                    if identity is None:return
+                    existing.enter_context(shutdown_journal._existing_database(identity))
+                    shutdown_journal._recover_existing()
+                    runs=shutdown_journal.status()['runs']
+                    fallback=True
+                for run in runs:
+                    if cancel_runs and run['owner_id'] in {h.owner for h in state['workers']} and run['state'] in (ACTIVE if fallback else ACTIVE-{'unknown'}):shutdown_journal.cancel(run['run_id'])
                 hosts_done.wait(max(0,deadline-time.monotonic()))
-                shutdown_journal.recover()
+                if not fallback:shutdown_journal.recover()
                 if not proof['hosts']:return
                 if state['owner'] is not None:
                     shutdown_journal.controller_tick(state['owner'],dict(ticks=state['ticks'],read_failures=_watch_read_failures(state),workers=0,dispatcher=0))
                     shutdown_journal.release_controller(state['owner'])
+                if fallback:shutdown_journal._assert_existing()
                 proof['db']=True
         except (ValueError,OSError):pass
         finally:db_done.set()

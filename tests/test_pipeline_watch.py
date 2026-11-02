@@ -4,6 +4,7 @@ import copy
 import io
 import json
 import os
+import sqlite3
 from pathlib import Path
 import sys
 import threading
@@ -343,6 +344,139 @@ class WatchTests(unittest.TestCase):
         before=self.journal.history(run['run_id'])
         pipeline.work(self.config,self.journal)
         self.assertEqual(before,self.journal.history(run['run_id']))
+
+    def owned_role_with_delayed_cancel_read(self,delay,stop_during_read=False):
+        """Delay genuine path validation only after a real owned role launch."""
+        f=self.source.fixture;marker=self.root/'observation-role-pid'
+        wrapper=self.root/'observation-role.py'
+        wrapper.write_text('import os,time,runpy\nfrom pathlib import Path\nPath('+repr(str(marker))+').write_text(str(os.getpid()))\ntime.sleep(3)\nrunpy.run_path('+repr(f.profile['argv'][1])+',run_name="__main__")\n',encoding='utf-8')
+        f.profile['argv']=[str(Path(sys.executable).resolve()),str(wrapper)]
+        self.executor.write_text(json.dumps(dict(version=1,profiles={'local':f.profile},allowlist=f.executor['allowlist'])))
+        _,self.journal,self.config=pipeline._runtime(self.args)
+        admission=pipeline._Host(self.args,'_dispatch',30,threading.Event())
+        self.assertTrue(admission.done.wait(30));self.assertFalse(admission.result['operational_failure']);admission.close()
+        self.assertEqual(pipeline.work(self.config,self.journal)['status'],'ready')
+        original_init=pipeline._Host.__init__;original_close=pipeline._Host.close
+        observed=[];outcomes=[];stoppers=[]
+        def initialize(host,*args,**kwargs):
+            original_init(host,*args,**kwargs)
+            if host.kind!='_action':return
+            original=host.journal._safe
+            def validated_delay():
+                original()
+                if observed or not marker.exists():return
+                with contextlib.closing(sqlite3.connect(host.journal.path.resolve().as_uri()+'?mode=ro',uri=True,timeout=.1)) as db:
+                    row=db.execute("SELECT run_id FROM runs WHERE owner_id=? AND state='executing'",(host.owner,)).fetchone()
+                    attempts=[] if row is None else db.execute("SELECT attempt_id FROM attempts WHERE run_id=? AND owner_id=? AND state='launch_intent'",(row[0],host.owner)).fetchall()
+                if row is not None and attempts:
+                    observed.append(dict(owner=host.owner,run_id=row[0],attempt_id=attempts[0][0]))
+                    if stop_during_read:
+                        timer=threading.Timer(.05,host.stop.set);timer.start();stoppers.append(timer)
+                    time.sleep(delay)
+            host.journal._safe=validated_delay
+        def close(host):
+            outcomes.append(host.outcome)
+            return original_close(host)
+        start=time.monotonic()
+        with patch.object(pipeline._Host,'__init__',initialize),patch.object(pipeline._Host,'close',close):
+            result=pipeline.work(self.config,self.journal)
+        elapsed=time.monotonic()-start
+        for timer in stoppers:timer.join(1)
+        self.assertEqual(len(observed),1)
+        run=self.journal.status(observed[0]['run_id'])
+        return result,run,self.journal.history(run['run_id']),outcomes,elapsed,marker
+
+    def test_owned_role_survives_350ms_validated_cancellation_read(self):
+        result,run,history,outcomes,elapsed,marker=self.owned_role_with_delayed_cancel_read(.35)
+        self.assertEqual(result['status'],'ready')
+        self.assertEqual(run['state'],'ready')
+        self.assertEqual(history['attempts'][-1]['state'],'completed')
+        self.assertTrue(history['attempts'][-1]['evidence']['cleanup_confirmed'])
+
+    def test_shutdown_recovers_actual_hot_journal_only_after_contained_cleanup(self):
+        from types import SimpleNamespace
+        from tests.test_pipeline_journal import request,policy
+        from task_tower.pipeline_journal import PipelineJournal
+        for cancel_runs in (False,True):
+            with self.subTest(cancel_runs=cancel_runs):
+                directory=self.root/('hot-stop-'+str(cancel_runs));directory.mkdir()
+                journal=PipelineJournal(directory/'pipeline.sqlite3')
+                for number in range(1,81):journal.submit(request(number),policy())
+                journal.submit(dict(request(81),repository='z-unrelated/repo'),policy())
+                unrelated_owner=str(uuid.uuid4())
+                claim_code="import sys;from pathlib import Path;from task_tower.pipeline_journal import PipelineJournal;j=PipelineJournal(Path(sys.argv[1]));owner=sys.argv[2]\nwith j.owner(owner):j.claim(owner,2)"
+                unrelated=pipeline.processes.run_command([str(Path(sys.executable).resolve()),'-c',claim_code,str(journal.path),unrelated_owner],directory,20,cancel_requested=lambda:False)
+                self.assertEqual(unrelated['exit_code'],0);self.assertTrue(unrelated['cleanup_confirmed'])
+                owner=str(uuid.uuid4());saved=directory/'claimed.json'
+                code="""import json,os,sqlite3,sys
+from pathlib import Path
+from task_tower.pipeline_journal import PipelineJournal
+j=PipelineJournal(Path(sys.argv[1]))
+with j.owner(sys.argv[2]):
+ row=j.claim(sys.argv[2],2)
+ Path(sys.argv[3]).write_text(json.dumps(row))
+ db=sqlite3.connect(sys.argv[1]);db.execute('PRAGMA synchronous=FULL');db.execute('PRAGMA cache_size=1');db.execute('PRAGMA cache_spill=ON');db.execute('BEGIN IMMEDIATE');db.execute('UPDATE runs SET policy_sha256=?',('c'*64,));os._exit(23)
+"""
+                outcome=pipeline.processes.run_command([str(Path(sys.executable).resolve()),'-c',code,str(journal.path),owner,str(saved)],directory,20,cancel_requested=lambda:False)
+                self.assertEqual(outcome['exit_code'],23);self.assertTrue(outcome['cleanup_confirmed'])
+                claimed=json.loads(saved.read_text());self.assertEqual(claimed['owner_pid'],outcome['pid'])
+                sidecar=Path(str(journal.path)+'-journal');self.assertTrue(sidecar.exists())
+                crashed={p:p.read_bytes() for p in (journal.path,sidecar)}
+                with self.assertRaises(ValueError) as failure:journal.status()
+                self.assertEqual(failure.exception.__cause__.sqlite_errorname,'SQLITE_READONLY_ROLLBACK')
+                self.assertEqual(crashed,{p:p.read_bytes() for p in crashed})
+                done=threading.Event();done.set()
+                # Adapter uses only proof returned by the actual contained runner.
+                host=SimpleNamespace(owner=owner,done=done,outcome=outcome,close=lambda:None)
+                state=dict(owner=None,stop=threading.Event(),workers=[host],dispatcher=None,ticks=0,failures=0)
+                host.outcome=None  # Deliberately omit proof; do not invent cleanup.
+                self.assertFalse(pipeline._shutdown(self.config,journal,state,cancel_runs=cancel_runs))
+                self.assertEqual(crashed,{p:p.read_bytes() for p in crashed})
+                host.outcome=outcome
+                if not cancel_runs:
+                    host.done=threading.Event()  # No completed-handle proof yet.
+                    start=time.monotonic()
+                    self.assertFalse(pipeline._shutdown(self.config,journal,state,cancel_runs=False))
+                    self.assertLess(time.monotonic()-start,5)
+                    self.assertTrue(state['_shutdown_journal_done'].wait(1))
+                    self.assertEqual(crashed,{p:p.read_bytes() for p in crashed})
+                    host.done=done
+                start=time.monotonic();confirmed=pipeline._shutdown(self.config,journal,state,cancel_runs=cancel_runs)
+                self.assertLess(time.monotonic()-start,5)
+                if not confirmed:
+                    with self.assertRaises(ValueError):journal.status()
+                    self.assertEqual(crashed,{p:p.read_bytes() for p in crashed})
+                self.assertTrue(confirmed)
+                current=journal.status(claimed['run_id']);history=journal.history(claimed['run_id'])
+                self.assertEqual(current['state'],'unknown');self.assertEqual(current['reason'],'owner_dead')
+                self.assertEqual(current['owner_id'],owner);self.assertEqual(current['owner_pid'],outcome['pid'])
+                self.assertEqual(current['cancel_requested'],int(cancel_runs))
+                others=[row for row in journal.status()['runs'] if row['owner_id']==unrelated_owner]
+                self.assertEqual(len(others),1);self.assertEqual(others[0]['state'],'unknown')
+                self.assertEqual(others[0]['cancel_requested'],0)
+                self.assertEqual(history['attempts'],[]);self.assertEqual(history['effects'],[])
+                self.assertIsNone(journal.claim(str(uuid.uuid4()),2))
+                self.assertEqual(history,journal.history(claimed['run_id']))
+
+    def test_owned_role_read_beyond_one_second_retains_unknown_intent(self):
+        result,run,history,outcomes,elapsed,marker=self.owned_role_with_delayed_cancel_read(1.2)
+        self.assertEqual(result['status'],'unknown');self.assertEqual(run['state'],'unknown')
+        self.assertEqual(history['attempts'][-1]['state'],'launch_intent')
+        self.assertTrue(outcomes[-1]['cleanup_confirmed'])
+        from task_tower.executor_queue import _dead
+        self.assertTrue(_dead(int(marker.read_text())))
+        pipeline.work(self.config,self.journal)
+        self.assertEqual(history,self.journal.history(run['run_id']))
+
+    def test_stop_during_validated_cancel_read_remains_bounded(self):
+        result,run,history,outcomes,elapsed,marker=self.owned_role_with_delayed_cancel_read(.35,True)
+        self.assertLess(elapsed,5)
+        self.assertEqual(result['status'],'unknown');self.assertEqual(run['state'],'unknown')
+        self.assertEqual(history['attempts'][-1]['state'],'launch_intent')
+        self.assertEqual(outcomes[-1]['status'],'cancelled')
+        self.assertTrue(outcomes[-1]['cleanup_confirmed'])
+        from task_tower.executor_queue import _dead
+        self.assertTrue(_dead(int(marker.read_text())))
 
     def accepted_publication(self):
         f=self.source.fixture;f.row['publish']['enabled']=True;f.path.write_text(json.dumps(f.value))

@@ -189,3 +189,87 @@ Reviewed the actual entire workflow delta and new recovery evidence. The sole op
 The recovery evidence records postmerge run41451105738 Windows job125296237186 exceeding the explicit15-minute maximum, Linux/macOS success, and a preceding successful Windows full-suite job taking about30 minutes including setup/cleanup. A bounded45-minute job budget accommodates the demonstrated runtime without weakening checks or inferring that timeout means product correctness. This differs from the older unproven a569 authority failure; that uncertainty remains preserved. No full product suite was rerun for this configuration-only delta. Fresh six-context CI, independent TEST/whole-PR review, exact-head/base merge controls and a successful new exact-main postmerge/automatic publication cycle remain required.
 
 The recovery note honestly keeps Issue16 open and main acceptance pending. No Issue closure, delivery/journal reset, installed-model invocation or pilot rewrite is supplied by this review. The reviewer appended only this report and refreshed only the task card's development evidence digest as explicitly authorized; no source, workflow, shared docs, test receipt, commit, push or external state was changed by this reviewer.
+
+
+## Recovery cancellation-observation correction — scoped development reacceptance
+
+2026-11-02, independent development reviewer distinct from implementer: **ACCEPT the exact two-file correction below.** No blocking finding within this correction. All prior history is retained byte-for-byte as prefix SHA256 `8e6cee7741aa56212aab75ff11775b2f744b45b76101ce8f7beadc6b712124ca`. This is source/behavior acceptance, not current functional CI, PR or main/postmerge acceptance.
+
+Reviewed entire actual diff at HEAD `3de7f94c7b7f40293a8cf673bc68877fba377830`. Freeze `runtime-pr42-observation-freeze.json` SHA256 `ffd0ba0b725174a1107ba19b8b12d41c9fc6fea2d7608ea0535897228a8af051` matches independently. Its `base=56f8ab1` is the historical original Issue16 baseline, not a claim that the current recovery PR targets that old main. This scoped review compares the working-tree correction with actual HEAD3de, descended from the merged D5 recovery baseline. Final PR acceptance must bind its actual then-current head/base separately.
+
+| File | Raw and canonical SHA256 |
+| --- | --- |
+| task_tower/pipeline.py | `8a8ca085c51ca9c932cb5513da06603b01c26bdbda86a5321b90d3691ff170d5` |
+| tests/test_pipeline_watch.py | `98fd4e207996bf1ff8d15eb0a2e4100be09e964ca9bfe3efeb6caf8da99a824b` |
+
+Production changes only the internal cancellation-read observation budget from0.2s to1.0s and rechecks stop immediately after successful status read. Stop-before-read remains first. Actual deadline/SQLite/ownership errors still propagate into the existing unknown/fenced runner path; no failure is converted to False. The task UTC/monotonic deadline, role/check limits, process containment, five-second shutdown budget, journal schema/API, source authority, proofs and no-replay behavior are unchanged. A one-second observation tolerance accommodates the demonstrated350ms validated read without increasing task/model/test budgets or granting uncertain work permission. Reads exceeding that budget still fail closed.
+
+Fresh independent existing bundled-Python command:
+
+```text
+-m unittest tests.test_pipeline_watch.WatchTests.test_owned_role_survives_350ms_validated_cancellation_read tests.test_pipeline_watch.WatchTests.test_owned_role_read_beyond_one_second_retains_unknown_intent tests.test_pipeline_watch.WatchTests.test_stop_during_validated_cancel_read_remains_bounded tests.test_pipeline_watch.WatchTests.test_public_work_interrupt_under_exclusive_lock_stops_first_and_exits_uncertain tests.test_pipeline_cli.ControllerTests.test_host_budget_is_own_run_bound_and_monotonic -q
+```
+
+**5 tests in34.128s, OK, no skips.** These use actual contained role launches and durable owned executing/launch-intent observations before delaying real path validation.350ms completes ready with actual cleanup;1.2s retains unknown/unresolved launch intent, positive role death and no replay; stop during the read cancels and cleans up within five seconds. The held exclusive-SQLite public-work interrupt and independent monotonic owner budget also pass. All supplied assertions remain intact, with no replacement authorization predicate or completed-result invention. Independently rechecked both raw bindings after execution. Author three-test RED/GREEN and87-test watch/journal/worker results are separate evidence, not this reviewer's reruns.
+
+The observed local cancellation-read trip and controlled actual-role delay support this narrow correction. They do not establish the cause of the original macOS failure; twenty instrumented macOS debug passes are diagnostic observations, not qualification. The earlier PR42 Windows readonly-database errors are a separate issue and are **not claimed fixed by this patch**. Current full new-head CI and fresh independent PR review remain required; no green legacy run is substituted for those gates.
+
+All preserved model pilots remain source-bound historical evidence; no new installed-model run, pilot reset, private schema change or credential/OS configuration action occurred here. The reviewer changed only this report and the explicitly authorized development evidence digest in the task card. Separate TEST receipt and all source/workflow/shared documentation were left unchanged. No commit, push, external write, merge or Issue-completion claim is supplied.
+
+
+## Whole recovery candidate development/security review — current verdict
+
+2026-11-02, independent development acceptor distinct from implementers: **ACCEPT whole current recovery development/security at the exact code and documentation inputs below.** No blocking finding remains in this reviewed candidate. All prior original rejection/R1/R2/R3, timeout and observation-window reviews remain byte-for-byte as prefix SHA256 `9778ece08b5b1798551279a15a5cef816e8d06e7682eb222ec78cbd3e1a174aa`. This is development acceptance, not fresh functional TEST, CI, PR or exact-main/postmerge completion.
+
+Reviewed the whole actual recovery diff against merged main `d5cf8953b70caf5329d5173b7fb4a15eaa4df978`, current committed HEAD `3de7f94c7b7f40293a8cf673bc68877fba377830` plus frozen working-tree inputs. Final six-file source freeze `runtime-pr42-delivery-final-freeze.json` SHA256 `32eef1c127f4d0ec68ff9b1ad434e853972dc0feff04dcfafca85f5ee6e571c7` independently matches. Its actual PR42 base is D5; original56f8ab1 remains historical Issue16 foundation. No exact-head/base acceptance is inferred for the eventual new commit.
+
+| Source/test input | Raw SHA256 | Canonical SHA256 |
+| --- | --- | --- |
+| task_tower/pipeline.py | `e78ad0862980afb4b16df631ac4143cca8f79179b93d89319cceab09bf46a9c5` | same |
+| task_tower/pipeline_journal.py | `139383295cb16ffc05fd80224e8d8c78932ea71e091f2cfd4ed50e2f96141cc0` | same |
+| tests/test_pipeline_watch.py | `64e052410070f33dedd78b89fc95ffb29ce11f4c004e54d6c5c4fe14b760184e` | same |
+| tests/test_pipeline_shutdown_recovery.py | `969ec9fb06160c72c42917b7b66c92b46361757bf357858712d00ec3a5d5c392` | same |
+| task_tower/dispatch_delivery.py | `f99517ddaea8b46d2bbe02b1feb087f880b21faa8ee06f388e51595113d0343e` | `c5f247aa6433b84e7db814ffe3b32e2d8e7dd2fc3e3cfdd562448adb8c58bbb4` |
+| tests/test_delivery_sqlite_race.py | `dd119c7bbdf569473e727347c62fff55c446bb2659cca1586749b2307ddb8a16` | same |
+
+### Preserved initial hot-fallback rejection and corrected existing-only boundary
+
+Initial four-file freeze04e0e38642100dd32b25f48b7efe4f1d7e766662c243ac565ddef32e92ad99d8 was independently **REJECTED P2**. Private rejection receipts: JSON SHA256 `74988a7db34ce49fb3c13e44610bd50c119eadfb5ceb67cd6a425f2a66207dfb`, Markdown `e50e6ae29a771ded2a016c315b28f43cb259975fdfef38c034f1eda19cdfaedd`. The actual-hot SQLite probe created80valid rows, used genuine cache spill/os._exit23 and actual contained cleanup, observed genuine read-only rollback error776, then removed the database only after successful real recovery. The initial fallback reported confirmed=True with database_exists=False because its follow-up public status treated absence as an empty journal. The inline probe's temporary DB was cleaned afterward; the private receipts preserve actual tool output/provenance without inventing retained raw files. The earlier9778 two-line observation acceptance never accepted this initial fallback.
+
+The corrected private existing-database context spans strict recovery, subsequent RO status, cancellation/controller/release writes and final confirmation. It uses URI existing-only connection semantics and disables initialization/parent creation for every write in that context. Physical dev/inode identity, regular/single-link/non-reparse metadata, unchanged exact APP_ID/version/schema/DELETE/FULL and remaining shared operation budget remain checked; write transactions additionally check physical identity before commit. Missing/empty/foreign/replaced state cannot become empty success or fresh initialization. The context finalizer only restores private state and performs no I/O. Public status stays read-only and ordinary startup/public recover compatibility is retained. This is bounded same-host path evidence, not a claim of descriptor-level immunity to hostile concurrent replacement or distributed fencing. SCHEMAS AST was independently compared with HEAD and is unchanged.
+
+Fallback is limited to a real chained sqlite3.Error extended code776, after every actual host has completed with positive contained cleanup proof. It retains the original4.8-second shutdown deadline and does not retry/reset/replay unknown work. Explicit cancellation applies only to exact worker owner UUIDs, including the newly recovered unknown state; normal completion invents no cancellation and unrelated owners are not cancelled. Unknown ownership/effects remain fenced. A pre-commit deletion test initially expected path absence, but actual SQLite rollback restored the original valid state. The revised expectation requires failed confirmation, exact original rows/schema/history/owner/cancel/controller state and no replay; deleting a valid restored DB would be wrong. The original failed assertion and diagnostic are preserved separately.
+
+Independently reran the original actual776/recovery/unlink reproduction at corrected V2: confirmed=False, DB remains absent, no recreation,1.992s. Independently ran all `tests.test_pipeline_shutdown_recovery` plus `WatchTests.test_shutdown_recovers_actual_hot_journal_only_after_contained_cleanup`: **9 tests in21.248s, OK, no skips**. These cover actual hot recovery with cancelTrue/False and unrelated owner, unconfirmed cleanup/deadline, no initialization, app0/foreign/malformed/WAL, disappearance before/after recovery and later writes, physical replacement, commit rollback preservation and no replay. These four code/test bindings remain unchanged in the final six-file freeze.
+
+### Delivery-journal guard correction and causal limits
+
+The next author96-test run failed one delivery read; its complete log SHA256 `1801f38e646fe3527c8e44e205c75fefba99dc85404d6aa34c6c211fd658dd79` remains a failed/unattributed observation. Its cleaned fixture and suppressed original cause prevent assigning that failure to a particular race. A later churn pass and one watch pass likewise do not diagnose it.
+
+Separate deterministic real-SQLite writer timing barriers demonstrate actual sidecar disappearance between a genuine positive existence/stat observation and later stat/alias operations. Barrier proof SHA256 `30844230309ba10d4716052fefdba4a2e52311995f426766088339da4ca98438` independently matches. These prove the guard races themselves, not the lost96-test or original CI cause. The correction reuses the existing private-stat helper only for the journal's exact three derived transient sidecars. Main and positively observed forbidden inputs remain strict, including suffix-named files. Validated snapshots support samestat alias checks without a second racy lookup; canonical/checkout, type/link/reparse, optional-initially-absent, DELETE/WAL, readonly, schema/backend/identity and no-replay contracts remain intact. Actual OSError/sqlite3.Error causes are chained privately; generic public error text and neutral CLI JSON remain unchanged. No recovery or delivery resubmit policy is added.
+
+Independent actual command `-m unittest tests.test_delivery_sqlite_race tests.test_dispatch_delivery tests.test_dispatcher -q`: **44 tests in5.371s, OK, no skips**. Includes both actual SQLite commit timing barriers, genuine deleted-file metadata, strict main/input loss, hardlink/directory/junction replacements, causal errors, neutral CLI and cold imports in both module orders. The earlier independent five observation-window controls remain their separately bound scoped evidence; the reviewed window/stop behavior is unchanged. No redundant complete suite is claimed by this reviewer.
+
+The final author combined log `runtime-pr42-delivery-current-combined.log` SHA256 `1c16bea0d050c0d499aff0171a7b9807d60ef4c3d37d3fd3aff59ef747f29ebe` reports **169 tests in760.633s, OK, one existing privilege skip**. Independently checked its hash, read the entire decoded output and scanned for failure/error/traceback/thread/resource/runtime warnings: none recorded. This is verified author-run evidence, separate from the independent9+44 executions. Earlier96 failure, initial P2 rejection and preliminary fixture/probe errors are not relabeled green. No current-head full CI success follows from this focused run.
+
+### Complete recovery documentation and remaining gates
+
+The timeout workflow remains exactly the previously accepted15-to45-minute substitution; full tests, exact merged checkout, read-only permissions, three-platform matrix, failed export and failure gate are unchanged. Read the entire new recovery-observations note, prior timeout note and actual card/test/development-history deltas. Notes preserve cancelled/unknown/rejected runs, the initial P2, SQLite rollback-restoration finding, unattributed96 failure, independently proven mechanisms and qualification limits.
+
+Reviewed all current coordination/setup document changes. They record the user's resource-based coordination decision while explicitly preserving this v1 binary's originally specified numeric two-slot limit until separately specified/reviewed #18 work. They do not rewrite Issue16's admitted criteria, journals/backend bindings or runtime validators. Per-repository serialized integration and unknown fences remain required. Setup's existing CLI/PATH clarification adds no login/scope grant; it distinguishes launch-environment visibility from credential authority. Current canonical/raw documentation bindings:
+
+| Input | Raw SHA256 | Canonical SHA256 |
+| --- | --- | --- |
+| .github/workflows/postmerge.yml | `7dd1c8797dbddf1232ab88985d8dfbbba50c9419d40618a7935ed0e6028233ee` | `194fca1f6743aac62dbbf7b29e15a2ff402f70e92ff260a91b66bc9c79a1d570` |
+| AGENTS.md | `3c6b107b29251033682e2ea1581a17dd07dea2ff52dffae969728b2a3884f411` | `b55c1a19836822248e3584b94b2c51a9e509d8e7785c0df50b7ec0772d4a0330` |
+| README.md | `81b4ffcaf4d2be5d7ec2aa92b465eaeac962975d32296c7942a591862f161487` | `9100c9ae81e5eaffd07b1d0fff39746d675e76263089b9db53ef36a8c2dcc2e4` |
+| docs/development-process.md | `9d8bea073e7c41b4ca451219a4d58260ae76f843dd9b29775c7b7b8b5ecc3211` | `564f46de80ffb69a25c5307add2b992dd47d48235214ed3f8e37b42b8628a56d` |
+| docs/roadmap.md | `0f922d9b958b22bd21faea67493a72432901d5abeaf7510ff7754af0ce77595c` | `2c195aa55dc6a67f6548744322fc2ece58ca032e377ec875d35cba84b38cb0f3` |
+| docs/github-setup.md | `e0e70b807150a3877a36f5449b9aab454f481009231b29b8a88963f86c4b3ad1` | `e825e8ea62c13263a843d6cd42757a48c1cef4931105ffde1f5166186b798df9` |
+| docs/tasks/evidence/TT-PIPELINE-001/recovery-observations.md | `9a081dd0c0f2f219e243c48916b903fafd5fa23a5fab684711688969336773f9` | same |
+
+Original macOS unknown and Windows readonly CI causes remain **UNPROVEN**; twenty instrumented macOS debug passes are not qualification. The new causal mechanisms are real but cannot retrospectively identify uncaptured failures. No fresh complete final-head CI/functional TEST/PR verdict is fabricated. The current card still projects previously scoped receipts pending coordinator reconciliation; editing it cannot grant acceptance.
+
+All1054 original/V2/V3 pilot artifacts remain their separately preserved source-qualified evidence; this reviewer did not run a new model or claim an additional private1054-file audit. The source8981c6d fixture-transport/publish-disabled pilot does not test later recovery code. Same Issue16 remains incomplete until independent current TEST, new complete exact-head CI, fresh whole-PR head/base acceptance and successful exact-main/postmerge/automatic Issue publication. This review grants none of those later gates.
+
+Only this public development report was edited by this reviewer. No code, tests, card, shared docs, workflow, installed configuration/journal/pilot, commit/push, API or model execution was changed/performed. All earlier prefix bytes remain intact; changed bound inputs require fresh affected acceptance.
