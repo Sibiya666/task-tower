@@ -14,6 +14,11 @@ SCHEMA="CREATE TABLE jobs(delivery_id TEXT PRIMARY KEY, run_id TEXT NOT NULL UNI
 HISTORY_SCHEMA="CREATE TABLE attempt_history(run_id TEXT NOT NULL, attempt INTEGER NOT NULL, attempt_id TEXT NOT NULL UNIQUE, owner_id TEXT NOT NULL, owner_pid INTEGER, evidence TEXT NOT NULL, PRIMARY KEY(run_id,attempt))"
 COLUMNS='delivery_id,run_id,repository,issue,task_id,runner_label,profile_id,profile_fingerprint,state,owner_id,owner_pid,attempt,attempt_id,cancel_requested,evidence'
 
+
+class ExecutorCancellationFence(ValueError):
+    """A committed cancellation prevents launch or a known terminal outcome."""
+
+
 def _uuid(value):
     try:
         if not isinstance(value,str) or str(uuid.UUID(value))!=value: raise ValueError()
@@ -173,7 +178,11 @@ class ExecutionQueue:
         with self._db(True) as db:
             row=db.execute('SELECT * FROM jobs WHERE run_id=?',(run_id,)).fetchone()
             if row is None or row['owner_id']!=owner_id or state not in allowed.get(row['state'],set()): raise ValueError('Invalid executor transition')
-            if state=='running' and row['cancel_requested']: raise ValueError('Executor cancelled before launch')
+            # BEGIN IMMEDIATE serializes this check with public cancel(). No
+            # slow worker/probe/model work occurs inside this transaction.
+            # Unknown cleanup/control remains stronger than cancellation.
+            if row['cancel_requested'] and state in ('running','execution_completed','failed','needs_input','timed_out'):
+                raise ExecutorCancellationFence('Executor cancellation committed')
             saved=json.loads(row['evidence'])
             if any(key in saved and (type(saved[key]) is not type(value) or saved[key]!=value) for key,value in evidence.items()):
                 raise ValueError('Conflicting executor evidence')

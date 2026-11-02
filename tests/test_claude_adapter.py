@@ -70,10 +70,21 @@ class ClaudeAdapterTests(unittest.TestCase):
             path.write_text('{"mcpServers":{"unexpected":{}}}')
             with self.assertRaises(ValueError): api.build_claude_invocation(attempt,self.profile())
 
-    def attempt(self):
-        return dict(run_id=str(uuid.uuid4()),attempt_id=str(uuid.uuid4()),source_sha='a'*40,
+    def attempt(self,directory=None):
+        attempt=dict(run_id=str(uuid.uuid4()),attempt_id=str(uuid.uuid4()),source_sha='a'*40,
                     request_content={'task_data':{'body':'Fix one file; --model injected is data'}},
                     instruction_content='Pinned instruction text')
+        if directory is not None:
+            api=self.adapter()
+            self.assertTrue(hasattr(api,'prepare_instruction_bundle'),'instruction file transport missing')
+            snapshots=directory/'instructions';snapshots.mkdir()
+            (snapshots/'SKILL.md').write_bytes(b'Pinned instruction text\n')
+            manifest={'SKILL.md':hashlib.sha256(b'Pinned instruction text\n').hexdigest()}
+            from task_tower.executor_profiles import profile_fingerprint
+            attempt.update(directory=str(directory),instruction_manifest=manifest,
+                           superpowers_manifest_sha256=profile_fingerprint(manifest))
+            attempt.update(api.prepare_instruction_bundle(attempt))
+        return attempt
 
     def profile(self,role='implementer'):
         return dict(kind='claude',argv=['claude.exe'],trusted=False,approve_for_me=False,
@@ -83,7 +94,7 @@ class ClaudeAdapterTests(unittest.TestCase):
     def test_fixed_invocation_has_inline_context_and_explicit_role_tools(self):
         api=self.adapter()
         with tempfile.TemporaryDirectory() as raw:
-            attempt=self.attempt()|api.prepare_mcp_config(Path(raw).resolve())
+            attempt=self.attempt(Path(raw).resolve())|api.prepare_mcp_config(Path(raw).resolve())
             for role,tools in [('implementer','Read,Edit,Write,Glob,Grep'),('reviewer','Read,Glob,Grep')]:
                 argv=api.build_claude_invocation(attempt,self.profile(role))
                 self.assertEqual(argv,harness.build_invocation(attempt,self.profile(role)))
@@ -95,7 +106,9 @@ class ClaudeAdapterTests(unittest.TestCase):
                              '--dangerously-skip-permissions','--resume','--continue','--bg','--add-dir']:
                     self.assertNotIn(flag,argv[:-1])
                 self.assertIn('--safe-mode',argv); self.assertIn('--strict-mcp-config',argv)
-                self.assertIn('Pinned instruction text',argv[-1])
+                self.assertNotIn('Pinned instruction text',argv[-1])
+                self.assertEqual(argv[argv.index('--append-system-prompt-file')+1],attempt['instruction_bundle_path'])
+                self.assertNotIn('--system-prompt',argv);self.assertNotIn('--system-prompt-file',argv)
                 self.assertIn('Fix one file',argv[-1])
                 schema=json.loads(argv[argv.index('--json-schema')+1])
                 self.assertEqual(schema,harness.result_schema(attempt))
@@ -151,6 +164,78 @@ class ClaudeAdapterTests(unittest.TestCase):
                 self.skipTest('junction creation unavailable')
             with self.assertRaises(ValueError): api.prepare_mcp_config(alias)
             self.assertFalse((target/'claude-mcp.json').exists())
+
+
+class InstructionBundleTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
+        self.root=Path(self.tmp.name).resolve();(self.root/'instructions').mkdir()
+        self.attempt=dict(run_id=str(uuid.uuid4()),attempt_id=str(uuid.uuid4()),source_sha='a'*40,directory=str(self.root))
+
+    def api(self):
+        from task_tower import claude_adapter
+        self.assertTrue(hasattr(claude_adapter,'prepare_instruction_bundle'),'instruction bundle missing')
+        return claude_adapter
+
+    def pins(self,count=2,size=64):
+        from task_tower.executor_profiles import profile_fingerprint
+        manifest={}
+        for index in range(count):
+            name='SKILL.md' if index==0 else f'file-{index:03}.md'
+            data=(f'Pinned file sentinel {index}\n'.encode()+b'x'*size+b'\n')
+            (self.root/'instructions'/name).write_bytes(data)
+            manifest[name]=hashlib.sha256(data).hexdigest()
+        self.attempt.update(instruction_manifest=manifest,superpowers_manifest_sha256=profile_fingerprint(manifest))
+
+    def test_complete_bundle_binding_and_exclusive_creation(self):
+        self.pins();api=self.api();bundle=api.prepare_instruction_bundle(self.attempt)
+        self.attempt.update(bundle)
+        self.assertEqual(api.verify_instruction_bundle(self.attempt),bundle)
+        data=Path(bundle['instruction_bundle_path']).read_bytes()
+        self.assertEqual(bundle['instruction_bundle_sha256'],hashlib.sha256(data).hexdigest())
+        self.assertEqual(bundle['instruction_bundle_bytes'],len(data));self.assertEqual(bundle['instruction_bundle_file_count'],2)
+        for name,sha in self.attempt['instruction_manifest'].items():
+            self.assertIn(name.encode(),data);self.assertIn(sha.encode(),data)
+            self.assertIn((self.root/'instructions'/name).read_bytes(),data)
+        metadata=json.loads((self.root/'claude-instructions.json').read_text())
+        for key in ('run_id','attempt_id','source_sha','superpowers_manifest_sha256'):
+            self.assertEqual(metadata[key],self.attempt[key])
+        with self.assertRaises(ValueError):api.prepare_instruction_bundle(self.attempt)
+
+    def test_snapshot_bundle_metadata_and_manifest_drift_are_not_repaired(self):
+        self.pins();api=self.api();self.attempt.update(api.prepare_instruction_bundle(self.attempt))
+        for path in [self.root/'instructions'/'SKILL.md',Path(self.attempt['instruction_bundle_path']),self.root/'claude-instructions.json']:
+            original=path.read_bytes();path.write_bytes(original+b'changed')
+            with self.assertRaises(ValueError):api.verify_instruction_bundle(self.attempt)
+            self.assertEqual(path.read_bytes(),original+b'changed');path.write_bytes(original)
+        self.attempt['superpowers_manifest_sha256']='0'*64
+        with self.assertRaises(ValueError):api.verify_instruction_bundle(self.attempt)
+
+    def test_directory_and_hardlinked_bundle_are_rejected(self):
+        self.pins();api=self.api();path=self.root/'claude-system-prompt.md';path.mkdir()
+        with self.assertRaises(ValueError):api.prepare_instruction_bundle(self.attempt)
+        path.rmdir();self.attempt.update(api.prepare_instruction_bundle(self.attempt))
+        os.link(path,self.root/'alias.md')
+        with self.assertRaises(ValueError):api.verify_instruction_bundle(self.attempt)
+
+    def test_per_file_and_aggregate_caps_do_not_silently_drop_pins(self):
+        self.pins(size=2097152);api=self.api()
+        with self.assertRaises(ValueError):api.prepare_instruction_bundle(self.attempt)
+        self.pins(count=9,size=2097000)
+        with self.assertRaises(ValueError):api.prepare_instruction_bundle(self.attempt)
+        self.assertFalse((self.root/'claude-system-prompt.md').exists())
+
+    @unittest.skipUnless(os.name=='nt','Windows junction')
+    def test_actual_junction_snapshot_is_rejected(self):
+        self.pins();api=self.api();target=self.root/'elsewhere';target.mkdir()
+        alias=self.root/'instructions'/'nested'
+        result=subprocess.run(['cmd','/c','mklink','/J',str(alias),str(target)],capture_output=True,timeout=10)
+        if result.returncode:self.skipTest('junction unavailable')
+        data=b'Pinned\n';(target/'file.md').write_bytes(data)
+        from task_tower.executor_profiles import profile_fingerprint
+        self.attempt['instruction_manifest']['nested/file.md']=hashlib.sha256(data).hexdigest()
+        self.attempt['superpowers_manifest_sha256']=profile_fingerprint(self.attempt['instruction_manifest'])
+        with self.assertRaises(ValueError):api.prepare_instruction_bundle(self.attempt)
 
 
 class ClaudeStreamTests(unittest.TestCase):
@@ -268,3 +353,13 @@ class ClaudeStreamTests(unittest.TestCase):
         self.assertFalse(parser.finish()['valid'])
         parser.feed(self.wire(self.final()))
         self.assertFalse(parser.finish()['valid'])
+
+    def test_reported_model_is_bounded_private_observation_not_public_capability(self):
+        parser=self.parser();parser.feed(self.wire(self.init()|{'model':'reported-model'},self.final()))
+        outcome=parser.finish()
+        self.assertTrue(outcome['valid'])
+        self.assertEqual(outcome['private_metadata'],{'reported_model':'reported-model'})
+        self.assertNotIn('reported-model',repr(outcome['evidence']))
+        for model in ['x'*513,{'unexpected':'shape'}]:
+            parser=self.parser();parser.feed(self.wire(self.init()|{'model':model},self.final()))
+            self.assertFalse(parser.finish()['valid'])

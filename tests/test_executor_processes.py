@@ -104,10 +104,49 @@ class ExecutorProcessesTests(unittest.TestCase):
         self.assertNotIn('private',repr(result))
 
     def test_active_deadline_precedes_observer_failure(self):
-        def observe(chunk): raise ValueError('private')
-        result=self.observer_command([sys.executable,'-c',
-            "import os,time;os.write(1,b'x');time.sleep(10)"],'.',.2,stdout_observer=observe)
+        from task_tower import processes
+        if sys.platform=='win32':
+            from task_tower.windows_job import WindowsJobProcess
+            process_type=WindowsJobProcess
+        else:
+            import subprocess
+            process_type=subprocess.Popen
+        entered_wait=threading.Event();failure=threading.Event();drains=[]
+        original_wait=process_type.wait;original_init=processes._Drain.__init__
+        polls=[0];active_poll_started=[None]
+        def actual_wait(child,timeout=None):
+            # Delegate every wait to the real contained child. Release the
+            # observer only after the owner's first observer check has passed.
+            entered_wait.set()
+            return original_wait(child,timeout)
+        def remember_drain(drain,*args,**kwargs):
+            original_init(drain,*args,**kwargs)
+            if drain.observer is not None:drains.append(drain)
+        def observe(chunk):
+            self.assertTrue(entered_wait.wait(3),'owner never entered native wait')
+            failure.set()
+            raise ValueError('private')
+        def no_cancel():
+            polls[0]+=1
+            if polls[0]==2:active_poll_started[0]=time.monotonic()
+            if polls[0]>=3:
+                self.assertTrue(failure.wait(3),'observer never received real child output')
+                bound=time.monotonic()+3
+                while not drains[0].observer_failed and time.monotonic()<bound:time.sleep(.001)
+                self.assertTrue(drains[0].observer_failed)
+                # The active deadline was set BEFORE poll two. Waiting past
+                # this upper bound proves expiry even if native wait rounds
+                # its 0.2-second timeout down by a fraction of a millisecond.
+                remaining=active_poll_started[0]+.2+.02-time.monotonic()
+                if remaining>0:time.sleep(remaining)
+                self.assertGreaterEqual(time.monotonic(),active_poll_started[0]+.2)
+            return False
+        with patch.object(process_type,'wait',actual_wait),patch.object(processes._Drain,'__init__',remember_drain):
+            result=self.observer_command([sys.executable,'-c',
+                "import os,time;os.write(1,b'x');time.sleep(10)"],'.',.2,
+                cancel_requested=no_cancel,stdout_observer=observe)
         self.assertEqual(result['status'],'timeout')
+        self.assertGreaterEqual(polls[0],3)
         self.assertTrue(result['stdout_observer_failed']); self.assertTrue(result['cleanup_confirmed'])
 
     def test_late_observer_failure_after_fast_exit_is_failed_without_cleanup_timeout(self):

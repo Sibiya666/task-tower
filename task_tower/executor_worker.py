@@ -11,6 +11,7 @@ from .executor_profiles import _pins, child_environment, profile_fingerprint
 from .executor_harness import build_invocation, validate_result, result_schema
 from .processes import run_command
 from .project_connections import safe_config_path
+from .executor_queue import ExecutorCancellationFence
 
 def _git(checkout,*args):
     result=subprocess.run(['git',*args],cwd=checkout,env=child_environment(os.environ),stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=30)
@@ -18,9 +19,121 @@ def _git(checkout,*args):
     return result.stdout.decode('utf-8').strip()
 
 def _write(path,value):
+    path=safe_config_path(path)
     data=(json.dumps(value,sort_keys=True,ensure_ascii=True)+'\n').encode('utf-8')
     with Path(path).open('xb') as stream: stream.write(data); stream.flush(); os.fsync(stream.fileno())
     return hashlib.sha256(data).hexdigest()
+
+
+class _ClaudePrelaunch(Exception):
+    def __init__(self,state,evidence=None):
+        self.state,self.evidence=state,dict(evidence or {})
+        self.evidence['claude_model_started']=False
+
+
+def _claude_executable(profile):
+    path=safe_config_path(profile['argv'][0]);before=path.stat()
+    if before.st_nlink!=1 or not 0<before.st_size<=536870912:
+        raise ValueError('Unsafe Claude executable')
+    digest=hashlib.sha256();size=0
+    with path.open('rb') as stream:
+        while chunk:=stream.read(65536):
+            size+=len(chunk)
+            if size>536870912: raise ValueError('Oversize Claude executable')
+            digest.update(chunk)
+    after=safe_config_path(path).stat()
+    if (before.st_dev,before.st_ino,before.st_size,before.st_mtime_ns)!=(after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns):
+        raise ValueError('Claude executable drift')
+    return dict(sha256=digest.hexdigest(),bytes=size)
+
+
+def _claude_read(path):
+    path=safe_config_path(path)
+    if path.stat().st_nlink!=1 or path.stat().st_size>2097152:
+        raise ValueError('Unsafe Claude context')
+    with path.open('rb') as stream: data=stream.read(2097153)
+    if len(data)>2097152: raise ValueError('Oversize Claude context')
+    return data
+
+
+def _claude_context(attempt,request,request_hash):
+    from .claude_adapter import verify_instruction_bundle
+    if hashlib.sha256(_claude_read(attempt['request_path'])).hexdigest()!=request_hash:
+        raise ValueError('Claude request drift')
+    verify_instruction_bundle(attempt)
+    return dict(attempt,request_content=request)
+
+
+def _prepare_claude(attempt,profile,request,request_hash,guard,cancel):
+    from .claude_adapter import (claude_child_environment,prepare_mcp_config,
+        local_update_preflight,validate_probe,ClaudeEventParser,SUPPORTED_VERSION,
+        prepare_instruction_bundle,verify_instruction_bundle)
+    evidence={}
+    try:
+        env=claude_child_environment(os.environ)
+        attempt=dict(attempt,**prepare_mcp_config(Path(attempt['directory'])))
+        bundle=prepare_instruction_bundle(attempt);attempt.update(bundle)
+        context=_claude_context(attempt,request,request_hash)
+        argv=build_invocation(context,profile)  # Bound prompt size before any child.
+        evidence['claude_instruction_bundle_sha256']=bundle['instruction_bundle_sha256']
+        evidence['claude_instruction_bundle_bytes']=bundle['instruction_bundle_bytes']
+        evidence['claude_instruction_file_count']=bundle['instruction_bundle_file_count']
+        evidence['claude_instructions_sha256']=hashlib.sha256(_claude_read(
+            Path(attempt['directory'])/'claude-instructions.json')).hexdigest()
+        executable=_claude_executable(profile)
+        snapshot=local_update_preflight(attempt['worktree'],profile['checkout'],env)
+        evidence['claude_preflight_sha256']=_write(Path(attempt['directory'])/'claude-preflight.json',snapshot)
+        probes={};probe_results={}
+        root=Path(attempt['directory'])/'probes';root.mkdir()
+        for name,cap in [('version',65536),('help',1048576)]:
+            if cancel(): raise _ClaudePrelaunch('cancelled',evidence)
+            if (not guard() or _claude_executable(profile)!=executable or
+                    local_update_preflight(attempt['worktree'],profile['checkout'],env)!=snapshot or
+                    verify_instruction_bundle(attempt)!=bundle):
+                raise _ClaudePrelaunch('needs_input',evidence)
+            directory=root/name;directory.mkdir()
+            observed=bytearray()
+            def collect(chunk):
+                if len(observed)+len(chunk)>cap: raise ValueError('probe_limit')
+                observed.extend(chunk)
+            result=run_command([*profile['argv'],'--'+name],attempt['worktree'],min(10,profile['timeout_seconds']),
+                env,cancel_requested=cancel,stdout_observer=collect,
+                capture=dict(directory=directory,max_bytes_per_stream=profile['log_max_bytes']))
+            probe_results[name]=result
+            evidence['claude_'+name+'_probe_sha256']=_write(directory/'process.json',result)
+            evidence['claude_'+name+'_probe_started']=bool(result.get('started'))
+            evidence['claude_'+name+'_probe_cleanup_confirmed']=bool(result.get('cleanup_confirmed'))
+            evidence['claude_'+name+'_probe_timed_out']=result['status']=='timeout'
+            evidence['claude_'+name+'_probe_cancelled']=result['status']=='cancelled'
+            if not result.get('cleanup_confirmed') or result['status'] in ('unknown','cleanup_failed'):
+                raise _ClaudePrelaunch('unknown',evidence)
+            if result['status'] in ('timeout','cancelled'):
+                # A probe is still in claimed/prelaunch, not model execution.
+                # Keep the actual timed-out process evidence without inventing
+                # an illegal claimed->timed_out transition or a retry proof.
+                raise _ClaudePrelaunch('needs_input' if result['status']=='timeout' else 'cancelled',evidence)
+            if result['status']!='passed' or result.get('stdout_tail_unknown',True) or result.get('stdout_observer_failed'):
+                raise _ClaudePrelaunch('needs_input',evidence)
+            probes[name]=bytes(observed)
+            if name=='version' and probes[name].decode('utf-8').strip()!=SUPPORTED_VERSION+' (Claude Code)':
+                raise _ClaudePrelaunch('needs_input',evidence)
+        probe=validate_probe(probes['version'],probes['help'],profile['claude']['version'])
+        evidence['claude_probes_sha256']=_write(Path(attempt['directory'])/'claude-probes.json',
+            dict(version=1,**{k:attempt[k] for k in ('run_id','attempt_id','source_sha')},probe=probe,
+                 processes=probe_results,executable=executable,installed_execution_verified=False))
+        if cancel(): raise _ClaudePrelaunch('cancelled',evidence)
+        def binding():
+            return (guard() and _claude_executable(profile)==executable and
+                    local_update_preflight(attempt['worktree'],profile['checkout'],env)==snapshot and
+                    build_invocation(_claude_context(attempt,request,request_hash),profile)==argv)
+        if not binding():
+            raise _ClaudePrelaunch('needs_input',evidence)
+        parser=ClaudeEventParser(attempt,profile['claude']['stream_max_bytes'],profile['claude']['line_max_bytes'])
+        return argv,env,parser,evidence,binding
+    except _ClaudePrelaunch:
+        raise
+    except (ValueError,OSError,UnicodeError,TypeError,KeyError,RecursionError,OverflowError) as error:
+        raise _ClaudePrelaunch('needs_input',evidence) from error
 
 def prepare_attempt(job,profile):
     for key in ('run_id','attempt_id'):
@@ -71,7 +184,21 @@ def execute_one(config,queue,*,owner_id=None):
         if job is None: return dict(status='idle')
         run=job['run_id']; effect=False
         def record(state,evidence=None):
-            queue.record(run,owner_id,state,evidence or {})
+            values=dict(evidence or {})
+            try:
+                queue.record(run,owner_id,state,values)
+            except ExecutorCancellationFence:
+                if state=='running':
+                    raise  # The launch callsite must return without any child.
+                # Positive files may already exist. Keep them untouched as
+                # forensic candidates; only the committed queue is authority.
+                if 'claude_protocol_validated' in values:
+                    values['claude_protocol_validated']=False
+                for key in ('result_sha256','claude_events_sha256'):
+                    if key in values: values['uncommitted_'+key]=values.pop(key)
+                values['completion_cancel_fenced']=True
+                queue.record(run,owner_id,'cancelled',values)
+                state='cancelled'
             return dict(run_id=run,status=state)
         try:
             profile=config['profiles'].get(job['profile_id'])
@@ -93,14 +220,61 @@ def execute_one(config,queue,*,owner_id=None):
             if queue.status(run)['cancel_requested']: return record('cancelled',dict(no_child_created=True))
             if _git(profile['checkout'],'rev-parse','--verify',profile['source_ref']+'^{commit}')!=attempt['source_sha']: return record('needs_input',dict(no_child_created=True))
             logs=Path(attempt['directory'])/'logs'; logs.mkdir()
-            record('running',dict(launch_intent=True,request_sha256=request_hash))
-            result=run_command(build_invocation(attempt,profile),attempt['worktree'],profile['timeout_seconds'],child_environment(os.environ),cancel_requested=lambda:bool(queue.status(run)['cancel_requested']),capture=dict(directory=logs,max_bytes_per_stream=profile['log_max_bytes']))
+            parser=None;claude_evidence={}
+            if profile['kind']=='claude':
+                record('claimed',dict(claude_probe_intent=True))
+                def guard():
+                    return (_authorized(config,job,profile) and _git(profile['checkout'],'rev-parse','--verify',
+                        profile['source_ref']+'^{commit}')==attempt['source_sha'])
+                try:
+                    argv,environment,parser,claude_evidence,claude_binding=_prepare_claude(attempt,profile,request,request_hash,
+                        guard,lambda:bool(queue.status(run)['cancel_requested']))
+                except _ClaudePrelaunch as error:
+                    return record(error.state,error.evidence)
+            else:
+                argv=build_invocation(attempt,profile);environment=child_environment(os.environ)
+            try:
+                record('running',dict(launch_intent=True,request_sha256=request_hash))
+            except ExecutorCancellationFence:
+                cancelled=dict(claude_evidence,claude_model_started=False) if parser is not None else dict(no_child_created=True)
+                return record('cancelled',cancelled)
+            options=dict(cancel_requested=lambda:bool(queue.status(run)['cancel_requested']),
+                capture=dict(directory=logs,max_bytes_per_stream=profile['log_max_bytes']))
+            if parser is not None: options['stdout_observer']=parser.observe
+            result=run_command(argv,attempt['worktree'],profile['timeout_seconds'],environment,**options)
             _write(Path(attempt['directory'])/'process.json',result)
             evidence={k:v for k,v in result.items() if k.endswith(('_sha256','_bytes','_truncated','_tail_unknown')) or k in ('started','cleanup_confirmed','exit_code')}
+            evidence.update(claude_evidence)
+            outcome=None
+            if parser is not None:
+                outcome=parser.finish()
+                evidence['claude_model_started']=bool(result.get('started'))
+                evidence['claude_protocol_validated']=False
+                observation=dict(outcome['evidence'],protocol_validated=False)
+                evidence['claude_observations_sha256']=_write(Path(attempt['directory'])/'claude-observations.json',
+                    dict(version=1,**{k:attempt[k] for k in ('run_id','attempt_id','source_sha')},
+                         validated=False,reason=outcome['reason'],evidence=observation,
+                         private_metadata=outcome['private_metadata']))
             if not result.get('cleanup_confirmed') or result['status'] in ('unknown','cleanup_failed'): return record('unknown',evidence)
             if result['status'] in ('timeout','cancelled'): return record('timed_out' if result['status']=='timeout' else 'cancelled',evidence)
-            if not result.get('started'):
+            if parser is not None and queue.status(run)['cancel_requested']: return record('cancelled',evidence)
+            if not result.get('started') and parser is None:
                 evidence.update(no_child_created=True,prelaunch_failure=True)
+            if outcome is not None:
+                try:
+                    binding_valid=claude_binding()
+                except (ValueError,OSError,UnicodeError,TypeError,KeyError,RecursionError,OverflowError):
+                    binding_valid=False
+                if queue.status(run)['cancel_requested']: return record('cancelled',evidence)
+                if not binding_valid: return record('needs_input',evidence)
+                if outcome['reason']=='permission_denied': return record('needs_input',evidence)
+                if (result['status']!='passed' or not outcome['valid'] or result.get('stdout_tail_unknown',True) or
+                        result.get('stdout_observer_failed')): return record('failed',evidence)
+                evidence['claude_events_sha256']=_write(Path(attempt['directory'])/'claude-events.json',
+                    dict(version=1,**{k:attempt[k] for k in ('run_id','attempt_id','source_sha')},
+                         valid=True,reason=None,evidence=outcome['evidence']))
+                evidence['claude_protocol_validated']=True
+                _write(attempt['result_path'],outcome['result'])
             if result['status']!='passed': return record('failed',evidence)
             try: value=validate_result(attempt['result_path'],attempt,65536)
             except ValueError: return record('failed',evidence)

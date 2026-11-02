@@ -25,6 +25,26 @@ class QueueTests(unittest.TestCase):
         self.q.record(job['run_id'],owner,'running',{})
         self.q.record(job['run_id'],owner,'unknown',{})
         with self.assertRaises(ValueError): self.q.record(job['run_id'],owner,'running',{})
+
+    def test_committed_cancel_fences_known_terminal_records_atomically(self):
+        for state in ('execution_completed','failed','needs_input','timed_out'):
+            with self.subTest(state=state):
+                receipt=self.q.submit(self.request(),'a'*64);owner=str(uuid.uuid4());job=self.q.claim(owner)
+                self.q.record(job['run_id'],owner,'running',{})
+                other=ExecutionQueue(self.q.path);other.cancel(receipt['receipt_id'])
+                with self.assertRaises(ValueError) as caught:
+                    self.q.record(job['run_id'],owner,state,{'claude_protocol_validated':True})
+                self.assertEqual(type(caught.exception).__name__,'ExecutorCancellationFence')
+                saved=self.q.status(job['run_id']);self.assertEqual(saved['state'],'running')
+                self.assertNotIn('claude_protocol_validated',saved['evidence'])
+                self.q.record(job['run_id'],owner,'cancelled',{})
+
+    def test_unknown_outcome_retains_precedence_over_committed_cancel(self):
+        for cleanup in (False,True):
+            self.q.submit(self.request(),'a'*64);owner=str(uuid.uuid4());job=self.q.claim(owner)
+            self.q.record(job['run_id'],owner,'running',{});self.q.cancel(job['run_id'])
+            self.q.record(job['run_id'],owner,'unknown',{'cleanup_confirmed':cleanup})
+            self.assertEqual(self.q.status(job['run_id'])['state'],'unknown')
     def test_unknown_consumes_capacity_and_unknown_owner_not_recovered(self):
         for _ in range(3): self.q.submit(self.request(),'a'*64)
         for _ in range(2):
