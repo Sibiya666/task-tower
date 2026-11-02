@@ -89,7 +89,16 @@ def identity_matches(snapshot, candidate):
             and len(repo['index'].get(task_id, [])) == 1)
 
 
-def collect_snapshot(connections: list, *, store_factory, source_factory) -> dict:
+def collect_snapshot(connections: list, *, store_factory=None, source_factory=None) -> dict:
+    # Resolve defaults only at call time: dispatcher imports this collector and
+    # owns the existing authenticated GitHubSource factory. Explicit factories
+    # retain their original transport seam and never trigger default auth.
+    if store_factory is None:
+        from .github_tasks import GitHubTasks
+        store_factory = GitHubTasks
+    if source_factory is None:
+        from .dispatcher import _source
+        source_factory = _source
     snapshot = {}
     for connection in connections:
         key = connection.repository.casefold()

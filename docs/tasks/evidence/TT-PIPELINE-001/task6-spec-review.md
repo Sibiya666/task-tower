@@ -1,0 +1,51 @@
+# Task 6 independent specification clarification review
+
+Verdict: **accepted within the Task 6 design boundary**, 2026-11-02. Reviewer: fresh independent `/root/pipeline_task6_spec_review`, distinct from the author. No blocking findings remain in the reviewed clarification. Builder check: nothing important left within this boundary.
+
+## Exact reviewed bindings
+
+Reviewed the complete working-tree document diff against HEAD `62fd437afeac079aacc0177cd4a9710558ae8c80`, repository AGENTS, original/R1 spec-review evidence, implementation ledger, Task 4 review and existing host authentication/environment/controller seams. WIP publication code is outside this review. No product source was changed or accepted here.
+
+| File | Raw SHA256 | Canonical SHA256 |
+| --- | --- | --- |
+| docs/superpowers/specs/2026-11-01-stage-pipeline-design.md | 68f611b225dbb412f3f136f8da1f38b1e217378703fe25a04640580686e6a4db | 68f611b225dbb412f3f136f8da1f38b1e217378703fe25a04640580686e6a4db |
+| docs/superpowers/plans/2026-11-01-stage-pipeline.md | 107b4f89406dd2c9a3ba1962294f2472d83c335579a9786c3c0a044d3f4882b2 | 107b4f89406dd2c9a3ba1962294f2472d83c335579a9786c3c0a044d3f4882b2 |
+
+Independently recomputed with installed Python after the final correction. Canonicalization is strict UTF-8, CRLF/bare CR to LF, preserving all other bytes/content. Changing either document invalidates this scoped verdict. The earlier proposed plan `4040e12c06237ab148c053fb21f0a98afbb7f1fbd32ed041fcc199fd00fd5c6f` had a contradictory global all-children stripping sentence; the author corrected it before this final binding. It is not the accepted plan.
+
+## Findings and preserved contracts
+
+The host/model distinction is coherent. Existing github_source.resolve_token explicitly reads GH_TOKEN/GITHUB_TOKEN before existing credential helpers. Stripping those keys from fixed trusted host API workers breaks environment-only installations. Inheriting them intentionally exposes existing credentials to these trusted host CLI processes; this review does not hide that exposure or describe containment as a credential sandbox. The exception is limited to fixed contained host worker/dispatcher invocations, grants no scopes and stores no credentials. Model roles, custom adapters and configured checks still use case-insensitive child_environment stripping. Host workers must not forward raw environments to them. Safe Git child filtering and separate Git transport authentication remain unchanged. Credentials remain prohibited in argv, JSON, configuration, logs and artifacts.
+
+The slow genuine dispatcher/source operation belongs in a cancellable fixed helper through the existing runner. That preserves genuine source/dependency verification while permitting the main watch loop to observe cancellation and completed workers within the existing five-second cleanup budget. Helper results remain bounded neutral identities/status/digests, without raw Issue bodies. Committed dispatcher intents remain lookup-only, never resubmitted because a helper failed or disappeared.
+
+Journal-owned singleton claim/heartbeat/release/read-only health APIs complete the already specified controller responsibility and existing controller table. Actual owner UUID/PID and lock proof, fixed validated health values, no caller SQL or arbitrary takeover, and no unknown-run/component release preserve the private schema and fencing design. This is additive internal orchestration scope, not a private JSON configuration extension, migration, distributed lease or second process runner.
+
+Unchanged Task 1–5 requirements still govern private authority, immutable criteria/manifests/checkpoints, fresh independent roles and receipts, durable launch/effect intents, deadlines/budgets, actual checks, publication and unknown outcomes. Their original acceptance remains content-bound to the source/dependencies actually reviewed; this clarification neither reaccepts modified code nor retroactively proves any code. Any journal/worker changes made for Task 6 require fresh focused review and integration verification against those contracts.
+
+## Required later evidence and limits
+
+Task 6 is not implemented or accepted by this receipt. Real subprocess tests must prove environment-only host API authentication separately from downstream model/custom/check token stripping, and assert credentials absent from arguments/results/logs/configuration/artifacts. A keyring-only or already-authenticated installed smoke does not prove environment-only mode. Required tests also cover a genuinely slow source helper cancelled within the cleanup budget, duplicate controller claims, controller exit preserving unknown locks, genuine readiness/dependency fixtures and no delivery resubmit after intent. These are requirements, not passing test claims.
+
+No product tests were run for this document-only review. Shared AGENTS/runtime wording still contains historical blanket child-stripping language; the coordinator must reconcile it to this precise host exception under Task 7 before final integration. This is documentation follow-through, not permission to weaken role stripping. Full suites, three-OS CI, actual Task 6 implementation review, installed-runtime limitations, whole-PR exact-head/base acceptance, serialized main/postmerge acceptance and automatic closure remain required. No commit, push or external write was made by this reviewer.
+
+## R2 orchestration clarification — current scoped design verdict
+
+Verdict: **accepted within the Task 6 design boundary**, 2026-11-02, by independent `/root/pipeline_task6_spec_review`. This R2 binding supersedes the earlier Task 6 document binding above; the historical review remains intact. No design blockers remain. Reviewed exact document delta against HEAD `bd13f954823b7a7d7ad21416b2e5a7058b2c922a` and independently recomputed both raw and canonical hashes:
+
+| File | Raw SHA256 | Canonical SHA256 |
+| --- | --- | --- |
+| docs/superpowers/specs/2026-11-01-stage-pipeline-design.md | 4fe7ff944bd39c59ba74e90ef10405c9020311fd3035554c0870d5e31648c72d | 4fe7ff944bd39c59ba74e90ef10405c9020311fd3035554c0870d5e31648c72d |
+| docs/superpowers/plans/2026-11-01-stage-pipeline.md | 4af0a9f7114e3e253658455fc3f579dde91c935d6fd5d5971d30ef7511dea83c | 4af0a9f7114e3e253658455fc3f579dde91c935d6fd5d5971d30ef7511dea83c |
+
+Canonicalization remains strict UTF-8 with CRLF/bare CR converted to LF, otherwise preserving content. Any changed input invalidates this scoped verdict.
+
+Same-repository serialization is an honest, material MVP limit: the accepted roles compare the full shared Git show-ref set, so concurrent linked-worktree commits can invalidate otherwise independent actions. Atomic repository-wide action exclusion, enforced by public work as well as watch and retained for unknown ownership, preserves that safety contract. Actual two-repository overlap remains required proof of two-slot runtime concurrency. Ready-first scheduling may finish one same-repository run without fair stage interleaving. This does not fulfill the user's ultimate general parallel architecture; #18 general scheduling/concurrency and #19 distributed ownership remain backlog obligations. It does not restrict active-chat Issue worktree coordination to one Issue or replace the serialized merge/main barrier.
+
+A positively completed enabled final commit or push must return to ready before a later helper continues. The exact accepted test input remains immutable; a genuine separately verified host-evidence final commit establishes the path from test checkpoint T to final head F. Setting ready, fabricating a new test approval, or observing a missing response cannot substitute for actual durable completed effect/identity/product/evidence proof. Unknown effects and uncertain cleanup retain fencing. A dead-owner ready cancellation may release capacity only through genuine safe-ready history and no unresolved launch/effect proof.
+
+Directly checked the sibling accepted Issue #17 R1 design at task-tower-pr-worker/docs/superpowers/specs/2026-11-02-pr-worker-design.md, raw SHA256 a987e1df4cf20c2e6531f80f0f6852325c250638b427d86bcd97c7c347b32efa, and its current R1 acceptance receipt. Its explicit no automatic branch update/rebase paragraph agrees with R2: a trusted upstream project source supplies refreshed branch/checks/stage evidence as applicable, #17 obtains a fresh complete exact-head/base review, and broader recovery remains #26. This clarifies future authority without granting either worker automatic rebase, unknown reset or stale acceptance reuse.
+
+process_count now explicitly counts managed model/custom roles and configured checks. Fixed trusted host-control helper concurrency and task deadlines bound their separate orchestration; helper restart cannot renew persisted deadlines, erase attempts or create another process containment layer. This is a documented budget meaning, not a claim of a total OS subprocess count or monetary cap. Existing minimum profile limits, monotonic/backward-clock handling and pre-effect budget checks remain binding. Model/custom/check token stripping, safe Git environment filtering, no credential argv/JSON/config/log/artifact, existing authentication only and no added scopes remain unchanged.
+
+Implementation evidence remains outstanding. New real-process tests must prove two-repository overlap versus same-repository atomic exclusion (including public work and unknown owners), separate-process final commit -> push -> PR completion, blocked network Git cancellation for public work and watch, and safe-ready cancellation with positive proof. They supplement rather than replace earlier genuine dispatcher/dependency, environment-only auth, descendant cleanup, no-resubmit and unknown-lock tests. This design review ran no product tests, reviewed no WIP CLI implementation and accepts no implementation. Task 1-5 receipts remain bound to their original reviewed source/dependencies; changed journal/publication/worker paths need fresh focused review. Shared AGENTS/README runtime reconciliation remains the coordinator's Task 7 obligation before final integration. Whole-suite/three-OS CI, pilot limitations and independent PR/main acceptance gates remain unchanged. Builder check: nothing important left within this design boundary.

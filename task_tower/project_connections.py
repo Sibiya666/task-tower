@@ -76,7 +76,8 @@ def safe_config_path(path):
             continue
         if stat.S_ISLNK(info.st_mode) or getattr(info, 'st_file_attributes', 0) & 0x400:
             raise ValueError('Unsafe connections path')
-    if path.exists() and not path.is_file(): raise ValueError('Unsafe connections path')
+        if part == path and not stat.S_ISREG(info.st_mode):
+            raise ValueError('Unsafe connections path')
     return path
 
 
