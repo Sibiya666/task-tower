@@ -29,14 +29,14 @@
       "status": "accepted",
       "reviewer": "pipeline_development_acceptance",
       "evidence": "evidence/TT-PIPELINE-001/development-review.md",
-      "sha256": "6601b78698608d4051d5f7963865997424488507cdcdce11c12ee6d69fdd5abb",
+      "sha256": "8e6cee7741aa56212aab75ff11775b2f744b45b76101ce8f7beadc6b712124ca",
       "hash_scheme": "sha256-utf8-lf-v1"
     },
     "test": {
       "status": "accepted",
       "reviewer": "books_native_smoke_impl",
       "evidence": "evidence/TT-PIPELINE-001/test-review.md",
-      "sha256": "e6edf44d49b0d5de73b65028ee3efb512acd7565357fb7f8c15237755cc225c9",
+      "sha256": "4118ecc82292e09b8e2bf748796b563a970075d3c0aef2100c026e62a29e1ccb",
       "hash_scheme": "sha256-utf8-lf-v1"
     },
     "postmerge": {

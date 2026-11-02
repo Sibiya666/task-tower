@@ -173,3 +173,19 @@ Independent existing bundled-Python command:
 Read the independent test review's completed e59 CI evidence: Windows713-test full pass and Ubuntu success are genuine completed observations; macOS has two fixture failures before the intended negative guards. This correction addresses that specifically identified fixture assumption. The older a569 generic policy_revoked cause remains unproven. The corrected-source local session that disappeared without terminal metadata remains incomplete; its65536-byte prefix is neither a full pass nor a diagnosed failure. No restart/substituted result is claimed by this development review.
 
 The qualified source8981c6d installed pilot, prior parked outcomes and preserved1054-file evidence remain separate and unchanged; no installed model rerun exercised this fixture correction. Independent functional TEST and final exact-head six-context CI/whole-PR approval remain mandatory before merge, followed by serialized exact-main/postmerge/automatic closure. This review does not waive or predeclare those gates. Only this report was edited by this reviewer; no product, docs, card, configuration, pilot/journal, commit, push or external state was changed.
+
+
+## Same-Issue postmerge timeout recovery — scoped development acceptance
+
+2026-11-02, independent development reviewer distinct from recovery author: **ACCEPT the exact bounded workflow correction below.** Original development review history remains byte-for-byte as prefix SHA256 `6601b78698608d4051d5f7963865997424488507cdcdce11c12ee6d69fdd5abb`. Recovery base is exact merged main `d5cf8953b70caf5329d5173b7fb4a15eaa4df978`. This is the same Issue16's incomplete postmerge cycle, not authorization to pass its barrier or integrate unrelated work.
+
+Reviewed the actual entire workflow delta and new recovery evidence. The sole operational change is `.github/workflows/postmerge.yml` verify-merge job timeout15 to45 minutes. Independently compared normalized workflow bytes with the base Git blob: they are identical after precisely this single substitution. The three-platform matrix, exact merge-commit checkout, read-only contents permission, disabled persisted checkout credentials, Python3.11 full unittest command, failure export/artifact and explicit failed-test gate are unchanged. Product source and test behavior are unchanged; no cancelled run gains approval.
+
+| Reviewed file | Raw SHA256 | Canonical SHA256 |
+| --- | --- | --- |
+| .github/workflows/postmerge.yml | `7dd1c8797dbddf1232ab88985d8dfbbba50c9419d40618a7935ed0e6028233ee` | `194fca1f6743aac62dbbf7b29e15a2ff402f70e92ff260a91b66bc9c79a1d570` |
+| docs/tasks/evidence/TT-PIPELINE-001/postmerge-timeout-recovery.md | `ce77c22d21b6b4148d51122214d803508181443c9c732ee6fc48d45a936aacdf` | same |
+
+The recovery evidence records postmerge run41451105738 Windows job125296237186 exceeding the explicit15-minute maximum, Linux/macOS success, and a preceding successful Windows full-suite job taking about30 minutes including setup/cleanup. A bounded45-minute job budget accommodates the demonstrated runtime without weakening checks or inferring that timeout means product correctness. This differs from the older unproven a569 authority failure; that uncertainty remains preserved. No full product suite was rerun for this configuration-only delta. Fresh six-context CI, independent TEST/whole-PR review, exact-head/base merge controls and a successful new exact-main postmerge/automatic publication cycle remain required.
+
+The recovery note honestly keeps Issue16 open and main acceptance pending. No Issue closure, delivery/journal reset, installed-model invocation or pilot rewrite is supplied by this review. The reviewer appended only this report and refreshed only the task card's development evidence digest as explicitly authorized; no source, workflow, shared docs, test receipt, commit, push or external state was changed by this reviewer.
