@@ -47,7 +47,7 @@ class ControllerTests(unittest.TestCase):
             parsed._connections_bytes=b'fixed'
             return [],object(),{}
         for report,expected in ((dict(status='unknown',reason='cleanup_unknown'),1),(dict(status='executing',reason=None),1),(dict(status='publishing',reason=None),1),(dict(status='needs_input',reason='environment_unavailable'),0)):
-            with patch('task_tower.pipeline._runtime',side_effect=runtime),patch('task_tower.pipeline.work',return_value=report),patch.object(Path,'read_bytes',return_value=b'fixed'),contextlib.redirect_stdout(io.StringIO()):
+            with patch('task_tower.pipeline.native_execution_supported',return_value=True),patch('task_tower.pipeline._runtime',side_effect=runtime),patch('task_tower.pipeline.work',return_value=report),patch.object(Path,'read_bytes',return_value=b'fixed'),contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(pipeline.main(args),expected)
 
     def test_live_and_unprovable_controller_never_stolen(self):

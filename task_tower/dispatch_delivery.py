@@ -14,6 +14,7 @@ import uuid
 
 from . import processes
 from .project_connections import safe_config_path
+from .executor_queue import _private_stat
 
 APP_ID = 1414808644
 RECEIPT = re.compile(r'[A-Za-z0-9._:-]{1,256}', re.ASCII)
@@ -42,15 +43,16 @@ class DeliveryJournal:
         paths = [self.path, *(Path(str(self.path)+s) for s in ('-journal','-wal','-shm'))]
         for path in paths:
             safe_config_path(path)
-            if path.exists() and path.stat().st_nlink != 1:
-                raise ValueError('Unsafe delivery journal')
+            info=_private_stat(path,transient=path!=self.path) if path.exists() else None
             canonical = str(path.resolve()).casefold()
             for checkout in self.checkouts:
                 root = str(checkout).casefold().rstrip('/\\')
                 if canonical == root or canonical.startswith(root + os.sep):
                     raise ValueError('Delivery journal must be outside checkouts')
             for other in self.forbidden_paths:
-                if canonical == str(other.resolve()).casefold() or (path.exists() and other.exists() and os.path.samefile(path,other)):
+                safe_config_path(other)
+                other_info=_private_stat(other) if other.exists() else None
+                if canonical == str(other.resolve()).casefold() or (info is not None and other_info is not None and os.path.samestat(info,other_info)):
                     raise ValueError('Delivery journal aliases an input')
 
     @contextmanager
@@ -126,8 +128,8 @@ class DeliveryJournal:
                 except BaseException:
                     if write: db.rollback()
                     raise
-        except (OSError,sqlite3.Error):
-            raise ValueError('Delivery journal unavailable; preserve journal and restore access') from None
+        except (OSError,sqlite3.Error) as error:
+            raise ValueError('Delivery journal unavailable; preserve journal and restore access') from error
 
     def rows(self):
         with self._database() as db:

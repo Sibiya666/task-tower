@@ -4,6 +4,7 @@ import copy
 import io
 import json
 import os
+import sqlite3
 from pathlib import Path
 import sys
 import threading
@@ -62,6 +63,7 @@ class WatchTests(unittest.TestCase):
             time.sleep(.05)
         self.fail('Watch condition timed out: '+str(self.journal.status()))
 
+    @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native pipeline execution')
     def test_real_dispatch_adapter_to_six_roles_and_host_tests(self):
         self.start()
         self.until(lambda:any(r['state']=='ready_for_pr' for r in self.journal.status()['runs']))
@@ -79,6 +81,7 @@ class WatchTests(unittest.TestCase):
             if path.is_file() and path.suffix in ('.json','.log','.md'):
                 self.assertNotIn(b'fixture-env-only-private-value',path.read_bytes(),str(path))
 
+    @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native pipeline execution')
     def test_slow_source_helper_does_not_block_watch_and_cancels(self):
         value=json.loads(self.http.read_text());value.update(slow=True,started=str(self.root/'source-started'))
         self.http.write_text(json.dumps(value));self.start()
@@ -91,6 +94,7 @@ class WatchTests(unittest.TestCase):
         self.assertTrue(host.outcome['cleanup_confirmed'])
         self.assertEqual(self.journal.status()['runs'],[])
 
+    @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native pipeline execution')
     def test_shutdown_budget_with_external_sqlite_lock_and_live_owned_helper(self):
         task=self.config['tasks'][0]
         receipt=pipeline.adapter(dict(operation='submit',delivery_id=str(uuid.uuid4()),repository='owner/repo',issue=16,task_id=task['task_id'],runner_label='local'),self.config,self.journal)
@@ -119,6 +123,7 @@ class WatchTests(unittest.TestCase):
         self.assertFalse(self.journal.controller_health()['health']['stopped'])
         self.journal.recover();self.assertEqual(self.journal.status(receipt['receipt_id'])['state'],'unknown')
 
+    @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native pipeline execution')
     def test_public_work_interrupt_under_exclusive_lock_stops_first_and_exits_uncertain(self):
         task=self.config['tasks'][0]
         receipt=pipeline.adapter(dict(operation='submit',delivery_id=str(uuid.uuid4()),repository='owner/repo',issue=16,task_id=task['task_id'],runner_label='local'),self.config,self.journal)
@@ -153,6 +158,7 @@ class WatchTests(unittest.TestCase):
         self.assertTrue(host.outcome['cleanup_confirmed'])
         self.journal.recover();self.assertEqual(self.journal.status(receipt['receipt_id'])['state'],'unknown')
 
+    @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native pipeline execution')
     def test_watch_interrupt_uses_shared_shutdown_budget_and_preserves_unknown(self):
         task=self.config['tasks'][0]
         receipt=pipeline.adapter(dict(operation='submit',delivery_id=str(uuid.uuid4()),repository='owner/repo',issue=16,task_id=task['task_id'],runner_label='local'),self.config,self.journal)
@@ -168,6 +174,7 @@ class WatchTests(unittest.TestCase):
         self.assertTrue(self.journal.controller_health()['health']['stopped'])
         self.assertEqual(self.journal.status(receipt['receipt_id'])['state'],'unknown')
 
+    @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native pipeline execution')
     def test_cancelled_owned_action_is_contained_and_fenced(self):
         task=self.config['tasks'][0]
         receipt=pipeline.adapter(dict(operation='submit',delivery_id=str(uuid.uuid4()),repository='owner/repo',issue=16,task_id=task['task_id'],runner_label='local'),self.config,self.journal)
@@ -185,6 +192,7 @@ class WatchTests(unittest.TestCase):
             self.assertEqual(self.journal.status(receipt['receipt_id'])['state'],'unknown')
         finally:stop.set();host.done.wait(5);host.close()
 
+    @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native pipeline execution')
     def test_public_work_task_budget_stops_real_blocked_host(self):
         f=self.source.fixture;f.value['task_timeout_seconds']=2;f.path.write_text(json.dumps(f.value))
         _,self.journal,self.config=pipeline._runtime(self.args)
@@ -216,6 +224,7 @@ class WatchTests(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()):self.assertEqual(pipeline.main(['cancel',*common,'--run-id',receipt['receipt_id']]),0)
         self.assertEqual(self.journal.status(receipt['receipt_id'])['state'],'cancelled')
 
+    @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native pipeline execution')
     def test_clean_dead_ready_run_cancels_after_profile_revocation(self):
         task=self.config['tasks'][0]
         receipt=pipeline.adapter(dict(operation='submit',delivery_id=str(uuid.uuid4()),repository='owner/repo',issue=16,task_id=task['task_id'],runner_label='local'),self.config,self.journal)
@@ -231,13 +240,16 @@ class WatchTests(unittest.TestCase):
         with self.assertRaises(ValueError):pipeline._runtime(self.args)
 
     def test_read_failure_backoff_is_exact_and_never_submits(self):
-        value=json.loads(self.http.read_text());value['unavailable']=True;self.http.write_text(json.dumps(value))
-        host=pipeline._Host(self.args,'_dispatch',30,threading.Event())
-        try:
-            self.assertTrue(host.done.wait(30));self.assertTrue(host.result['read_failure'])
-            self.assertEqual(pipeline.DeliveryJournal(self.args.dispatch_journal,readonly=True).rows(),[])
-            self.assertEqual(self.journal.status()['runs'],[])
-        finally:host.close()
+        self.source.transport_unavailable=True
+        with self.source.transport():
+            report=pipeline.dispatcher.tick(self.config['_connections'],self.config['_dispatch_config'],self.args.dispatch_journal)
+        self.assertTrue(report['operational_failure'])
+        self.assertEqual(pipeline.DeliveryJournal(self.args.dispatch_journal,readonly=True).rows(),[])
+        self.assertEqual(self.journal.status()['runs'],[])
+        capability=patch.object(pipeline,'native_execution_supported',return_value=True)
+        capability.start();self.addCleanup(capability.stop)
+        no_hosts=patch.object(pipeline,'_Host',side_effect=AssertionError('Backoff must not launch helpers'))
+        no_hosts.start();self.addCleanup(no_hosts.stop)
         self.start();state=self.config['_watch']
         class Finished:
             result=dict(read_failure=True)
@@ -257,14 +269,14 @@ class WatchTests(unittest.TestCase):
         meta=dict(version=1,kind='task',mode='autonomous',task_id=self.source.fixture.row['task_id'],status='open',blocked_by=['Owner/Repo#17'])
         value['issues'][0]['body']=replace_metadata('Build from installed policy',meta)
         value['issues'].append(dict(number=17,id=124,state='closed',title='Unverified',body=replace_metadata('Says done',dict(version=1,kind='task',mode='autonomous',task_id='TT-DEPENDENCY-001',status='done'))))
-        self.http.write_text(json.dumps(value))
-        host=pipeline._Host(self.args,'_dispatch',30,threading.Event())
-        try:
-            self.assertTrue(host.done.wait(30));self.assertIsNotNone(host.result)
-            self.assertEqual(self.journal.status()['runs'],[])
-            self.assertEqual(pipeline.DeliveryJournal(self.args.dispatch_journal,readonly=True).rows(),[])
-        finally:host.close()
+        self.source.issues=value['issues']
+        with self.source.transport():
+            report=pipeline.dispatcher.tick(self.config['_connections'],self.config['_dispatch_config'],self.args.dispatch_journal)
+        self.assertEqual(report['selection']['ready'],[])
+        self.assertEqual(self.journal.status()['runs'],[])
+        self.assertEqual(pipeline.DeliveryJournal(self.args.dispatch_journal,readonly=True).rows(),[])
 
+    @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native pipeline execution')
     def test_stripped_host_tokens_cannot_pass_via_keyring_fallback(self):
         env={k:v for k,v in os.environ.items() if k.upper() not in ('GH_TOKEN','GITHUB_TOKEN')}
         result=self.root/'stripped-host-result.json'
@@ -275,6 +287,7 @@ class WatchTests(unittest.TestCase):
         self.assertEqual(self.journal.status()['runs'],[])
         self.assertEqual(pipeline.DeliveryJournal(self.args.dispatch_journal,readonly=True).rows(),[])
 
+    @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native pipeline execution')
     def test_two_real_slots_clean_blocker_automatic_refill_and_unknown_retention(self):
         f=self.source.fixture
         profile=f.profile;profile['argv'][1]=str(Path(__file__).parent.resolve()/'fixtures/pipeline_watch_role.py')
@@ -306,6 +319,7 @@ class WatchTests(unittest.TestCase):
         pipeline.work(self.config,self.journal)
         self.assertEqual(before,{r['run_id']:len(self.journal.history(r['run_id'])['attempts']) for r in rows})
 
+    @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native pipeline execution')
     def test_public_work_contains_blocked_git_descendant_and_no_replay(self):
         f=self.source.fixture
         f.row['publish']['enabled']=True;f.path.write_text(json.dumps(f.value))
@@ -344,6 +358,143 @@ class WatchTests(unittest.TestCase):
         pipeline.work(self.config,self.journal)
         self.assertEqual(before,self.journal.history(run['run_id']))
 
+    def owned_role_with_delayed_cancel_read(self,delay,stop_during_read=False):
+        """Delay genuine path validation only after a real owned role launch."""
+        f=self.source.fixture;marker=self.root/'observation-role-pid'
+        wrapper=self.root/'observation-role.py'
+        wrapper.write_text('import os,time,runpy\nfrom pathlib import Path\nPath('+repr(str(marker))+').write_text(str(os.getpid()))\ntime.sleep(3)\nrunpy.run_path('+repr(f.profile['argv'][1])+',run_name="__main__")\n',encoding='utf-8')
+        f.profile['argv']=[str(Path(sys.executable).resolve()),str(wrapper)]
+        self.executor.write_text(json.dumps(dict(version=1,profiles={'local':f.profile},allowlist=f.executor['allowlist'])))
+        _,self.journal,self.config=pipeline._runtime(self.args)
+        admission=pipeline._Host(self.args,'_dispatch',30,threading.Event())
+        self.assertTrue(admission.done.wait(30));self.assertFalse(admission.result['operational_failure']);admission.close()
+        self.assertEqual(pipeline.work(self.config,self.journal)['status'],'ready')
+        original_init=pipeline._Host.__init__;original_close=pipeline._Host.close
+        observed=[];outcomes=[];stoppers=[]
+        def initialize(host,*args,**kwargs):
+            original_init(host,*args,**kwargs)
+            if host.kind!='_action':return
+            original=host.journal._safe
+            def validated_delay():
+                original()
+                if observed or not marker.exists():return
+                with contextlib.closing(sqlite3.connect(host.journal.path.resolve().as_uri()+'?mode=ro',uri=True,timeout=.1)) as db:
+                    row=db.execute("SELECT run_id FROM runs WHERE owner_id=? AND state='executing'",(host.owner,)).fetchone()
+                    attempts=[] if row is None else db.execute("SELECT attempt_id FROM attempts WHERE run_id=? AND owner_id=? AND state='launch_intent'",(row[0],host.owner)).fetchall()
+                if row is not None and attempts:
+                    observed.append(dict(owner=host.owner,run_id=row[0],attempt_id=attempts[0][0]))
+                    if stop_during_read:
+                        timer=threading.Timer(.05,host.stop.set);timer.start();stoppers.append(timer)
+                    time.sleep(delay)
+            host.journal._safe=validated_delay
+        def close(host):
+            outcomes.append(host.outcome)
+            return original_close(host)
+        start=time.monotonic()
+        with patch.object(pipeline._Host,'__init__',initialize),patch.object(pipeline._Host,'close',close):
+            result=pipeline.work(self.config,self.journal)
+        elapsed=time.monotonic()-start
+        for timer in stoppers:timer.join(1)
+        self.assertEqual(len(observed),1)
+        run=self.journal.status(observed[0]['run_id'])
+        return result,run,self.journal.history(run['run_id']),outcomes,elapsed,marker
+
+    @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native pipeline execution')
+    def test_owned_role_survives_350ms_validated_cancellation_read(self):
+        result,run,history,outcomes,elapsed,marker=self.owned_role_with_delayed_cancel_read(.35)
+        self.assertEqual(result['status'],'ready')
+        self.assertEqual(run['state'],'ready')
+        self.assertEqual(history['attempts'][-1]['state'],'completed')
+        self.assertTrue(history['attempts'][-1]['evidence']['cleanup_confirmed'])
+
+    @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native pipeline execution')
+    def test_shutdown_recovers_actual_hot_journal_only_after_contained_cleanup(self):
+        from types import SimpleNamespace
+        from tests.test_pipeline_journal import request,policy
+        from task_tower.pipeline_journal import PipelineJournal
+        for cancel_runs in (False,True):
+            with self.subTest(cancel_runs=cancel_runs):
+                directory=self.root/('hot-stop-'+str(cancel_runs));directory.mkdir()
+                journal=PipelineJournal(directory/'pipeline.sqlite3')
+                for number in range(1,81):journal.submit(request(number),policy())
+                journal.submit(dict(request(81),repository='z-unrelated/repo'),policy())
+                unrelated_owner=str(uuid.uuid4())
+                claim_code="import sys;from pathlib import Path;from task_tower.pipeline_journal import PipelineJournal;j=PipelineJournal(Path(sys.argv[1]));owner=sys.argv[2]\nwith j.owner(owner):j.claim(owner,2)"
+                unrelated=pipeline.processes.run_command([str(Path(sys.executable).resolve()),'-c',claim_code,str(journal.path),unrelated_owner],directory,20,cancel_requested=lambda:False)
+                self.assertEqual(unrelated['exit_code'],0);self.assertTrue(unrelated['cleanup_confirmed'])
+                owner=str(uuid.uuid4());saved=directory/'claimed.json'
+                code="""import json,os,sqlite3,sys
+from pathlib import Path
+from task_tower.pipeline_journal import PipelineJournal
+j=PipelineJournal(Path(sys.argv[1]))
+with j.owner(sys.argv[2]):
+ row=j.claim(sys.argv[2],2)
+ Path(sys.argv[3]).write_text(json.dumps(row))
+ db=sqlite3.connect(sys.argv[1]);db.execute('PRAGMA synchronous=FULL');db.execute('PRAGMA cache_size=1');db.execute('PRAGMA cache_spill=ON');db.execute('BEGIN IMMEDIATE');db.execute('UPDATE runs SET policy_sha256=?',('c'*64,));os._exit(23)
+"""
+                outcome=pipeline.processes.run_command([str(Path(sys.executable).resolve()),'-c',code,str(journal.path),owner,str(saved)],directory,20,cancel_requested=lambda:False)
+                self.assertEqual(outcome['exit_code'],23);self.assertTrue(outcome['cleanup_confirmed'])
+                claimed=json.loads(saved.read_text());self.assertEqual(claimed['owner_pid'],outcome['pid'])
+                sidecar=Path(str(journal.path)+'-journal');self.assertTrue(sidecar.exists())
+                crashed={p:p.read_bytes() for p in (journal.path,sidecar)}
+                with self.assertRaises(ValueError) as failure:journal.status()
+                self.assertEqual(failure.exception.__cause__.sqlite_errorname,'SQLITE_READONLY_ROLLBACK')
+                self.assertEqual(crashed,{p:p.read_bytes() for p in crashed})
+                done=threading.Event();done.set()
+                # Adapter uses only proof returned by the actual contained runner.
+                host=SimpleNamespace(owner=owner,done=done,outcome=outcome,close=lambda:None)
+                state=dict(owner=None,stop=threading.Event(),workers=[host],dispatcher=None,ticks=0,failures=0)
+                host.outcome=None  # Deliberately omit proof; do not invent cleanup.
+                self.assertFalse(pipeline._shutdown(self.config,journal,state,cancel_runs=cancel_runs))
+                self.assertEqual(crashed,{p:p.read_bytes() for p in crashed})
+                host.outcome=outcome
+                if not cancel_runs:
+                    host.done=threading.Event()  # No completed-handle proof yet.
+                    start=time.monotonic()
+                    self.assertFalse(pipeline._shutdown(self.config,journal,state,cancel_runs=False))
+                    self.assertLess(time.monotonic()-start,5)
+                    self.assertTrue(state['_shutdown_journal_done'].wait(1))
+                    self.assertEqual(crashed,{p:p.read_bytes() for p in crashed})
+                    host.done=done
+                start=time.monotonic();confirmed=pipeline._shutdown(self.config,journal,state,cancel_runs=cancel_runs)
+                self.assertLess(time.monotonic()-start,5)
+                if not confirmed:
+                    with self.assertRaises(ValueError):journal.status()
+                    self.assertEqual(crashed,{p:p.read_bytes() for p in crashed})
+                self.assertTrue(confirmed)
+                current=journal.status(claimed['run_id']);history=journal.history(claimed['run_id'])
+                self.assertEqual(current['state'],'unknown');self.assertEqual(current['reason'],'owner_dead')
+                self.assertEqual(current['owner_id'],owner);self.assertEqual(current['owner_pid'],outcome['pid'])
+                self.assertEqual(current['cancel_requested'],int(cancel_runs))
+                others=[row for row in journal.status()['runs'] if row['owner_id']==unrelated_owner]
+                self.assertEqual(len(others),1);self.assertEqual(others[0]['state'],'unknown')
+                self.assertEqual(others[0]['cancel_requested'],0)
+                self.assertEqual(history['attempts'],[]);self.assertEqual(history['effects'],[])
+                self.assertIsNone(journal.claim(str(uuid.uuid4()),2))
+                self.assertEqual(history,journal.history(claimed['run_id']))
+
+    @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native pipeline execution')
+    def test_owned_role_read_beyond_one_second_retains_unknown_intent(self):
+        result,run,history,outcomes,elapsed,marker=self.owned_role_with_delayed_cancel_read(1.2)
+        self.assertEqual(result['status'],'unknown');self.assertEqual(run['state'],'unknown')
+        self.assertEqual(history['attempts'][-1]['state'],'launch_intent')
+        self.assertTrue(outcomes[-1]['cleanup_confirmed'])
+        from task_tower.executor_queue import _dead
+        self.assertTrue(_dead(int(marker.read_text())))
+        pipeline.work(self.config,self.journal)
+        self.assertEqual(history,self.journal.history(run['run_id']))
+
+    @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native pipeline execution')
+    def test_stop_during_validated_cancel_read_remains_bounded(self):
+        result,run,history,outcomes,elapsed,marker=self.owned_role_with_delayed_cancel_read(.35,True)
+        self.assertLess(elapsed,5)
+        self.assertEqual(result['status'],'unknown');self.assertEqual(run['state'],'unknown')
+        self.assertEqual(history['attempts'][-1]['state'],'launch_intent')
+        self.assertEqual(outcomes[-1]['status'],'cancelled')
+        self.assertTrue(outcomes[-1]['cleanup_confirmed'])
+        from task_tower.executor_queue import _dead
+        self.assertTrue(_dead(int(marker.read_text())))
+
     def accepted_publication(self):
         f=self.source.fixture;f.row['publish']['enabled']=True;f.path.write_text(json.dumps(f.value))
         _git(f.profile['checkout'],'remote','add','origin','https://github.com/Owner/Repo.git')
@@ -358,6 +509,7 @@ class WatchTests(unittest.TestCase):
             if len(self.journal.history(run['run_id'])['verdicts'])==3:return run
         self.fail('Three actual independent stages not accepted')
 
+    @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native pipeline execution')
     def test_distinct_worker_processes_commit_push_and_create_one_pr(self):
         run=self.accepted_publication();owners=[]
         checkpoint=run['manifest']['checkpoint_sha']
@@ -373,6 +525,7 @@ class WatchTests(unittest.TestCase):
         pipeline.work(self.config,self.journal)
         self.assertEqual(history,self.journal.history(run['run_id']))
 
+    @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native pipeline execution')
     def test_lost_pr_response_is_unknown_and_restart_never_posts_again(self):
         run=self.accepted_publication()
         pipeline.work(self.config,self.journal);pipeline.work(self.config,self.journal)

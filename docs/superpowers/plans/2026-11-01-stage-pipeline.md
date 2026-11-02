@@ -1,5 +1,19 @@
 # Automatic Stage Pipeline Implementation Plan
 
+## Release scope amendment — user decision 2026-11-02
+
+The user explicitly deferred work not covered by Windows to the next project version. This dated amendment supersedes earlier native three-platform promises in this document; it does not change unrelated established portable interfaces or turn failed historical evidence into success.
+
+Current native execution acceptance is Windows-only. Pure policies, schemas, event/protocol parsing, source readers and the existing portable CLI keep their supported behavior and all applicable Ubuntu/macOS/Windows CI. Distinguish portable regression coverage from native platform qualification. Never remove CI matrix entries, tolerate failures, blanket-skip mixed test modules or replace real native execution with a mocked platform. Classify effects per test; preserve all portable and Windows regressions.
+
+Deferred work is tracked by [feature #58](https://github.com/Sibiya666/task-tower/issues/58), [Linux pipeline #59](https://github.com/Sibiya666/task-tower/issues/59), [macOS pipeline #60](https://github.com/Sibiya666/task-tower/issues/60), [POSIX resource/group qualification #61](https://github.com/Sibiya666/task-tower/issues/61), and [POSIX harness qualification #62](https://github.com/Sibiya666/task-tower/issues/62), in the next-version milestone. Saved POSIX code at `18e9a3985ad3b86a02d58703ef8e8a2afdd9a0e2` is unaccepted WIP, with manual-only diagnostics. It grants no runtime authority.
+
+Unsupported native capability must fail closed before launching a helper/model/check/server, creating a worktree or publishing. A resource fallback never enables an unsupported execution platform. Native qualification must be separately accepted before each deferred capability can be enabled. Do not change credentials, models, installers, repository protection, original admission identity or unknown/replay semantics.
+
+Fresh independent specification acceptance binds the amended documents before new scope implementation. Existing spec verdicts remain historical for their exact hashes. Keep rejected, failed, cancelled and unknown attempts; fresh development/test, exact-head/base PR, current CI, exact-main independent postmerge acceptance and automatic verified Issue closure remain required. The Windows release is not a night-readiness claim.
+
+Pipeline work/watch and internal _action/_dispatch must reject non-Windows with a stable unsupported_platform result before _runtime (including journal initialization). Adapter submission/lookup, status, cancel and reconcile --inspect remain portable and retain their no-replay/read-only boundaries. Guard direct orchestration entries too. Windows Job containment, shared shutdown budget, SQLite physical identity pin and ordinary/hot recovery controls remain release gates. No current POSIX scope/bootstrap module is shipped by this change.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Run authorized tasks through independently accepted spec, development and tests, then create reviewable PRs with durable local watch/refill and no blind replay.
@@ -12,7 +26,7 @@
 
 ## Global Constraints
 
-- Python 3.11+ standard library only; Windows, macOS and Linux.
+- Python 3.11+ standard library only; portable core with current Windows native execution qualification (see the release scope amendment).
 - Defaults: max_active=2 (1..2), interval_seconds=5 (1..60), task_timeout_seconds=7200 (1..86400), role_timeout_seconds=900 (1..3600), max_reworks=2 (0..5 per target stage), max_processes=36 (6..100), log_max_bytes=1048576 (1..67108864); profile timeout/log ceilings also apply.
 - Preserve executor v1 configuration, v2 queue, existing CLI/six-key result, manual tasks and postmerge ReviewRunner behavior.
 - No model selection, installation, new scopes, protection bypass, merge or Issue closure. #16 host creates PRs; #17 owns merge/main barrier.

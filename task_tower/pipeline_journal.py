@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import sqlite3
+import stat
 import time
 import uuid
 from .executor_queue import _uuid, _dead, validate_request, _private_stat
@@ -28,6 +29,36 @@ SCHEMAS={
 'controller':'CREATE TABLE controller(singleton INTEGER PRIMARY KEY CHECK(singleton=1), owner_id TEXT NOT NULL, owner_pid INTEGER, started_at TEXT NOT NULL, last_tick_at TEXT NOT NULL, policy_sha256 TEXT NOT NULL, health TEXT NOT NULL)'}
 
 def _now(): return datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+def _open_database_pin(path):
+    """Read-only, noninheritable identity reference, with no SQLite side effects."""
+    if os.name=='nt':
+        import ctypes as C
+        from ctypes import wintypes as W
+        import msvcrt
+        kernel=C.WinDLL('kernel32',use_last_error=True)
+        kernel.CreateFileW.argtypes=[W.LPCWSTR,W.DWORD,W.DWORD,C.c_void_p,W.DWORD,W.DWORD,W.HANDLE]
+        kernel.CreateFileW.restype=W.HANDLE
+        kernel.CloseHandle.argtypes=[W.HANDLE];kernel.CloseHandle.restype=W.BOOL
+        handle=kernel.CreateFileW(str(path),0x80000000,7,None,3,0x00200000,None)
+        if handle==C.c_void_p(-1).value:raise C.WinError(C.get_last_error())
+        try:fd=msvcrt.open_osfhandle(handle,os.O_RDONLY|os.O_BINARY)
+        except BaseException:
+            kernel.CloseHandle(handle)
+            raise
+    else:fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|getattr(os,'O_CLOEXEC',0))
+    try:os.set_inheritable(fd,False)
+    except BaseException:
+        try:os.close(fd)
+        except OSError:pass
+        raise
+    return fd
+
+def _pin_identity(info):
+    if (not stat.S_ISREG(info.st_mode) or info.st_nlink!=1 or getattr(info,'st_file_attributes',0)&0x400
+            or type(info.st_dev) is not int or info.st_dev<0 or type(info.st_ino) is not int or info.st_ino<=0):
+        raise ValueError('Invalid existing pipeline file identity')
+    return info
 def _dump(value): return canonical_json(value).decode('ascii')
 def _sha(value,size=64,nullable=False):
     if nullable and value is None: return
@@ -87,6 +118,49 @@ class PipelineJournal:
         remaining=5 if deadline is None else min(5,deadline-time.monotonic())
         if remaining<=0:raise ValueError('Pipeline journal operation deadline exhausted')
         return remaining
+    @contextmanager
+    def _pinned_database(self):
+        self._wait_seconds();self._safe();self._wait_seconds()
+        try:initial=_pin_identity(_private_stat(self.path))
+        except FileNotFoundError:
+            self._wait_seconds()
+            yield None
+            return
+        self._wait_seconds()
+        fd=_open_database_pin(self.path)
+        previous=getattr(self,'_pinned_database_fd',None);failed=True
+        try:
+            self._wait_seconds()
+            opened=_pin_identity(os.fstat(fd));self._wait_seconds()
+            current=_pin_identity(_private_stat(self.path));self._wait_seconds()
+            if not os.path.samestat(initial,opened) or not os.path.samestat(initial,current):
+                raise ValueError('Existing pipeline database replaced while opening pin')
+            self._pinned_database_fd=fd
+            yield initial
+            failed=False
+        finally:
+            self._pinned_database_fd=previous
+            try:os.close(fd)
+            except OSError:
+                if not failed:raise
+    @contextmanager
+    def _existing_database(self,identity):
+        previous=getattr(self,'_existing_database_identity',None)
+        self._existing_database_identity=identity
+        try:
+            self._assert_existing()
+            yield
+        finally:self._existing_database_identity=previous
+    def _assert_existing(self):
+        self._wait_seconds();self._safe();self._wait_seconds()
+        identity=getattr(self,'_existing_database_identity',None)
+        fd=getattr(self,'_pinned_database_fd',None)
+        if identity is None or fd is None:raise ValueError('Existing pipeline database is not pinned')
+        opened=_pin_identity(os.fstat(fd));self._wait_seconds()
+        current=_pin_identity(_private_stat(self.path));self._wait_seconds()
+        if not os.path.samestat(identity,opened) or not os.path.samestat(identity,current):
+            raise ValueError('Existing pipeline database missing or replaced')
+        self._wait_seconds()
     def _safe(self):
         for path in [self.path,*(Path(str(self.path)+s) for s in ('-journal','-wal','-shm'))]:
             safe_config_path(path)
@@ -102,17 +176,27 @@ class PipelineJournal:
                     except FileNotFoundError:same=False  # SQLite removed its transient sidecar.
                     if same:raise ValueError('Pipeline private path collision')
     @contextmanager
-    def _db(self,write=False):
+    def _db(self,write=False,*,initialize=True):
         self._wait_seconds()
         self._safe()
-        if not self.path.exists() and not write: yield None; return
-        if write: self.path.parent.mkdir(parents=True,exist_ok=True); self._safe()
+        existing=getattr(self,'_existing_database_identity',None) is not None
+        if existing:
+            initialize=False
+            self._assert_existing()
+        if not self.path.exists() and not write:
+            if existing:raise ValueError('Existing pipeline database missing')
+            yield None; return
+        if write:
+            if initialize:self.path.parent.mkdir(parents=True,exist_ok=True)
+            self._safe()
         if any(Path(str(self.path)+s).exists() for s in ('-wal','-shm')): raise ValueError('Unsupported pipeline WAL')
         if self.path.exists():
             with self.path.open('rb') as stream: header=stream.read(100)
             if header[:16]==b'SQLite format 3\0' and header[18:20]!=b'\1\1': raise ValueError('Unsupported pipeline WAL')
         try:
-            with closing(sqlite3.connect(self.path if write else self.path.resolve().as_uri()+'?mode=ro',uri=not write,timeout=self._wait_seconds())) as db:
+            uri=not write or not initialize
+            target=self.path.resolve().as_uri()+('?mode=rw' if write else '?mode=ro') if uri else self.path
+            with closing(sqlite3.connect(target,uri=uri,timeout=self._wait_seconds())) as db:
                 db.row_factory=sqlite3.Row; db.execute('PRAGMA busy_timeout='+str(max(0,int(self._wait_seconds()*1000)))); db.execute('PRAGMA synchronous=FULL')
                 db.execute('PRAGMA busy_timeout='+str(max(0,int(self._wait_seconds()*1000))))
                 if write: db.execute('BEGIN IMMEDIATE')
@@ -121,7 +205,7 @@ class PipelineJournal:
                     if getattr(self,'_operation_deadline',None) is not None:db.execute('BEGIN')
                 app=db.execute('PRAGMA application_id').fetchone()[0]; version=db.execute('PRAGMA user_version').fetchone()[0]
                 objects={(r[0],r[1],r[2]) for r in db.execute("SELECT type,name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'")}
-                if write and app==0 and version==0 and not objects:
+                if write and initialize and app==0 and version==0 and not objects:
                     db.execute('PRAGMA application_id='+str(APP_ID)); db.execute('PRAGMA user_version=1')
                     for schema in SCHEMAS.values(): db.execute(schema)
                 elif app!=APP_ID or version!=1 or objects!={('table',n,s) for n,s in SCHEMAS.items()}: raise ValueError('Unrecognized pipeline schema')
@@ -130,6 +214,7 @@ class PipelineJournal:
                 try:
                     yield db
                     if write:
+                        if existing:self._assert_existing()
                         remaining=self._wait_seconds()
                         # Shutdown must not enter a fresh lock wait at COMMIT.
                         # A conflicting reader makes this bounded transaction
@@ -849,8 +934,13 @@ class PipelineJournal:
             value=dict(row);value['health']=self._health(_json(value['health']))
             return value
     def recover(self)->list[str]:
+        return self._recover(True)
+    def _recover_existing(self)->list[str]:
+        """Explicit shutdown recovery may roll back, never initialize/create."""
+        return self._recover(False)
+    def _recover(self,initialize):
         recovered=[]
-        with self._db(True) as db:
+        with self._db(True,initialize=initialize) as db:
             for row in db.execute('SELECT * FROM runs WHERE owner_id IS NOT NULL'):
                 if self._cancel_clean_ready(db,row):
                     recovered.append(row['run_id']);continue

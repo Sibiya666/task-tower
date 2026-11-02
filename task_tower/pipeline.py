@@ -4,10 +4,12 @@ Only fixed host Python invocations inherit API credentials. Roles and checks
 continue to construct their own stripped environments in pipeline_roles.
 """
 import argparse
+from contextlib import ExitStack
 from datetime import datetime, timezone
 import json
 import os
 import re
+import sqlite3
 from pathlib import Path
 import stat
 import sys
@@ -29,6 +31,18 @@ from .project_connections import load_connections
 
 _CAP=65536
 _BACKOFF=(5,10,20,40,60)
+
+
+class UnsupportedPlatform(ValueError):
+    """The current release has no qualified native pipeline on this host."""
+
+
+def native_execution_supported():
+    return os.name=='nt'
+
+
+def _require_native_execution():
+    if not native_execution_supported():raise UnsupportedPlatform('unsupported_platform')
 
 
 def adapter(request,config,journal):
@@ -190,12 +204,14 @@ def _status(connections,journal,run_id=None):
 
 
 def _action(config,journal):
+    _require_native_execution()
     from .pipeline_worker import step
     journal.recover()
     return step(config,journal,owner_id=config['_cli_args'].host_owner)
 
 
 def _dispatch(config,journal):
+    _require_native_execution()
     args=config['_cli_args'];_backend_scope(config,journal)
     if args.dispatch_config.read_bytes()!=config['_dispatch_bytes']:raise ValueError('Dispatcher policy changed')
     report=dispatcher.tick(config['_connections'],config['_dispatch_config'],args.dispatch_journal,
@@ -210,6 +226,7 @@ def _dispatch(config,journal):
 class _Host:
     """A thread waits on the existing contained runner; it never launches itself."""
     def __init__(self,args,kind,timeout,stop):
+        _require_native_execution()
         self.stop=stop;self.done=threading.Event();self.outcome=None;self.result=None
         self._budget_deadline=None
         self.kind=kind
@@ -232,7 +249,8 @@ class _Host:
     def cancelled(self):
         if self.stop.is_set():return True
         if self.owner:
-            with self.journal.operation_deadline(time.monotonic()+.2):runs=self.journal.status()['runs']
+            with self.journal.operation_deadline(time.monotonic()+1.0):runs=self.journal.status()['runs']
+            if self.stop.is_set():return True
             for run in runs:
                 if run['owner_id']==self.owner:
                     now=datetime.now(timezone.utc)
@@ -246,6 +264,7 @@ class _Host:
 
 
 def work(config,journal):
+    _require_native_execution()
     args=config['_cli_args'];args.journal.parent.mkdir(parents=True,exist_ok=True)
     stop=threading.Event();host=_Host(args,'_action',_remaining(config,journal),stop)
     interrupted=False;confirmed=False
@@ -271,6 +290,7 @@ def _watch_read_failures(state):
 
 def watch_tick(config,journal,*,dispatch_tick=dispatcher.tick):
     """Poll contained hosts and refill; slow API operations remain off-loop."""
+    _require_native_execution()
     state=config['_watch'];args=config['_cli_args']
     # Fresh private policy validation happens in every helper and here each pass.
     _,_,fresh=_runtime(args)
@@ -325,16 +345,31 @@ def _shutdown(config,journal,state,*,cancel_runs=True):
         # the same deadline. A late transaction must roll back before commit.
         try:
             shutdown_journal=PipelineJournal(journal.path,checkouts=journal.checkouts,forbidden_paths=journal.forbidden_paths)
-            with shutdown_journal.operation_deadline(deadline):
-                for run in shutdown_journal.status()['runs']:
-                    if cancel_runs and run['owner_id'] in {h.owner for h in state['workers']} and run['state'] in ACTIVE-{'unknown'}:shutdown_journal.cancel(run['run_id'])
+            with shutdown_journal.operation_deadline(deadline),ExitStack() as existing:
+                identity=existing.enter_context(shutdown_journal._pinned_database())
+                if identity is not None:existing.enter_context(shutdown_journal._existing_database(identity))
+                fallback=False
+                try:runs=shutdown_journal.status()['runs']
+                except ValueError as error:
+                    cause=error.__cause__
+                    if not isinstance(cause,sqlite3.Error) or getattr(cause,'sqlite_errorcode',None)!=sqlite3.SQLITE_READONLY_ROLLBACK:raise
+                    hosts_done.wait(max(0,deadline-time.monotonic()))
+                    if not proof['hosts'] or any(not h.done.is_set() or not h.outcome or not h.outcome.get('cleanup_confirmed') for h in hosts):return
+                    if identity is None:return
+                    shutdown_journal._recover_existing()
+                    runs=shutdown_journal.status()['runs']
+                    fallback=True
+                for run in runs:
+                    if cancel_runs and run['owner_id'] in {h.owner for h in state['workers']} and run['state'] in (ACTIVE if fallback else ACTIVE-{'unknown'}):shutdown_journal.cancel(run['run_id'])
                 hosts_done.wait(max(0,deadline-time.monotonic()))
-                shutdown_journal.recover()
+                if not fallback:shutdown_journal.recover()
                 if not proof['hosts']:return
                 if state['owner'] is not None:
                     shutdown_journal.controller_tick(state['owner'],dict(ticks=state['ticks'],read_failures=_watch_read_failures(state),workers=0,dispatcher=0))
                     shutdown_journal.release_controller(state['owner'])
-                proof['db']=True
+                if identity is not None:shutdown_journal._assert_existing()
+            if time.monotonic()>=deadline:return
+            proof['db']=True
         except (ValueError,OSError):pass
         finally:db_done.set()
     threading.Thread(target=finish_journal,daemon=True).start()
@@ -349,6 +384,7 @@ def _shutdown(config,journal,state,*,cancel_runs=True):
 
 
 def watch(config,journal):
+    _require_native_execution()
     owner=str(uuid.uuid4());journal.claim_controller(owner,config['policy_sha256'])
     state=dict(owner=owner,stop=threading.Event(),workers=[],dispatcher=None,ticks=0,failures=0,next_dispatch=0)
     config['_watch']=state;exit_code=0
@@ -365,6 +401,7 @@ def watch(config,journal):
 def main(argv=None):
     args=_parser().parse_args(argv)
     try:
+        if args.command in ('work','watch','_action','_dispatch'):_require_native_execution()
         connections,journal,config=_runtime(args)
         if args.command=='adapter':
             report=adapter(_read(args.request),config,journal);_write(args.result,report);return 0
@@ -390,6 +427,8 @@ def main(argv=None):
         print(json.dumps(report,sort_keys=True))
         completed={'idle','ready','needs_input','cancelled','timed_out','ready_for_pr','awaiting_pr'}
         return 1 if args.command=='work' and report.get('status') not in completed else 0
+    except UnsupportedPlatform:
+        print(json.dumps(dict(error='unsupported_platform')),file=sys.stderr);return 2
     except (OSError,ValueError,TypeError,KeyError):
         print(json.dumps(dict(error='invalid_or_unavailable_private_state')),file=sys.stderr);return 2
 
