@@ -4,6 +4,9 @@ from pathlib import Path
 from .project_connections import safe_config_path
 
 def build_invocation(attempt, profile):
+    if profile['kind']=='claude':
+        from .claude_adapter import build_claude_invocation
+        return build_claude_invocation(attempt,profile)
     if profile['kind']=='custom':
         if not profile.get('trusted'): raise ValueError('Untrusted custom executor')
         return [*profile['argv'],'--request',str(attempt['request_path']),'--result',str(attempt['result_path'])]
@@ -34,4 +37,7 @@ def result_schema(attempt):
     return dict(type='object',properties=properties,required=list(properties),additionalProperties=False)
 
 def capabilities(profile):
+    if profile.get('kind')=='claude':
+        from .claude_adapter import claude_capabilities
+        return claude_capabilities(profile)
     return dict(configured=True,executable=Path(profile['argv'][0]).is_file(),probed=False,verified=False,events=False,resume=False)

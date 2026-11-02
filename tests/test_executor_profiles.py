@@ -157,3 +157,65 @@ class ExecutorProfilesTests(unittest.TestCase):
         arguments=['--sandbox','danger-full-access','--model','chosen','-mchosen','-c','model=chosen']
         self.profile['argv'].extend(arguments)
         self.assertEqual(self.load()['profiles']['local']['argv'][1:],arguments)
+
+    def claude_profile(self):
+        self.profile.update(kind='claude', trusted=False, claude=dict(version='2.1.302',
+            role='implementer', max_budget_usd='0.25', stream_max_bytes=65536, line_max_bytes=4096))
+
+    def test_claude_policy_is_fingerprinted_and_role_is_explicit(self):
+        self.claude_profile()
+        first=self.load()['profiles']['local']
+        self.assertEqual(first['claude'],self.profile['claude'])
+        self.profile['claude']['role']='reviewer'
+        second=self.load()['profiles']['local']
+        self.assertNotEqual(profiles.profile_fingerprint(first),profiles.profile_fingerprint(second))
+
+    def test_claude_rejects_missing_unknown_and_confused_policy(self):
+        self.claude_profile()
+        original=dict(self.profile['claude'])
+        for field,values in {
+            'version':['2.1.303',True,None], 'role':['executor',[],True],
+            'max_budget_usd':[1,True,'0','100.01','0.001','NaN','Infinity','1e1','-1',' 1','1.'],
+            'stream_max_bytes':[True,65535,67108865],
+            'line_max_bytes':[True,4095,1048577,65537], 'extra':['ignored']}.items():
+            for value in values:
+                with self.subTest(field=field,value=value):
+                    self.profile['claude']=original|{field:value}
+                    with self.assertRaises(ValueError): self.load()
+        for field in original:
+            self.profile['claude']={k:v for k,v in original.items() if k!=field}
+            with self.assertRaises(ValueError): self.load()
+        for policy in [None,[],True]:
+            self.profile['claude']=policy
+            with self.assertRaises(ValueError): self.load()
+        self.profile.pop('claude')
+        with self.assertRaises(ValueError): self.load()
+
+    def test_claude_cannot_add_arguments_or_approval_policy(self):
+        self.claude_profile()
+        for update in [dict(trusted=True),dict(approve_for_me=True),
+                       dict(argv=[self.profile['argv'][0],'--model','chosen'])]:
+            original=dict(self.profile); self.profile.update(update)
+            with self.assertRaises(ValueError): self.load()
+            self.profile.clear(); self.profile.update(original)
+
+    def test_other_kinds_reject_claude_options(self):
+        self.profile['claude']={}
+        with self.assertRaises(ValueError): self.load()
+        self.profile['kind']='codex'
+        with self.assertRaises(ValueError): self.load()
+
+    def test_claude_budget_and_stream_boundary_values(self):
+        self.claude_profile()
+        for budget in ['0.01','1','100','100.00']:
+            self.profile['claude']['max_budget_usd']=budget
+            self.assertEqual(self.load()['profiles']['local']['claude']['max_budget_usd'],budget)
+        self.profile['claude'].update(stream_max_bytes=67108864,line_max_bytes=1048576)
+        self.load()
+
+    def test_claude_shell_script_executable_is_not_native(self):
+        self.claude_profile()
+        for suffix in ['.cmd','.bat','.CMD']:
+            path=self.root/('claude'+suffix); path.write_text('echo fixture')
+            self.profile['argv']=[str(path)]
+            with self.assertRaises(ValueError): self.load()

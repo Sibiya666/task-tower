@@ -89,13 +89,20 @@ def load_executor_config(path, connections):
         for name, raw in value['profiles'].items():
             if not isinstance(name,str) or not re.fullmatch('[A-Za-z0-9][A-Za-z0-9_.-]{0,99}',name):
                 raise ValueError('Invalid executor profile identity')
-            if not isinstance(raw,dict) or not required <= set(raw) or set(raw) - required - {'trusted','approve_for_me'}:
+            if not isinstance(raw,dict) or not required <= set(raw) or set(raw) - required - {'trusted','approve_for_me','claude'}:
                 raise ValueError('Invalid executor profile')
             profile = dict(raw, trusted=raw.get('trusted',False), approve_for_me=raw.get('approve_for_me',False))
-            if profile['kind'] not in ('codex','custom') or type(profile['trusted']) is not bool or type(profile['approve_for_me']) is not bool:
+            if profile['kind'] not in ('codex','custom','claude') or type(profile['trusted']) is not bool or type(profile['approve_for_me']) is not bool:
                 raise ValueError('Invalid executor trust policy')
             if profile['kind']=='custom' and (not profile['trusted'] or profile['approve_for_me']):
                 raise ValueError('Custom executor requires explicit trust')
+            if profile['kind']=='claude':
+                from .claude_adapter import validate_claude_policy
+                if profile['trusted'] or profile['approve_for_me']:
+                    raise ValueError('Claude cannot bypass approval policy')
+                profile['claude']=validate_claude_policy(profile.get('claude'))
+            elif 'claude' in profile:
+                raise ValueError('Claude options require Claude executor')
             matches=[c for c in connections if c.repository.casefold()==str(profile['repository']).casefold()]
             checkout=_path(profile['checkout'],directory=True)
             if len(matches)!=1 or checkout != matches[0].checkout or profile['runner_label'] != matches[0].runner_label:
@@ -106,8 +113,10 @@ def load_executor_config(path, connections):
             if not isinstance(argv,list) or not argv or any(not isinstance(a,str) or not a or '\x00' in a for a in argv):
                 raise ValueError('Invalid executor argv')
             executable=_path(argv[0])
-            if not executable.is_file() or (profile['kind'] == 'codex' and len(argv) != 1):
+            if not executable.is_file() or (profile['kind'] in ('codex','claude') and len(argv) != 1):
                 raise ValueError('Invalid executor executable policy')
+            if profile['kind']=='claude' and executable.suffix.lower() in ('.cmd','.bat'):
+                raise ValueError('Claude requires a native executable')
             profile['argv']=[str(executable),*argv[1:]]
             ref=profile['source_ref']
             if not isinstance(ref,str) or not (re.fullmatch('[0-9a-f]{40}',ref) or re.fullmatch(r'refs/(heads|tags)/[A-Za-z0-9][A-Za-z0-9_./-]*',ref)) or '..' in ref or ref.endswith(('/', '.')):
