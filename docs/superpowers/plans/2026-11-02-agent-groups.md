@@ -1,5 +1,19 @@
 # Agent Groups Implementation Plan
 
+## Release scope amendment — user decision 2026-11-02
+
+The user explicitly deferred work not covered by Windows to the next project version. This dated amendment supersedes earlier native three-platform promises in this document; it does not change unrelated established portable interfaces or turn failed historical evidence into success.
+
+Current native execution acceptance is Windows-only. Pure policies, schemas, event/protocol parsing, source readers and the existing portable CLI keep their supported behavior and all applicable Ubuntu/macOS/Windows CI. Distinguish portable regression coverage from native platform qualification. Never remove CI matrix entries, tolerate failures, blanket-skip mixed test modules or replace real native execution with a mocked platform. Classify effects per test; preserve all portable and Windows regressions.
+
+Deferred work is tracked by [feature #58](https://github.com/Sibiya666/task-tower/issues/58), [Linux pipeline #59](https://github.com/Sibiya666/task-tower/issues/59), [macOS pipeline #60](https://github.com/Sibiya666/task-tower/issues/60), [POSIX resource/group qualification #61](https://github.com/Sibiya666/task-tower/issues/61), and [POSIX harness qualification #62](https://github.com/Sibiya666/task-tower/issues/62), in the next-version milestone. Saved POSIX code at `18e9a3985ad3b86a02d58703ef8e8a2afdd9a0e2` is unaccepted WIP, with manual-only diagnostics. It grants no runtime authority.
+
+Unsupported native capability must fail closed before launching a helper/model/check/server, creating a worktree or publishing. A resource fallback never enables an unsupported execution platform. Native qualification must be separately accepted before each deferred capability can be enabled. Do not change credentials, models, installers, repository protection, original admission identity or unknown/replay semantics.
+
+Fresh independent specification acceptance binds the amended documents before new scope implementation. Existing spec verdicts remain historical for their exact hashes. Keep rejected, failed, cancelled and unknown attempts; fresh development/test, exact-head/base PR, current CI, exact-main independent postmerge acceptance and automatic verified Issue closure remain required. The Windows release is not a night-readiness claim.
+
+Group policy/DAG and provenance remain portable. Current native resource collection/admission and group execution are Windows-qualified; Linux/macOS collectors and installed concurrent pilots are deferred to #61. Read-only inspection/cancel remains available on unsupported platforms. Windows must still prove resource-based >=3 concurrency when authorized capacity permits; there is no fixed two-task ceiling. Accepted-current-main Issue16 API/CI/postmerge/automatic-closure integration gate remains mandatory. Existing pure Task1R acceptance is not native runtime acceptance.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Schedule authorized tasks across explicit project groups with atomic local limits, accepted-result dependencies and durable chat-independent refill.
@@ -14,7 +28,7 @@ Revision R2 supersedes historical fixed capacity following the user decision; R1
 
 ## Global Constraints
 
-- Python 3.11+ standard library only; Windows, macOS and Linux.
+- Python 3.11+ standard library only; portable core with current Windows native execution qualification (see the release scope amendment).
 - Default v2 capacity is automatic typed host/resource admission under installed budgets; no fixed task maximum.
 - Each v2 group inherits resource capacity by default; optional positive caps only narrow it. Preserve v1 defaults as historical explicit caps.
 - One canonical pipeline journal owns execution, group/global capacity, action claims and fair cursors atomically; local SQLite is not distributed ownership.

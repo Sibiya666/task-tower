@@ -16,14 +16,15 @@
     "Cancellation, restart, multiple workers and lossless explicit migration preserve ownership, unknown effects, stage evidence and stable run/branch/workspace identity",
     "A real host watch refills safely without an active chat while repository main changes invalidate stale head/base evidence and completion waits for verified integration",
     "Actual accepted Issue16 APIs precede integration; Issue17 merge worker, distributed ownership and night readiness are never fabricated",
-    "Fresh independent stage and exact-head/base PR acceptance, current CI, exact-main postmerge acceptance and automatic verified Issue18 closure complete the task"
+    "Fresh independent stage and exact-head/base PR acceptance, current CI, exact-main postmerge acceptance and automatic verified Issue18 closure complete the task",
+    "Current native resource collection, group execution and installed capacity pilot are Windows-qualified; portable policy/DAG and generic CI remain; Linux/macOS native resource/group qualification is deferred to Issue61"
   ],
   "stages": {
     "spec": {
       "status": "accepted",
-      "reviewer": "/root/groups_capacity_r3_acceptance",
+      "reviewer": "windows_scope_spec_acceptance",
       "evidence": "evidence/TT-GROUPS-001/spec-review.md",
-      "sha256": "e4fb44063c5260492d77317eebf50072431371a1f12e43282651bd4a6a2dbe59",
+      "sha256": "21fa15aa212be43bbc2774487f4653aea1082f239299268bbb7fb69a5126ed66",
       "hash_scheme": "sha256-utf8-lf-v1"
     },
     "development": {
