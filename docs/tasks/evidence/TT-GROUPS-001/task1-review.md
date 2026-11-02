@@ -43,3 +43,46 @@ Used existing Python `C:/Users/sibiya666/.cache/codex-runtimes/codex-primary-run
 These are explicit plan boundaries, not waived requirements. Before any pipeline integration, Issue16 still requires exact-main CI, independent postmerge acceptance and automatic closure, followed by actual-API/schema audit and affected spec revalidation. This Task 1 verdict permits the coordinator to commit only the exact reviewed product bytes under the established process; it authorizes no runtime integration or merge by itself. Changed product bytes invalidate this verdict.
 
 Reviewer wrote only this requested report; no source/card mutation, commit, push, journal/config change, ACL/auth change or GitHub write was performed.
+
+
+---
+
+# Issue18 Task1R independent exact-diff review
+
+Reviewer: /root/groups_policy_task1r_review, 2026-11-02; distinct from implementer.
+
+Verdict: APPROVE the two-file pure-policy change at the exact bindings below. No blocking findings. This is task development review, not PR, runtime integration, migration, resource collection, pilot, main or Issue acceptance.
+
+Base/checkout HEAD: cb7a8ee378db4f76515d2a1d11542cf6b7c77585 (feat/agent-groups). Reviewed the complete current working-tree diff relative to HEAD of only:
+
+- task_tower/group_policy.py SHA256 9bbb0c8729ddf08b07c0ef634226dc694b5d0c022d5ae8ef06be8f0569fb087c
+- tests/test_group_policy.py SHA256 d794d8574b372869732e0698e3c1bec0a710a2399cb60d90bc4acd9789fdfb87
+
+Requirements: spec docs/superpowers/specs/2026-11-02-agent-groups-design.md SHA256 2b98f00a034878d649315972d77d1316b031a32956df6abcfc37854ded61f2b7; plan docs/superpowers/plans/2026-11-02-agent-groups.md SHA256 138523c0115a618027168a48817af888d72ab46bb654e96db3aa5deb5ca88817. Read repository AGENTS, independent R3 acceptance at parent workspace runtime/groups18-capacity-r3-independent-review.md, and requesting-code-review instructions/template context. using-superpowers expressly exempts dispatched subagents.
+
+The version2 group schema has closed auto/fallback shapes, strict positive nullable signed-64-bit caps, optional null inheritance and no fixed task-count ceiling. Count minima include executor/pipeline historical v1 explicit defaults when participating in v2; group caps narrow routes. Legacy v1 input behavior/defaults remain intact for its historical supported normalized v1 inputs. Exact route/profile/component/source/update-grant authority is retained. Resource envelopes and pool identity participate in authorization; only enumerated capacity controls (including max_parallel) are excluded from authorization and bound into the capacity digest. Alias argv authority cannot split pools, pool caps take minima, and bindings copy the resource grants/pools. No model hints, inferred quotas, launch, claim, journal or pipeline runtime import is introduced.
+
+The executor-v2 and pipeline-v2 dictionaries in tests are synthetic normalized pure-policy fixtures. They do not establish shipped file loader support. Actual loader/runtime integration remains Task3 work blocked on Issue16 exact accepted main, main CI, independent postmerge acceptance and automatic Issue closure. This approval must not be described as removing the shipped v1 executor ceiling or proving actual parallel resource admission.
+
+Independent validation using C:/Users/sibiya666/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe:
+
+- unittest discover -s tests -p test_group_policy.py -v: 39 tests, 5.317s, OK.
+- unittest tests.test_group_policy tests.test_executor_profiles tests.test_dispatch_selection -v: 67 tests, 5.717s, OK (1 skip: symlink privilege unavailable).
+
+Author-reported 71 targeted tests/6.405s and full 513 tests/114.023s/4 skips were not reproduced by this reviewer and exact retained output for those runs was not located. The independent scoped checks above are the evidence for this verdict; full-suite evidence remains the coordinator's required verification before integration. No native observation, installed model, external auth, installation or runtime acceptance is implied.
+
+Only this private report was written. No source/docs/card/GitHub edits, commit or push were performed. Any change to either reviewed file hash invalidates this task verdict.
+
+Declined to judge (outside this explicitly assigned two-file Task1R boundary):
+
+- Shipping executor/pipeline v2 file loaders: Task3 blocked integration; dictionaries here are normalized policy fixtures, not loader evidence.
+- Host samples, runtime resource arithmetic/leases, migration and concurrent claims: later tasks, with no implementation in this diff.
+- PR/main readiness and Issue closure: require their own exact head/base, CI and independent postmerge gates; not granted by this verdict.
+
+Coordinator clarified the author's 71-test command was tests.test_group_policy tests.test_group_graph tests.test_executor_profiles -q. It differs from the reviewer's 67-test required Task1 command above; neither count contradicts the other. The author's full-suite evidence remains author-reported only here.
+
+## Fresh mechanical EOF receipt
+
+APPROVE refreshed binding, 2026-11-02. Product file remains SHA256 9bbb0c8729ddf08b07c0ef634226dc694b5d0c022d5ae8ef06be8f0569fb087c. Current tests/test_group_policy.py is SHA256 e36f5c0ca88ca2c7f5d6e92db75157e866300efbb66de519494790a9ae4726b3.
+
+Independently verified exact old test bytes: replacing the current final LF with CRLF CRLF reconstructs SHA256 d794d8574b372869732e0698e3c1bec0a710a2399cb60d90bc4acd9789fdfb87. Thus the only change since the full review is three EOF newline bytes; executable/test logic is identical. The review and prior independent checks carry to these refreshed exact hashes without redundant execution. All original acceptance scope limits remain in force.

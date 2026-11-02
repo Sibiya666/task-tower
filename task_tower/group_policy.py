@@ -33,6 +33,68 @@ def _integer(value, low, high):
     return value
 
 
+
+def _cap(value):
+    return None if value is None else _integer(value, 1, 2**63 - 1)
+
+
+def _minimum(*values):
+    present = [v for v in values if v is not None]
+    return min(present) if present else None
+
+
+def _counts(config):
+    version = config.get('version')
+    if type(version) is not int or version not in (1, 2):
+        raise ValueError('Invalid capacity policy version')
+    if version == 1:
+        return dict(max_executors=_integer(config.get('max_active', 2), 1, 2), max_inflight=None)
+    if 'max_active' in config:
+        raise ValueError('Legacy capacity in version2')
+    value = config.get('capacity', dict(max_executors=None, max_inflight=None))
+    if not isinstance(value, dict) or set(value) != {'max_executors', 'max_inflight'}:
+        raise ValueError('Invalid capacity counts')
+    return {k: _cap(v) for k, v in value.items()}
+
+
+def _capacity(value):
+    default = dict(mode='auto', max_executors=None, max_inflight=None,
+                   max_cpu_millis=None, max_memory_bytes=None, fallback=None)
+    if value is None or not isinstance(value, dict) or set(value) != set(default) or value['mode'] != 'auto':
+        raise ValueError('Invalid automatic capacity')
+    result = dict(mode='auto', **{k: _cap(value[k]) for k in
+        ('max_executors', 'max_inflight', 'max_cpu_millis', 'max_memory_bytes')})
+    fallback = value['fallback']
+    if fallback is not None:
+        if not isinstance(fallback, dict) or set(fallback) != {'cpu_millis', 'memory_bytes', 'max_executors'}:
+            raise ValueError('Invalid fallback grant')
+        fallback = {k: _integer(v, 1, 2**63 - 1) for k, v in fallback.items()}
+    return dict(result, fallback=fallback)
+
+
+def _resources(executor, projects):
+    resources = executor.get('harness_resources')
+    if not isinstance(resources, dict) or not resources:
+        raise ValueError('Missing harness resource grants')
+    normalized, aliases = {}, {}
+    for profile_id, raw in resources.items():
+        profile = executor['profiles'][_name(profile_id)]
+        if not isinstance(raw, dict) or set(raw) != {'pool_id', 'cpu_millis', 'memory_bytes', 'max_parallel'}:
+            raise ValueError('Invalid harness resource grant')
+        row = dict(pool_id=_name(raw['pool_id']),
+            cpu_millis=_integer(raw['cpu_millis'], 1, 2**63 - 1),
+            memory_bytes=_integer(raw['memory_bytes'], 1, 2**63 - 1), max_parallel=_cap(raw['max_parallel']))
+        authority = tuple(profile['argv'])
+        if authority in aliases and aliases[authority] != row['pool_id']:
+            raise ValueError('Harness alias splits pool')
+        aliases[authority] = row['pool_id']
+        normalized[profile_id] = row
+    for project in projects:
+        for group in project['groups']:
+            if any(p not in normalized for p in group['role_profiles'].values()):
+                raise ValueError('Missing selected harness grant')
+    return normalized
+
 def _name(value, pattern=NAME):
     if not isinstance(value, str) or not re.fullmatch(pattern, value):
         raise ValueError('Invalid group identity')
@@ -96,10 +158,11 @@ def _profile(profile_id, profiles, connections):
 
 
 def _task_rows(pipeline, executor, connections):
-    if type(pipeline.get('version')) is not int or pipeline['version'] != 1 or not isinstance(pipeline.get('tasks'), list):
+    if type(pipeline.get('version')) is not int or pipeline['version'] not in (1, 2) or not isinstance(pipeline.get('tasks'), list):
         raise ValueError('Invalid private pipeline task policy')
     limits = {key: _integer(pipeline.get(key, default), low, high)
-              for key, (default, low, high) in LIMITS.items()}
+              for key, (default, low, high) in LIMITS.items() if key != 'max_active' or pipeline['version'] == 1}
+    _counts(pipeline)
     profiles = executor['profiles']
     rows, aliases = {}, set()
     for value in pipeline['tasks']:
@@ -179,7 +242,7 @@ def _task_rows(pipeline, executor, connections):
     return rows, limits
 
 
-def _project(value, tasks, profiles, connections, maximum):
+def _project(value, tasks, profiles, connections, maximum, version=1):
     required = {'repository', 'groups', 'routes', 'aggregates'}
     if not isinstance(value, dict) or not required <= set(value) or set(value) - required - {'base_update', 'accepted_main_sources'}:
         raise ValueError('Invalid group project')
@@ -188,7 +251,7 @@ def _project(value, tasks, profiles, connections, maximum):
         raise ValueError('Unknown group project')
     groups = {}
     for raw in value['groups']:
-        if not isinstance(raw, dict) or not {'id', 'components', 'role_profiles'} <= set(raw) or set(raw) - {'id', 'capacity', 'components', 'role_profiles'}:
+        if not isinstance(raw, dict) or not {'id', 'components', 'role_profiles'} <= set(raw) or set(raw) - ({'id', 'capacity', 'components', 'role_profiles'} | ({'max_inflight'} if version == 2 else set())):
             raise ValueError('Invalid group')
         name = _name(raw['id'])
         if name in groups:
@@ -200,8 +263,10 @@ def _project(value, tasks, profiles, connections, maximum):
             profile = _profile(profile_id, profiles, connections)
             if profile['repository'].casefold() != repository:
                 raise ValueError('Foreign group role profile')
-        groups[name] = dict(id=name, capacity=_integer(raw.get('capacity', 1), 1, maximum),
+        groups[name] = dict(id=name, capacity=(_integer(raw.get('capacity', 1), 1, maximum) if version == 1 else _cap(raw.get('capacity'))),
                             components=_components(raw['components']), role_profiles=copy.deepcopy(roles))
+        if version == 2:
+            groups[name]['max_inflight'] = _cap(raw.get('max_inflight'))
     routes = []
     for raw in value['routes']:
         if not isinstance(raw, dict) or set(raw) != {'issue', 'task_id', 'group'}:
@@ -266,8 +331,9 @@ def load_group_config(path: Path, connections: list, executor_config: dict, pipe
         raw = path.read_bytes()
         value = json.loads(raw.decode('utf-8'), object_pairs_hook=_pairs)
         if (not isinstance(value, dict) or not {'version', 'installation_id', 'canonical_journal', 'projects'} <= set(value)
-                or set(value) - {'version', 'installation_id', 'canonical_journal', 'max_active', 'projects'}
-                or type(value['version']) is not int or value['version'] != 1):
+                or type(value['version']) is not int or value['version'] not in (1, 2)
+                or set(value) - ({'version', 'installation_id', 'canonical_journal', 'projects'} |
+                    ({'max_active'} if value['version'] == 1 else {'capacity'}))):
             raise ValueError('Invalid group policy schema')
         installation = value['installation_id']
         if not isinstance(installation, str) or str(uuid.UUID(installation)) != installation:
@@ -278,27 +344,50 @@ def load_group_config(path: Path, connections: list, executor_config: dict, pipe
         journal = _path(value['canonical_journal'])
         _paths(path, journal, [c.checkout for c in connections], pipeline_config)
         tasks, limits = _task_rows(pipeline_config, executor_config, index)
-        maximum = _integer(value.get('max_active', 2), 1, 2)
+        version = value['version']
+        maximum = _integer(value.get('max_active', 2), 1, 2) if version == 1 else None
         if not isinstance(value['projects'], list):
             raise ValueError('Invalid group projects')
-        projects = [_project(v, tasks, executor_config['profiles'], index, maximum) for v in value['projects']]
+        projects = [_project(v, tasks, executor_config['profiles'], index, maximum, version) for v in value['projects']]
         if len({p['repository'] for p in projects}) != len(projects):
             raise ValueError('Duplicate group project')
-        result = dict(version=1, installation_id=installation, canonical_journal=str(journal),
-                      max_active=maximum, effective_max_active=min(maximum, limits['max_active']), projects=projects)
+        result = dict(version=version, installation_id=installation, canonical_journal=str(journal),
+                      max_active=maximum, effective_max_active=_minimum(maximum, _counts(pipeline_config)['max_executors']), projects=projects)
+        if version == 2:
+            result.pop('max_active')
+            result.pop('effective_max_active')
+            result['capacity'] = _capacity(value.get('capacity', dict(mode='auto', max_executors=None,
+                max_inflight=None, max_cpu_millis=None, max_memory_bytes=None, fallback=None)))
+            result['harness_resources'] = _resources(executor_config, projects)
+            result['effective_capacity'] = dict(result['capacity'])
+            for key in ('max_executors', 'max_inflight'):
+                result['effective_capacity'][key] = _minimum(result['capacity'][key],
+                    _counts(executor_config)[key], _counts(pipeline_config)[key])
         authority = copy.deepcopy(result)
-        del authority['max_active'], authority['effective_max_active']
+        if version == 1:
+            del authority['max_active'], authority['effective_max_active']
+        else:
+            del authority['capacity'], authority['effective_capacity']
+            for resource in authority['harness_resources'].values():
+                del resource['max_parallel']
         for project in authority['projects']:
             for group in project['groups']:
                 del group['capacity']
+                group.pop('max_inflight', None)
         authority.update(config_path=str(path), tasks=list(tasks.values()),
             profiles={k: profile_fingerprint(v) for k, v in executor_config['profiles'].items()},
             limits={k: v for k, v in limits.items() if k != 'max_active'},
             connections=[dict(repository=c.repository.casefold(), checkout=str(c.checkout),
                               runner_label=c.runner_label, trusted_publishers=list(c.trusted_publishers)) for c in connections])
-        capacity = dict(max_active=maximum, pipeline_max_active=limits['max_active'],
+        capacity = dict(max_active=maximum, pipeline_max_active=limits.get('max_active'),
                         groups=[dict(repository=p['repository'], id=g['id'], capacity=g['capacity'])
                                 for p in projects for g in p['groups']])
+        if version == 2:
+            capacity = dict(capacity=result['capacity'], effective_capacity=result['effective_capacity'],
+                executor_capacity=_counts(executor_config), pipeline_capacity=_counts(pipeline_config),
+                harness_caps={k: v['max_parallel'] for k, v in result['harness_resources'].items()},
+                groups=[dict(repository=p['repository'], id=g['id'], capacity=g['capacity'],
+                    max_inflight=g['max_inflight']) for p in projects for g in p['groups']])
         result.update(policy_sha256=hashlib.sha256(raw).hexdigest(),
             authorization_sha256=profile_fingerprint(authority), capacity_sha256=profile_fingerprint(capacity),
             _policy_path=path, _policy_bytes=raw, _tasks=tasks, _limits=limits,
@@ -325,7 +414,10 @@ def resolve_route(policy: dict, repository: str, issue: int, task_id: str) -> di
     group = next(g for g in project['groups'] if g['id'] == route['group'])
     task = policy['_tasks'][(repository.casefold(), issue)]
     return dict(status='ready', reason=None, group_id=group['id'], role_profiles=copy.deepcopy(group['role_profiles']),
-                components=list(task['components']), capacity=min(group['capacity'], policy['effective_max_active']))
+                components=list(task['components']), capacity=(min(group['capacity'], policy['effective_max_active']) if policy['version'] == 1 else
+                    dict(policy['effective_capacity'], max_executors=_minimum(group['capacity'],
+                        policy['effective_capacity']['max_executors']), max_inflight=_minimum(group['max_inflight'],
+                        policy['effective_capacity']['max_inflight']))))
 
 
 def group_binding(policy: dict, task: dict) -> dict:
@@ -354,7 +446,15 @@ def group_binding(policy: dict, task: dict) -> dict:
             role_timeout_seconds=min(limits['role_timeout_seconds'], profile['timeout_seconds']),
             max_reworks=limits['max_reworks'], max_processes=limits['max_processes'],
             log_max_bytes=min(limits['log_max_bytes'], profile['log_max_bytes']))
-        return dict(route, version=1, installation_id=fresh['installation_id'],
+        resources = fresh.get('harness_resources', {})
+        resource_binding = {}
+        if fresh['version'] == 2:
+            pools = {}
+            for resource in resources.values():
+                pool = pools.setdefault(resource['pool_id'], dict(max_parallel=None))
+                pool['max_parallel'] = _minimum(pool['max_parallel'], resource['max_parallel'])
+            resource_binding = dict(harness_resources=copy.deepcopy(resources), harness_pools=pools)
+        return dict(route, **resource_binding, version=fresh['version'], installation_id=fresh['installation_id'],
             canonical_journal=fresh['canonical_journal'], repository=key[0], issue=installed['issue'],
             task_id=installed['task_id'], runner_label=installed['runner_label'],
             executor_profile=installed['executor_profile'], profile_sha256=profile_fingerprint(profile),

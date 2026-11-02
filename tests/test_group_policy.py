@@ -266,5 +266,107 @@ class GroupPolicyTests(unittest.TestCase):
         with self.assertRaises(ValueError): self.load()
 
 
+class GroupPolicyV2Tests(GroupPolicyTests):
+    # Inherit v1 coverage on the unchanged fixture; opt in only in v2 cases.
+    def upgrade(self):
+        self.value['version'] = 2
+        self.executor['version'] = 2
+        self.executor.pop('max_active', None)
+        self.executor['capacity'] = dict(max_executors=None, max_inflight=None)
+        self.executor['harness_resources'] = {'local': dict(pool_id='approved', cpu_millis=1000,
+            memory_bytes=1073741824, max_parallel=None)}
+        self.pipeline['version'] = 2
+        self.pipeline.pop('max_active', None)
+        self.pipeline['capacity'] = dict(max_executors=None, max_inflight=None)
+
+    def test_v2_auto_inherit_has_no_fixed_task_count(self):
+        self.upgrade()
+        policy = self.load()
+        self.assertEqual(self.route(policy)['capacity'], dict(mode='auto', max_executors=None,
+            max_inflight=None, max_cpu_millis=None, max_memory_bytes=None, fallback=None))
+        self.assertEqual(group_policy.group_binding(policy, self.task)['version'], 2)
+        self.assertIsNone(policy['projects'][0]['groups'][0]['capacity'])
+
+    def test_v2_explicit_caps_above_two_and_legacy_minimum(self):
+        self.upgrade()
+        self.value['capacity'] = dict(mode='auto', max_executors=9, max_inflight=12,
+            max_cpu_millis=9000, max_memory_bytes=2**40, fallback=None)
+        self.group.update(capacity=5, max_inflight=8)
+        self.executor['capacity']['max_executors'] = 7
+        self.pipeline['capacity']['max_inflight'] = 6
+        self.assertEqual(self.route()['capacity']['max_executors'], 5)
+        self.assertEqual(self.route()['capacity']['max_inflight'], 6)
+        self.pipeline['version'] = 1
+        self.pipeline.pop('capacity')
+        self.assertEqual(self.route()['capacity']['max_executors'], 2)
+
+    def test_v2_strict_capacity_and_missing_resources(self):
+        self.upgrade()
+        original = copy.deepcopy(self.value)
+        for bad in (True, 0, -1, 2**63, '3'):
+            self.group['capacity'] = bad
+            with self.subTest(bad=bad), self.assertRaises(ValueError): self.load()
+        self.value = original
+        self.group = self.value['projects'][0]['groups'][0]
+        for capacity in ({}, dict(mode='auto', max_executors=None, max_inflight=None,
+                max_cpu_millis=None, max_memory_bytes=None, fallback={'cpu_millis': True,
+                'memory_bytes': 1, 'max_executors': 1})):
+            self.value['capacity'] = capacity
+            with self.subTest(capacity=capacity), self.assertRaises(ValueError): self.load()
+        self.value.pop('capacity')
+        self.executor['harness_resources'] = {}
+        with self.assertRaises(ValueError): self.load()
+
+    def test_v2_capacity_digest_excludes_only_capacity_authority(self):
+        self.upgrade()
+        before = self.load()
+        self.group.update(capacity=5, max_inflight=7)
+        self.executor['harness_resources']['local']['max_parallel'] = 4
+        after = self.load()
+        self.assertEqual(before['authorization_sha256'], after['authorization_sha256'])
+        self.assertNotEqual(before['capacity_sha256'], after['capacity_sha256'])
+        self.executor['harness_resources']['local']['cpu_millis'] = 2000
+        changed = self.load()
+        self.assertNotEqual(after['authorization_sha256'], changed['authorization_sha256'])
+
+    def test_v2_legacy_executor_is_explicit_cap_and_cannot_infer_resources(self):
+        self.value['version'] = 2
+        with self.assertRaises(ValueError): self.load()
+        self.executor['harness_resources'] = {'local': dict(pool_id='approved', cpu_millis=1000,
+            memory_bytes=1073741824, max_parallel=5)}
+        self.assertEqual(self.route()['capacity']['max_executors'], 2)
+
+    def test_v2_binding_freezes_resources_and_pool_caps_use_minimum(self):
+        self.upgrade()
+        self.executor['harness_resources']['local']['max_parallel'] = 5
+        other = copy.deepcopy(self.executor['profiles']['local'])
+        self.executor['profiles']['alias'] = other
+        self.executor['harness_resources']['alias'] = dict(pool_id='approved', cpu_millis=2000,
+            memory_bytes=2000000000, max_parallel=3)
+        binding = group_policy.group_binding(self.load(), self.task)
+        self.assertEqual(binding['harness_resources']['local']['cpu_millis'], 1000)
+        self.assertEqual(binding['harness_pools'], {'approved': {'max_parallel': 3}})
+        binding['harness_resources']['local']['cpu_millis'] = 1
+        self.assertEqual(group_policy.group_binding(self.load(), self.task)
+                         ['harness_resources']['local']['cpu_millis'], 1000)
+        self.executor['harness_resources']['alias']['pool_id'] = 'split'
+        with self.assertRaises(ValueError): self.load()
+
+    def test_v2_resource_authority_rejects_model_hints_and_bad_fallbacks(self):
+        self.upgrade()
+        for raw in (dict(pool_id='approved', cpu_millis=1000, memory_bytes=1,
+                         max_parallel=None, model='cheap'),
+                    dict(pool_id='approved', cpu_millis=True, memory_bytes=1, max_parallel=None)):
+            self.executor['harness_resources']['local'] = raw
+            with self.subTest(raw=raw), self.assertRaises(ValueError): self.load()
+        self.upgrade()
+        self.value['capacity'] = dict(mode='auto', max_executors=None, max_inflight=None,
+            max_cpu_millis=None, max_memory_bytes=None,
+            fallback=dict(cpu_millis=4000, memory_bytes=2**34, max_executors=4))
+        self.assertEqual(self.route()['capacity']['fallback']['max_executors'], 4)
+        self.value['capacity']['model'] = 'budget'
+        with self.assertRaises(ValueError): self.load()
+
+
 if __name__ == '__main__':
     unittest.main()

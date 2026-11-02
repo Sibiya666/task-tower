@@ -10,7 +10,7 @@
   "plan": "../superpowers/plans/2026-11-02-agent-groups.md",
   "acceptance_criteria": [
     "Private explicit project groups, routes and six independent role bindings park unknown routing without inventing authority",
-    "One canonical local journal atomically enforces default two installation tasks, group capacity, one owner and component conflicts with fair scheduling",
+    "One canonical local journal atomically admits all ready independent work feasible under current trusted host resources and explicit installation budgets, with no fixed two-task ceiling; positive cleanup releases executor resources while component/product and main barriers remain",
     "Dependencies and explicit aggregate parents require genuine accepted main results; native hierarchy, cycles and unavailable sources remain distinct and visible",
     "Independent Git directories enable real same-project disjoint-group and cross-project concurrency without weakening complete ref mutation guards",
     "Cancellation, restart, multiple workers and lossless explicit migration preserve ownership, unknown effects, stage evidence and stable run/branch/workspace identity",
@@ -21,9 +21,9 @@
   "stages": {
     "spec": {
       "status": "accepted",
-      "reviewer": "books_pr_acceptance",
+      "reviewer": "/root/groups_capacity_r3_acceptance",
       "evidence": "evidence/TT-GROUPS-001/spec-review.md",
-      "sha256": "04aab5223e336739279dd4ab47d7c17e9e1c7e936e8ad123c672399f25fa6d2a",
+      "sha256": "e4fb44063c5260492d77317eebf50072431371a1f12e43282651bd4a6a2dbe59",
       "hash_scheme": "sha256-utf8-lf-v1"
     },
     "development": {

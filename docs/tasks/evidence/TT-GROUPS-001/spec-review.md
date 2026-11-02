@@ -90,3 +90,93 @@ Strict group protocol versions are also specified instead of adding fields to cl
 The original review's sound boundaries remain: explicit routing and same already-authorized role profiles, one local journal/owner/capacity authority, legacy unknown counting and positive cleanup, deterministic accepted-result DAG/parent/cycle semantics, independent Git directories with unchanged whole-ref guards, conservative mixed legacy mode, additive crash-safe migration and fair action/refill scheduling. Copies/other installations are not distributed fencing. #17 merge worker, #19 distributed ownership, #25 supervision and #26 recovery remain separate; no service installation, credential scope, model selection or night readiness is claimed.
 
 No additional blocking design finding remains at this binding. Actual implementation still requires per-task reviews, real competing-process/Git/failure tests, bounded installed-Codex group pilot with truthful limitations, full/current three-platform checks, fresh whole-diff exact-head/base PR acceptance and exact-main independent postmerge plus publisher-driven automatic Issue18 closure. No implementation/pilot tests were run for this document review; read-only API/source examination and tasks._read establish feasibility/shape only. Reviewer wrote only this append-only review section, with no spec/plan/card/code/journal/API mutation, commit or push.
+
+
+## R2 independent full specification and plan review — rejected binding
+
+2026-11-02. Reviewer `/root/groups_policy_acceptance`, distinct from the author and future implementer. **REJECTED pending the representation conflict below.** This verdict supersedes neither the historical R1 acceptance nor Task1/Task2 implementation bindings; it declines the new R2 document binding only. The user's explicit removal of the fixed two-Issue ceiling takes precedence over older AGENTS capacity wording. That user decision is accepted scope, not the reason for rejection.
+
+### Exact reviewed sources
+
+Read the entire revised specification, implementation plan and private proposal in passes, the pending task card, repository AGENTS and applicable independent-review/verification instructions. Re-examined the actual provisional Issue16 noncreating recovery seams statically; neither that branch nor the D5 release is substituted for accepted final main/closure. No runtime import, native sampler, DDL, SQLite connection, model invocation, migration or implementation test was executed.
+
+All three new author documents have identical raw and canonical SHA-256 (UTF-8-sig decode, CRLF/CR to LF, UTF-8 encode for canonical):
+
+| Source | SHA-256 |
+| --- | --- |
+| docs/superpowers/specs/2026-11-02-agent-groups-design.md | `e33167f0eefc5eb273e559bfbb249095021760118898744d3e4b4102572396e8` |
+| docs/superpowers/plans/2026-11-02-agent-groups.md | `22b17de1a7cd8f59171ca46efa33f2cf1f9457e5b3b88fa926e46f20f6c553ad` |
+| private runtime/groups18-capacity-r2-proposal.md | `418c051e4b801dbbbaeca107e12cc4352d78e1108c09da52d5f21264811ca34b` |
+
+The whole pre-append report was preserved byte-for-byte: raw `0e945a2671b354a3bd02f9b9ccdfcd3a694509605dab95f27c02ec59150c1348`, canonical `04aab5223e336739279dd4ab47d7c17e9e1c7e936e8ad123c672399f25fa6d2a`. Its earlier rejection and R1 acceptance remain intact. Task card is in_progress with SPEC/development/test/postmerge pending. Current delivery48c93982-4c79-468c-a3eb-e4f6d05db14d remains at its original owner/backend; no import/re-admission is approved.
+
+### P1 — pre-registration legacy resource fences have no valid representation
+
+Anchors: specification lines250–275 (resource observations/leases), lines314–335 (actions require nonnull capacity_epoch), lines426–428 (installation absent before registration and active/unknown migration slot held), line445 (migration creates no group actions/installation), line452 (slot_held equals held leases; synthetic migration legacy_fence). Equivalent private proposal lines102–126,160–178,278–280,297,304. Plan Task3A requires migration_unknown_estimate_fences and full v2 invariant validation.
+
+A recognized v1 journal can contain a positively dead owner's unknown run with unresolved launch/cleanup. The contract explicitly permits migrating it without inventing cleanup. Migration must mark its slot+components held, and R2 says slot_held is exactly existence of a held resource lease. But a lease's action_id references group_actions; group_actions.capacity_epoch is NOT NULL and references group_capacity_epochs; every capacity epoch requires a group_installation row. Registration has not happened yet, group_installation must contain zero rows, and migration explicitly forbids group actions. Therefore no valid row set satisfies all the proposed SQL and typed invariants for this required input. Synthetic legacy_fence does not resolve it: it still lacks the required epoch/installation and contradicts the action prohibition. Deferred FKs only postpone checks until commit; they cannot create the missing authority.
+
+This forces a builder to reject a promised lossless migration, weaken validation, invent G/policy authority or fabricate a release. It is a required representation/compatibility decision, not a routine helper choice to defer until implementation.
+
+Required correction: explicitly define the pre-registration conservative legacy-fence representation (for example a typed migration-only holding with no resource-authorizing epoch, or defer resource materialization until G adoption while stating a precise pre-registration exception and retaining the old conservative fence). Reconcile DDL nullability/closed row dispatch, slot_held equality, migration action rules and the atomic registration conversion. Specify how absent/unknown estimates, original owners/PIDs and original history digests survive, how no claims bypass that fence, and how registration installs real estimates or preserves unknown_estimate blocking without asserting cleanup. Add named tests for unknown/dead legacy migration before G, v2 reopen/status/cancel, failed registration rollback and first G adoption with unchanged original rows/sequences. Do not solve it by creating a guessed installation/policy epoch, dropping unknowns or treating missing estimates as zero.
+
+### P2 — remove the remaining fixed-two acceptance obligation from new R2 evidence
+
+Specification line173 still requires competing processes to prove at most2 installation reservations in its live Acceptance evidence list, adjacent to >=3 real work/pilot obligations. R2's final audit says historical foundation count statements are old-only, but this is an acceptance requirement, not an old-runtime description. The plan also retains the old test_full_capacity_still_allows_reserved_continuation name despite R2 explicitly forbidding product-reservation resource bypass; its intended existing-active-action semantics should be stated if retained. Rewrite the acceptance item as v1 compatibility-cap evidence plus separate >=3 feasible R2 resource claims, and explicitly distinguish already-held live action continuation from a cleaned product-owner reacquisition. Keep the old requirement in historical reviews rather than an ambiguous current acceptance list. This is a document consistency correction; the user decision itself needs no reconfirmation.
+
+### Sound R2 boundaries
+
+- V2 auto/null capacity and positive optional caps replace a product-wide constant; exact closed v1 loaders/default caps remain compatibility semantics and deliberate v2 private opt-in is required. CPU/memory feasibility, explicit harness pool grants and optional count caps are minima; aliases cannot create extra account capacity. Provider/model/tool/credential quota or spend authority is not inferred.
+- Fresh host resource samples have a two-second collection budget, five-second maximum age, boot/process/monotonic/policy provenance and same-transaction revalidation. Typed unknown/fallback paths do not silently mean unlimited capacity; explicit fallback only substitutes missing resource dimensions and adds its count cap. Conservative headroom plus checked held-envelope arithmetic supports zero capacity. Estimates are explicitly not OS reservations, child resource enforcement or a credential sandbox.
+- Active action leases are separate from in-flight product/component ownership. Positive cleanup plus closed effects releases execution resources during clean CI/review/main waits while component/main barriers persist. Unknown launch/effect/cleanup retains fences; no PID-only release, lease stealing, deadline reset or replay is introduced. Fresh actions reacquire resources and debt blocks additions rather than killing owners.
+- Same-J atomic claims/epochs/resource samples/owners and persisted omitted-G gates, stable backend argv/cwd/fingerprints, no existing delivery transfer, lossless backup/row/sequence preservation and noncreating existing-file recovery remain explicit. Seventeen new tables/two indexes are proposed, not executed. SQL rows/hashes/samples never replace host proof or acceptance.
+- Native hierarchy/qualified dependency receipts and partial-source diagnostics remain unchanged. Immutable original S/B/source/profile/criteria, private initial-source/base-update grants, fresh accepted-main proof, disjoint raw deltas/exact tree union, full-ref guard, strict legacy/group wire dispatch and all-old-input invalidation remain required.
+- Pilot evidence now requires >=3 actual independent installed tasks when authorized capacity exists, six fresh roles/three independent approvals each, actual overlap/cleanup and bounded actions. Insufficient installed resources/policy leaves pilot acceptance pending; fixtures cannot substitute, and no budget/provider grant is inferred.
+
+### Declined to judge and remaining gates
+
+- Platform sampler correctness and hard runtime deadline enforcement: no native probes executed; named Windows/Linux/macOS capability/unknown/timeout tests and actual supported-host evidence remain implementation/TEST gates.
+- Real multi-process resource accounting, helper sizing, fairness, cleanup/debt races, crash backup/migration behavior and exact protocol implementation: design obligations only, requiring future actual diff and tests. No running scheduler behavior is accepted here.
+- Issue16's current provisional recovery edits, CI, postmerge and automatic closure: external integration gate remains pending. After it passes, rebase/audit actual accepted main, freeze final APIs/schema and obtain affected acceptance before integration. D5 hashes or candidate test counts do not satisfy it.
+- #17 PR merge worker, #19 distributed fencing and #25/#26 supervision/recovery remain separate; no service installation, source-grant widening, main merge or Issue closure is authorized by this review.
+
+No additional major finding identified in the reviewed scope. Resolve both anchored items and freeze revised documents for fresh independent full R2 acceptance. Reviewer appended only this report; no spec/plan/card/product code, original review history, private proposal, DB/config, commit, push or GitHub state was changed.
+
+
+---
+
+# Issue18 capacity R3 — independent specification review
+
+Reviewer: `/root/groups_capacity_r3_acceptance`, 2026-11-02, distinct from document author and implementers.
+
+**Verdict: ACCEPT the specification/plan at the exact bindings below.** No blocking specification finding remains. This is document acceptance only: no implementation, migration, sampler, native pilot, test, PR/main or Issue completion is accepted.
+
+| Reviewed document | Raw SHA-256 |
+| --- | --- |
+| task-tower-capture/docs/superpowers/specs/2026-11-02-agent-groups-design.md | `2b98f00a034878d649315972d77d1316b031a32956df6abcfc37854ded61f2b7` |
+| task-tower-capture/docs/superpowers/plans/2026-11-02-agent-groups.md | `138523c0115a618027168a48817af888d72ab46bb654e96db3aa5deb5ca88817` |
+
+Reviewed the revised contract, SQL proposal and implementation sequence, prior R2 rejection and historical acceptance, private proposal, and repository AGENTS. The user's explicit removal of a fixed two-Issue maximum supersedes older AGENTS wording. No product maximum is inferred from the chat's four tool slots.
+
+## Previously rejected items
+
+R2 P1 is resolved. The DDL now distinguishes execution actions from immutable provenance-only legacy_fence actions. The latter have NULL executable owner/PID/input/epoch and no completion receipt. Their pre-registration held unknown-estimate lease has NULL epoch/observation/numeric envelope and a real run/action binding. This admits the required dead-owner unknown migration without creating an installation, borrowing an owner or pretending cleanup. The seventeen-table/three-index catalog and typed invariants agree with this representation. Deferred keys are used only for real atomic initialization, not as a substitute for absent authority.
+
+R3 explicitly carries original owner/PID/run/history digests in immutable neutral provenance, conservatively fences new pre-registration claims, allows inspection/cancel independently of G, and specifies positive original cleanup as the only release path. First G adoption reconciles current original history and inserts the actual installation/epoch plus known approved estimates or preserved unknowns in one transaction. Failed adoption leaves unregistered v2 intact. Adoption does not convert the historical fence into execution authority or advance fair cursors. Released historical fences remain inspectable; lease-aware per-run exclusion prevents a held fence coexisting with a new action. The plan names migration, reopen, claims, adoption failure/crash/idempotence and genuine cleanup cases.
+
+R2 P2 is resolved. Current evidence separates exact v1 compatibility caps from resource-feasible v2 claims, including three or more actual simultaneous tasks when authorized resources permit. Already-held live actions finishing are explicitly distinguished from clean product owners reacquiring resources. The new path has no fixed-two ceiling. The independently bounded two-intent base-update budget remains unrelated to execution parallelism.
+
+## Retained boundaries checked
+
+- Exact closed v1 schemas/default caps and committed delivery/backend identities remain unchanged. Explicit private v2 opt-in does not silently widen existing policy or move Issue18's admitted delivery.
+- CPU/memory headroom, checked envelope arithmetic, fresh same-process/boot/policy/monotonic samples and optional explicit pool/count caps form one same-J atomic feasibility decision. Unsupported observations block or use explicitly installed labeled fallback; zero capacity is valid. These estimates are not OS enforcement or provider/spend authority.
+- Resource leases are distinct from product/component ownership. Clean CI/review waits can yield execution capacity while preserving conflicts and the serialized main barrier. Unknown launch/effect/cleanup remains fenced; no timeout stealing, PID-only release or replay is allowed.
+- Registered same-J discovery applies to omitted-G and legacy claim paths. Unavailable/revoked policy does not disable status/cancel. One writer transaction covers samples, capacities, owners and resources; no distributed lock is claimed.
+- Source/profile/criteria/admission baselines remain immutable. Authenticated accepted-main proofs, bounded disjoint imports, full task-delta/full-ref checks, strict wire versions and all-old-acceptance invalidation remain intact. Parent hierarchy is distinct from accepted-result dependency authority.
+- Migration is explicit, stopped/no-live-owner, recognized-schema only, noncreating and lossless, with no-clobber backup, one shared deadline and rollback boundary. Original rows/sequences/history remain unchanged. The SQL catalog is a proposed implementation contract, not executed evidence.
+
+## Mandatory remaining gates
+
+Issue16 exact accepted main, successful main CI, independent postmerge acceptance and automatic Issue closure remain a hard prerequisite for Task3/runtime integration. Re-audit the actual final APIs/schema and recovery semantics, including pending descriptor/process fixes, update the contract map and obtain affected acceptance before integration. A provisional candidate or its tests do not satisfy this gate.
+
+Pure Task1R policy rework may proceed under its stated independent-review/TDD boundaries. Runtime behavior still requires real migration/FK/crash tests, native resource observations or visible unavailable results on all three platforms, competing-process three-or-more feasibility tests, genuine cleanup and bounded installed pilot evidence. No DDL, SQLite connection, native sampler/model/pilot or implementation suite was executed in this document review. No card, source document, historical review, config, GitHub state, commit or push was changed; only this private report was created.
