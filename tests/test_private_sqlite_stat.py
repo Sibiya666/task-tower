@@ -69,8 +69,15 @@ class PrivateSQLiteStatTests(unittest.TestCase):
                 owner=kind(path)
                 with self.subTest(kind=kind.__name__,suffix=suffix),self.fault(path,info),self.assertRaises(ValueError):owner._safe()
 
-    def test_observed_directory_zero_never_becomes_missing_sidecar(self):
+    def test_actual_deleted_directory_never_becomes_missing_sidecar(self):
         info=self.fixture.unlinked_info(directory=True)
+        for kind in (ExecutionQueue,PipelineJournal):
+            owner=self.owner(kind);path=Path(str(owner.path)+'-journal');path.touch()
+            with self.subTest(kind=kind.__name__),self.fault(path,info),self.assertRaises(ValueError):owner._safe()
+
+    def test_modeled_zero_link_directory_never_becomes_missing_sidecar(self):
+        """Synthetic zero-link directory boundary, distinct from actual fstat."""
+        info=self.fixture.modeled_directory_zero_info()
         for kind in (ExecutionQueue,PipelineJournal):
             owner=self.owner(kind);path=Path(str(owner.path)+'-journal');path.touch()
             with self.subTest(kind=kind.__name__),self.fault(path,info),self.assertRaises(ValueError):owner._safe()

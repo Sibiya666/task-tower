@@ -145,3 +145,31 @@ The installed-model pilot remains qualified solely to source8981c6d and fixture 
 The separate TEST review rejects a569 macOS CI despite its independent local666-test green run and Windows/Linux evidence. This development/security verdict does not turn that rejected head green. Required later work remains independent current-source testing/current three-OS CI, whole actual exact-head/base PR acceptance, serialized merge/main CI, independent postmerge acceptance and automatic Issue closure. No service/night/live-GitHub readiness is granted.
 
 Only this report was changed by this reviewer. No product/docs/card, private installed configuration or pilot journal, Git ref, commit/push, API write or installed-model execution was performed. Changed source or documentation invalidates affected content-bound acceptance.
+
+
+## R3 fixture-only APFS portability rebind — current development verdict
+
+2026-11-02, same independent development reviewer: **ACCEPT the exact two-file fixture correction and retain whole-development acceptance for the current combined inputs.** No blocking finding in this delta. All original rejection/R1/R2 evidence remains byte-for-byte as the prefix SHA256 `ed30109c2a549839fe7048ff5c652fbc4c5cc13d306f060d6df2be7ea5865312`. This verdict supplies development reacceptance, not functional TEST, final-head CI, PR or main acceptance.
+
+HEAD `e59d736157185f59bf7cf7cf01b47b7b673f249b`; base `56f8ab12f21ab91030ffe54de96520fcd979dc04`. Independently verified freeze `runtime-task7-apfs-directory-freeze.json` SHA256 `36907966f59bdb474c0b5b540254c93efb3ff1f657980f69ab9847f0fe93e942`, both changed test bindings, and all five production raw/canonical bindings against the prior combined source. All five accepted operator/shared docs also remain byte-identical to the R2 bindings above. Only the two test fixtures change:
+
+| File | Raw and canonical SHA256 |
+| --- | --- |
+| tests/test_safe_config_race.py | `5b3f4978888fd5ef3d9915ff0967b3e5d7d0bf23af621564f29155e68cc34f44` |
+| tests/test_private_sqlite_stat.py | `a2421b6c88af30409e914fd069a91244c01b0fa6634d0c147bf5d5f3434c81a8` |
+
+Read the entire actual two-file diff. The helper still creates and removes a real inode, obtains actual fstat metadata, and verifies the path is gone. For regular files it additionally requires actual regular mode and link count0. For directories it requires actual directory mode without assuming a filesystem-universal link count. Thus APFS's observed deleted-directory count2 can reach the intended negative product guard, instead of failing in fixture setup. Production still rejects directory metadata regardless of link count.
+
+The separate `modeled_directory_zero_info` explicitly labels its modified count as synthetic; the APFS-style count2 fixture contract likewise models only the link count on genuine removed-directory metadata. These are not claimed as actual APFS execution on this Windows host. Explicit modeled-zero negative tests retain coverage in executor `_paths` and both SQLite `_safe` layers. There is no guard change, new skip, timeout adjustment or relaxed hardlink/junction/collision assertion.
+
+Independent existing bundled-Python command:
+
+```text
+-m unittest tests.test_safe_config_race tests.test_private_sqlite_stat tests.test_executor_queue tests.test_pipeline_journal tests.test_pipeline_cli -q
+```
+
+**96 tests in10.804s, OK, one existing unavailable-symlink privilege skip.** Added a separate independent probe using genuine removed-directory mode with explicitly modeled link counts0,2,17: all nine combinations across executor `_paths`, ExecutionQueue and PipelineJournal rejected the directory snapshots. No actual APFS host run is inferred. Reverified the two test and five production bindings after these checks.
+
+Read the independent test review's completed e59 CI evidence: Windows713-test full pass and Ubuntu success are genuine completed observations; macOS has two fixture failures before the intended negative guards. This correction addresses that specifically identified fixture assumption. The older a569 generic policy_revoked cause remains unproven. The corrected-source local session that disappeared without terminal metadata remains incomplete; its65536-byte prefix is neither a full pass nor a diagnosed failure. No restart/substituted result is claimed by this development review.
+
+The qualified source8981c6d installed pilot, prior parked outcomes and preserved1054-file evidence remain separate and unchanged; no installed model rerun exercised this fixture correction. Independent functional TEST and final exact-head six-context CI/whole-PR approval remain mandatory before merge, followed by serialized exact-main/postmerge/automatic closure. This review does not waive or predeclare those gates. Only this report was edited by this reviewer; no product, docs, card, configuration, pilot/journal, commit, push or external state was changed.

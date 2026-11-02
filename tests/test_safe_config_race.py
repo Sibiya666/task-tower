@@ -1,5 +1,6 @@
 """No-follow path observations remain valid when SQLite removes a sidecar."""
 import os
+import stat
 from pathlib import Path
 import tempfile
 import subprocess
@@ -145,7 +146,7 @@ class ExecutorTransientLinkTests(unittest.TestCase):
         self.base=self.root/'state.sqlite3';self.base.touch()
 
     def unlinked_info(self,directory=False):
-        """Actual deleted-file metadata, injected only at the stat race seam."""
+        """Actual removed inode; directory link counts differ across filesystems."""
         path=self.root/'held'
         if directory:path.mkdir()
         else:path.write_bytes(b'actual unlinked inode')
@@ -163,9 +164,18 @@ class ExecutorTransientLinkTests(unittest.TestCase):
         try:
             path.rmdir() if directory else path.unlink()
             info=os.fstat(descriptor)
-            self.assertEqual(info.st_nlink,0)
+            self.assertFalse(path.exists())
+            if directory:self.assertTrue(stat.S_ISDIR(info.st_mode))
+            else:
+                self.assertTrue(stat.S_ISREG(info.st_mode))
+                self.assertEqual(info.st_nlink,0)
             return info
         finally:os.close(descriptor)
+
+    def modeled_directory_zero_info(self):
+        """Explicit synthetic zero-link boundary, not a kernel metadata claim."""
+        values=list(self.unlinked_info(directory=True));values[3]=0
+        return os.stat_result(values)
 
     def fault(self,path,info,replace=None):
         original=Path.stat;observed=[]
@@ -176,6 +186,17 @@ class ExecutorTransientLinkTests(unittest.TestCase):
                 return info
             return original(candidate,*args,**kwargs)
         return patch.object(Path,'stat',stat)
+
+    def test_deleted_directory_fixture_accepts_modeled_apfs_link_count_two(self):
+        """Model only APFS link count; the directory is genuinely removed."""
+        original=os.fstat
+        def apfs_count(descriptor):
+            info=original(descriptor)
+            self.assertTrue(stat.S_ISDIR(info.st_mode))
+            values=list(info);values[3]=2
+            return os.stat_result(values)
+        with patch('os.fstat',apfs_count):info=self.unlinked_info(directory=True)
+        self.assertTrue(stat.S_ISDIR(info.st_mode));self.assertEqual(info.st_nlink,2)
 
     def test_typed_sidecars_allow_genuine_unlinked_stat_snapshot(self):
         from task_tower.executor import _paths
@@ -195,6 +216,12 @@ class ExecutorTransientLinkTests(unittest.TestCase):
     def test_deleted_directory_snapshot_is_never_treated_as_sidecar(self):
         from task_tower.executor import _paths
         info=self.unlinked_info(directory=True);sidecar=Path(str(self.base)+'-journal')
+        with self.fault(sidecar,info),self.assertRaises(ValueError):
+            _paths([self.base,sidecar],[],transient_paths=[sidecar])
+
+    def test_modeled_zero_link_directory_is_never_treated_as_sidecar(self):
+        from task_tower.executor import _paths
+        info=self.modeled_directory_zero_info();sidecar=Path(str(self.base)+'-journal')
         with self.fault(sidecar,info),self.assertRaises(ValueError):
             _paths([self.base,sidecar],[],transient_paths=[sidecar])
 

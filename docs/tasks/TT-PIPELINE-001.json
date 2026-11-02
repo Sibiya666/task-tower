@@ -5,7 +5,7 @@
   "executor": "stage-pipeline-implementation-team",
   "project_root": "../..",
   "mode": "autonomous",
-  "status": "in_progress",
+  "status": "awaiting_merge",
   "spec": "../superpowers/specs/2026-11-01-stage-pipeline-design.md",
   "plan": "../superpowers/plans/2026-11-01-stage-pipeline.md",
   "acceptance_criteria": [
@@ -29,11 +29,15 @@
       "status": "accepted",
       "reviewer": "pipeline_development_acceptance",
       "evidence": "evidence/TT-PIPELINE-001/development-review.md",
-      "sha256": "ed30109c2a549839fe7048ff5c652fbc4c5cc13d306f060d6df2be7ea5865312",
+      "sha256": "6601b78698608d4051d5f7963865997424488507cdcdce11c12ee6d69fdd5abb",
       "hash_scheme": "sha256-utf8-lf-v1"
     },
     "test": {
-      "status": "pending"
+      "status": "accepted",
+      "reviewer": "books_native_smoke_impl",
+      "evidence": "evidence/TT-PIPELINE-001/test-review.md",
+      "sha256": "e6edf44d49b0d5de73b65028ee3efb512acd7565357fb7f8c15237755cc225c9",
+      "hash_scheme": "sha256-utf8-lf-v1"
     },
     "postmerge": {
       "status": "pending"
