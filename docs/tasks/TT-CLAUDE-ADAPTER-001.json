@@ -21,7 +21,7 @@
       "status": "accepted",
       "reviewer": "claude_spec_acceptance",
       "evidence": "evidence/TT-CLAUDE-ADAPTER-001/spec-review.md",
-      "sha256": "c3734febce6a976ed312c58745eb3a306139c21d11d037ab77c1c2517dd66a1d",
+      "sha256": "8df0a45fc8dfc19148c42814e70de64af13767ecea5d5df38eee02232a8dec66",
       "hash_scheme": "sha256-utf8-lf-v1"
     },
     "development": {

@@ -38,3 +38,33 @@ These are checks against the accepted contract, not permission for new authentic
 - Unattended orchestration, publication, pool scheduling and distributed ownership: explicitly owned by other Issues; this adapter must not claim those capabilities.
 
 Any spec/plan edit or relevant accepted-main interface change invalidates this exact source binding and requires fresh review. Root may record this verdict in the pending card through the ordinary stage loader; this reviewer did not edit the card, code, specification, plan, Git state or GitHub.
+
+## R1 — narrow child update-guard supplement review
+
+2026-11-02, same independent reviewer. **REJECTED as currently worded; helper policy accepted in principle.** The original report above is preserved. Reviewed canonical spec `4b0df7a12990bec5e97465485a70e3df842861444cb70e5d8cbafeccc395b8f9` and plan `e157e48f704c1f226443a6e69f89259b64d0b57e1662db57d61fce3d119ea2dd`; independently recomputed both. Task1 WIP/code is excluded from this narrow specification review.
+
+The proposed pure child helper appropriately removes GitHub tokens and case-insensitive update/force aliases, supplies canonical `DISABLE_UPDATES=1`, preserves other variables and leaves the host untouched. Removing the force variable avoids relying on invented `0` semantics. Official documentation identifies the full update-disable control and the force-plugin-update override of the weaker updater control. It also states that settings `env` commonly replaces inherited values. [Environment variables](https://code.claude.com/docs/en/env-vars).
+
+Important finding: the new paragraph makes every actual probe/pilot depend on establishing that all loaded settings and managed policy cannot override the guard, but supplies no bounded method. Managed sources can arrive remotely and change while a session runs. Requiring universal proof converts the original accepted managed-policy boundary into an open-ended prerequisite; the task's no-install/update instruction does not require a new human attestation or proof against arbitrary trusted policy behavior. [Settings and precedence](https://code.claude.com/docs/en/settings).
+
+Read-only current-installation spot check parsed the default user settings and reported only relevant-key presence: neither update-related key is present. Worker checkout project/local settings are absent; `C:/Program Files/ClaudeCode/managed-settings.json` is absent; no `CLAUDE_CONFIG_DIR` override is inherited. No auth/model/secret values or complete settings were output. This is a scoped check, not a claim that all managed sources or the eventual pilot checkout were examined. No Claude process, model, updater, auth operation or settings mutation was run during R1.
+
+Required correction: replace the universal prerequisite with a bounded read-only preflight of known applicable local settings sources for only these update-related `env` keys, including the actual invocation worktree and selected config directory. Record sanitized source identities/fingerprints and relevant-key findings privately; block an observed conflicting override or an unreadable relevant local source. Recheck for each concrete probe/pilot as appropriate. If no conflict is observed, allow guarded execution under the already documented managed-policy boundary, without asserting an absolute OS/update guarantee. Newly observed conflicting managed behavior remains a real blocker; unknown hypothetical remote behavior alone does not create a new approval flow. Do not inspect credentials or mutate policy to pass preflight.
+
+Suggested replacement intent: “The supplied mapping is a child-process safeguard. Before actual probes/pilot, inspect known applicable local settings read-only for update-related env overrides and retain sanitized fingerprints/findings. Block observed conflicts or unreadable relevant local settings; otherwise proceed with this guard and document that existing trusted managed policy may still affect runtime behavior. No claim is made that arbitrary managed hooks cannot run external commands.”
+
+No other original design decision is reopened. A corrected frozen supplement needs fresh narrow acceptance before its runtime hookup. Pure helper tests alone do not prove effective runtime policy.
+
+## R2 — corrected narrow supplement acceptance
+
+2026-11-02, reviewer `claude_spec_acceptance`. **ACCEPTED for implementation.** This supersedes R1's rejection for the corrected supplement only; original report and R1 remain preserved above.
+
+Independently recomputed canonical UTF-8/LF hashes and read the changed supplement/source entry and corresponding plan contract:
+
+- Specification: `8d1c587b62cff7ded7906a450800d722f50bf285d835e9c0ed1e794a6080c3bd`.
+- Plan: `30f8ff37c16b0ae2372151abb7ef27f87be7ad98f5b0dd2b415fb6efb230cb1f`.
+- Accepted-main interface baseline remains `56f8ab12f21ab91030ffe54de96520fcd979dc04`. Current Task1 code and test claims are outside this narrow review.
+
+R1 is resolved: known local settings sources are concretely enumerated, inspection is restricted to relevant update-control env keys, evidence remains private/sanitized, source fingerprints are checked immediately before launch, and observed conflicts/unreadable relevant local sources block. In the absence of an observed conflict the guarded mapping may proceed under the original managed-policy boundary. The text explicitly excludes universal remote/future-policy proof, new hypothetical attestation and an absolute OS/update guarantee. These requirements are practical without changing global/auth/model/telemetry settings. No additional local settings scan, Claude process, model or mutation was needed for R2.
+
+The previously verified official environment-variable/settings sources support both the child-only update control and acknowledging later settings precedence. Removing the force override rather than assigning an assumed false value remains sound. The plan carries the helper's exact preservation/alias/token tests and binds Task3 runtime hookup to the scoped preflight. No remaining narrow specification blocker. Development review must verify this behavior and its failure paths; this verdict does not establish runtime effectiveness or pilot acceptance.
