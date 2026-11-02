@@ -15,7 +15,7 @@ def policy(components=None): return dict(profile_id='default',profile_fingerprin
 class JournalFixture:
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
-        self.path=Path(self.tmp.name)/'private/pipeline.sqlite3'
+        self.path=Path(self.tmp.name).resolve()/'private/pipeline.sqlite3'
         self.journal=journal.PipelineJournal(self.path)
 
 
@@ -37,7 +37,10 @@ class JournalTests(JournalFixture, unittest.TestCase):
         with self.assertRaises(ValueError): self.journal.status()
 
     def test_cas_claims_component_locks_and_unknown_capacity(self):
-        for issue,components in [(1,['core']),(2,['core']),(3,['other'])]: self.journal.submit(request(issue),policy(components))
+        for issue,components in [(1,['core']),(2,['core']),(3,['other'])]:
+            candidate=request(issue)
+            if issue==3:candidate['repository']='other/repository'
+            self.journal.submit(candidate,policy(components))
         owner=uid(); first=self.journal.claim(owner,2)
         second=self.journal.claim(uid(),2)
         self.assertEqual((first['issue'],second['issue']),(1,3))
@@ -155,7 +158,7 @@ class HistoryGateTests(AttemptFixture, unittest.TestCase):
 class CompetingJournalTests(JournalFixture, unittest.TestCase):
     def test_real_competing_processes_cannot_exceed_capacity(self):
         import subprocess,sys
-        for issue in range(1,5): self.journal.submit(request(issue),policy([str(issue)]))
+        for issue in range(1,5): self.journal.submit(dict(request(issue),repository='example/repo'+str(issue)),policy([str(issue)]))
         code="from task_tower.pipeline_journal import PipelineJournal; import sys,uuid; j=PipelineJournal(sys.argv[1]); o=str(uuid.uuid4());\nwith j.owner(o):\n r=j.claim(o,2); print('none' if r is None else r['run_id'])"
         env={k:v for k,v in os.environ.items() if k.upper() not in ('GH_TOKEN','GITHUB_TOKEN')}
         children=[subprocess.Popen([sys.executable,'-c',code,str(self.path)],stdout=subprocess.PIPE,stderr=subprocess.PIPE,env=env) for _ in range(4)]
@@ -469,9 +472,9 @@ class CrossRunReworkProofTests(AttemptFixture, unittest.TestCase):
         owner,first,manifest=self.bound_run()
         attempt=self.journal.begin_attempt(first['run_id'],owner,dict(role='spec_executor',manifest=manifest,artifact_names={}))
         self.journal.finish_attempt(attempt['attempt_id'],owner,dict(status='failed',started=True,cleanup_confirmed=True,exit_code=1,result_sha256='f'*64,source_unchanged=False))
-        self.journal.submit(request(2),policy(['other'])); second=self.journal.claim(owner,2)
+        self.journal.submit(dict(request(2),repository='other/repository'),policy(['other'])); second=self.journal.claim(owner,2)
         criteria={'issue_id':124}
-        admission=dict(first['admission'],issue=second['issue'],issue_id=124,task_id=second['task_id'],criteria=criteria,criteria_sha256=digest_manifest(criteria))
+        admission=dict(first['admission'],repository=second['repository'],issue=second['issue'],issue_id=124,task_id=second['task_id'],criteria=criteria,criteria_sha256=digest_manifest(criteria))
         second=self.journal.record(second['run_id'],owner,{k:second[k] for k in ('state','stage','generation','input_sha256')},dict(state='preparing',admission=admission,issue_id=124,criteria_sha256=admission['criteria_sha256'],source_sha='a'*40,base_sha='a'*40,superpowers_sha256='d'*64))
         binding=stage_manifest(second,dict(checkpoint_sha='a'*40,product_sha256='e'*64),stage='spec',generation=1,prior_receipt=None,checks=None)
         second=self.journal.record(second['run_id'],owner,{k:second[k] for k in ('state','stage','generation','input_sha256')},dict(state='executing',manifest=binding))

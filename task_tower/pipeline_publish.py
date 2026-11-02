@@ -251,6 +251,10 @@ def publish_one(config:dict,run:dict,journal,owner_id:str,*,store_factory=GitHub
         if not task['publish']['enabled']:
             from .pipeline_worker import _record
             _record(journal,current,owner_id,state='ready_for_pr',evidence=dict(cleanup_confirmed=True))
+        else:
+            from .pipeline_worker import _record
+            effect=journal.history(run['run_id'])['effects'][-1]
+            _record(journal,current,owner_id,state='ready',evidence=dict(cleanup_confirmed=True,publication_effect_id=effect['effect_id']))
         return journal.status(run['run_id'])
     validate_publication_current(run,task,journal)
     if not task['publish']['enabled']:
@@ -270,6 +274,8 @@ def publish_one(config:dict,run:dict,journal,owner_id:str,*,store_factory=GitHub
             _git(run['worktree'],'-c','core.hooksPath='+str(hooks),'-c','push.gpgSign=false','push','--porcelain','--no-follow-tags','--recurse-submodules=no','origin',run['checkpoint_sha']+':refs/heads/'+run['branch'])
             if _remote_head(run)!=run['checkpoint_sha']:raise ValueError('Push observation missing')
             journal.finish_effect(effect['effect_id'],owner_id,dict(status='completed',head_sha=run['checkpoint_sha']))
+            from .pipeline_worker import _record
+            _record(journal,journal.status(run['run_id']),owner_id,state='ready',evidence=dict(cleanup_confirmed=True,publication_effect_id=effect['effect_id']))
         except Exception:
             journal.finish_effect(effect['effect_id'],owner_id,dict(status='unknown'))
         return journal.status(run['run_id'])

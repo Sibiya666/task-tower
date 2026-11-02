@@ -31,7 +31,7 @@ class GitFixture:
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name) / 'repo'
+        self.root = Path(self.tmp.name).resolve() / 'repo'
         self.root.mkdir()
         self.git('init', '-b', 'main')
         self.git('config', 'user.name', 'Fixture')
@@ -98,7 +98,7 @@ class CheckpointTests(GitFixture, unittest.TestCase):
     def journal_run(self):
         from task_tower.pipeline_journal import PipelineJournal
         from tests.test_pipeline_journal import policy,request,uid
-        store=PipelineJournal(Path(self.tmp.name)/'private/journal.sqlite3',checkouts=(self.root,))
+        store=PipelineJournal(Path(self.tmp.name).resolve()/'private/journal.sqlite3',checkouts=(self.root,))
         store.submit(request(),policy()); owner=uid(); run=store.claim(owner,2)
         self.git('checkout','-b',run['branch'])
         run=store.record(run['run_id'],owner,{k:run[k] for k in ('state','stage','generation','input_sha256')},dict(state='preparing',source_sha=self.source,base_sha=self.source,worktree=str(self.root)))
@@ -165,7 +165,7 @@ class AdditionalInputTests(GitFixture, unittest.TestCase):
 
     def test_inherited_git_index_cannot_redirect_host_git(self):
         from unittest.mock import patch
-        foreign=Path(self.tmp.name)/'foreign-index'
+        foreign=Path(self.tmp.name).resolve()/'foreign-index'
         with patch.dict(os.environ,{'GIT_INDEX_FILE':str(foreign)}):
             result=inputs.product_manifest(self.root,self.policy)
         self.assertIn('a.ps1',[r['path'] for r in result['files']])
@@ -225,7 +225,7 @@ class PublicationCheckpointTests(GitFixture, unittest.TestCase):
     def test_final_host_evidence_is_committed_without_changing_product(self):
         from task_tower.pipeline_journal import PipelineJournal
         from tests.test_pipeline_journal import policy,request,uid
-        store=PipelineJournal(Path(self.tmp.name)/'private/journal.sqlite3',checkouts=(self.root,))
+        store=PipelineJournal(Path(self.tmp.name).resolve()/'private/journal.sqlite3',checkouts=(self.root,))
         store.submit(request(),policy()); owner=uid(); run=store.claim(owner,2)
         self.git('checkout','-b',run['branch'])
         def move(**transition):
@@ -270,7 +270,7 @@ class ReworkCheckpointTests(GitFixture, unittest.TestCase):
     def mutation_attempt(self, checking=False):
         from task_tower.pipeline_journal import PipelineJournal
         from tests.test_pipeline_journal import policy,request,uid
-        store=PipelineJournal(Path(self.tmp.name)/'private/journal.sqlite3',checkouts=(self.root,))
+        store=PipelineJournal(Path(self.tmp.name).resolve()/'private/journal.sqlite3',checkouts=(self.root,))
         store.submit(request(),policy()); owner=uid(); run=store.claim(owner,2)
         self.git('checkout','-b',run['branch'])
         def move(**transition):

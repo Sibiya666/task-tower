@@ -76,9 +76,9 @@ class PublicationTests(unittest.TestCase):
     def test_host_push_then_pr_with_no_closing_keywords(self):
         self.accepted(True)
         accepted=self.f.state()['manifest']['checkpoint_sha']
-        self.assertEqual(self.f.tick()['status'],'publishing')
+        self.assertEqual(self.f.tick()['status'],'ready')
         self.assertNotEqual(self.f.state()['checkpoint_sha'],accepted)
-        self.assertEqual(self.f.tick()['status'],'publishing')
+        self.assertEqual(self.f.tick()['status'],'ready')
         self.assertEqual(self.f.tick()['status'],'awaiting_pr')
         self.assertEqual(len(self.store.writes),1)
         payload=self.store.writes[0]
@@ -201,6 +201,8 @@ class PublicationTests(unittest.TestCase):
     def test_typed_pr_observation_and_database_reload_reject_forgery(self):
         self.accepted(True);self.f.tick();self.f.tick()
         journal=self.f.journal;run=self.f.state();owner=self.f.owner
+        self.assertEqual(run['state'],'ready')
+        run=worker._record(journal,run,owner,state='publishing')
         effect=journal.begin_pr_effect(run['run_id'],owner,'owner'); intent=effect['intent']
         payload=dict(title='Task Tower '+run['task_id'],body=self.publish._body(run,intent['marker']),head=run['branch'],base='main')
         row=self.store.request('POST','/pulls',payload)
@@ -247,7 +249,7 @@ class PublicationTests(unittest.TestCase):
         with patch.object(self.publish,'freeze_checkpoint',side_effect=crash),self.assertRaises(KeyboardInterrupt):self.f.tick()
         self.assertEqual(self.f.state()['manifest'],accepted)
         before=len([e for e in self.f.journal.history(self.f.run_id)['effects'] if e['kind']=='commit'])
-        self.assertEqual(self.f.tick()['status'],'publishing')
+        self.assertEqual(self.f.tick()['status'],'ready')
         self.assertEqual(len([e for e in self.f.journal.history(self.f.run_id)['effects'] if e['kind']=='commit']),before)
         self.assertEqual(self.f.tick()['status'],'awaiting_pr')
 

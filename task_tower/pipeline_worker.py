@@ -339,7 +339,7 @@ def _step(config,journal,owner):
         task=_authority(config,run,journal,owner)
         if action not in ('checkpoint','park'):
             try:
-                if action=='publish' and run['state']=='publishing' and run['checkpoint_sha']!=run['manifest']['checkpoint_sha']:
+                if action=='publish' and run['state'] in ('publishing','ready') and run['checkpoint_sha']!=run['manifest']['checkpoint_sha']:
                     from .pipeline_publish import validate_publication_current
                     validate_publication_current(run,task,journal)
                 else:_current(run,task)

@@ -14,7 +14,7 @@ def binding(stage='spec'):
 class RoleProtocolTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
-        self.path=Path(self.temp.name)/'result.json'; self.bound=binding()
+        self.path=Path(self.temp.name).resolve()/'result.json'; self.bound=binding()
 
     def result(self, reviewer=False, **changes):
         value=dict(version=2,**self.bound,summary='private')

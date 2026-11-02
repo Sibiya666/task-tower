@@ -49,7 +49,12 @@ class ExecutionQueue:
     def _safe(self):
         for path in [self.path,*(Path(str(self.path)+s) for s in ('-journal','-wal','-shm'))]:
             safe_config_path(path)
-            if path.exists() and path.stat().st_nlink!=1: raise ValueError('Unsafe executor queue')
+            if path.exists():
+                try:info=path.stat()
+                except FileNotFoundError:
+                    if path==self.path:raise
+                    info=None  # Another SQLite writer removed its transient sidecar.
+                if info is not None and info.st_nlink!=1: raise ValueError('Unsafe executor queue')
             if any(path.resolve().is_relative_to(c) for c in self.checkouts): raise ValueError('Private queue inside checkout')
             for other in self.forbidden_paths:
                 safe_config_path(other)

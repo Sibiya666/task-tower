@@ -31,9 +31,19 @@ def _paths(paths,connections):
     checked=[]
     for raw in paths:
         path=safe_config_path(raw)
-        if path.exists() and path.stat().st_nlink!=1: raise ValueError('Unsafe executor private file')
+        try:info=path.stat()
+        except FileNotFoundError:
+            if not str(path).endswith(('-journal','-wal','-shm')) and path.exists():raise
+            info=None
+        if info is not None and info.st_nlink!=1: raise ValueError('Unsafe executor private file')
         if any(path.resolve().is_relative_to(c.checkout) for c in connections): raise ValueError('Executor private files must be outside checkouts')
-        if any(str(path.resolve()).casefold()==str(other.resolve()).casefold() or (path.exists() and other.exists() and os.path.samefile(path,other)) for other in checked): raise ValueError('Executor private file collision')
+        for other in checked:
+            if str(path.resolve()).casefold()==str(other.resolve()).casefold():raise ValueError('Executor private file collision')
+            try:same=path.exists() and other.exists() and os.path.samefile(path,other)
+            except FileNotFoundError:
+                if not any(str(p).endswith(('-journal','-wal','-shm')) for p in (path,other)):raise
+                same=False
+            if same:raise ValueError('Executor private file collision')
         checked.append(path)
     return checked
 

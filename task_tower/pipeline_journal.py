@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import re
 import sqlite3
+import time
 import uuid
 from .executor_queue import _uuid, _dead, validate_request
 from .pipeline_inputs import canonical_json, digest_manifest, validate_stage_manifest, _relative
@@ -73,18 +74,37 @@ class PipelineJournal:
     def __init__(self,path:Path,*,checkouts=(),forbidden_paths=()):
         self.path=safe_config_path(path); self.checkouts=tuple(Path(p).resolve() for p in checkouts)
         self.forbidden_paths=tuple(Path(p) for p in forbidden_paths); self._owners=set(); self._safe()
+    @contextmanager
+    def operation_deadline(self,deadline):
+        """One host monotonic budget across DB operations, never a renewed lease."""
+        if type(deadline) not in (int,float):raise ValueError('Invalid journal deadline')
+        previous=getattr(self,'_operation_deadline',None)
+        self._operation_deadline=min(previous,deadline) if previous is not None else deadline
+        try:yield
+        finally:self._operation_deadline=previous
+    def _wait_seconds(self):
+        deadline=getattr(self,'_operation_deadline',None)
+        remaining=5 if deadline is None else min(5,deadline-time.monotonic())
+        if remaining<=0:raise ValueError('Pipeline journal operation deadline exhausted')
+        return remaining
     def _safe(self):
         for path in [self.path,*(Path(str(self.path)+s) for s in ('-journal','-wal','-shm'))]:
             safe_config_path(path)
-            if path.exists() and path.stat().st_nlink!=1: raise ValueError('Linked pipeline journal')
+            try:info=path.stat()
+            except FileNotFoundError:info=None
+            if info is not None and info.st_nlink!=1: raise ValueError('Linked pipeline journal')
             if any(path.resolve().is_relative_to(c) for c in self.checkouts): raise ValueError('Private pipeline state inside checkout')
             for other in self.forbidden_paths:
                 safe_config_path(other)
                 if other.exists() and other.stat().st_nlink!=1: raise ValueError('Unsafe private input')
                 for alias in [other,*(Path(str(other)+s) for s in ('-journal','-wal','-shm'))]:
-                    if str(path.resolve()).casefold()==str(alias.resolve()).casefold() or (path.exists() and alias.exists() and os.path.samefile(path,alias)): raise ValueError('Pipeline private path collision')
+                    if str(path.resolve()).casefold()==str(alias.resolve()).casefold():raise ValueError('Pipeline private path collision')
+                    try:same=path.exists() and alias.exists() and os.path.samefile(path,alias)
+                    except FileNotFoundError:same=False  # SQLite removed its transient sidecar.
+                    if same:raise ValueError('Pipeline private path collision')
     @contextmanager
     def _db(self,write=False):
+        self._wait_seconds()
         self._safe()
         if not self.path.exists() and not write: yield None; return
         if write: self.path.parent.mkdir(parents=True,exist_ok=True); self._safe()
@@ -93,10 +113,13 @@ class PipelineJournal:
             with self.path.open('rb') as stream: header=stream.read(100)
             if header[:16]==b'SQLite format 3\0' and header[18:20]!=b'\1\1': raise ValueError('Unsupported pipeline WAL')
         try:
-            with closing(sqlite3.connect(self.path if write else self.path.resolve().as_uri()+'?mode=ro',uri=not write,timeout=5)) as db:
-                db.row_factory=sqlite3.Row; db.execute('PRAGMA busy_timeout=5000'); db.execute('PRAGMA synchronous=FULL')
+            with closing(sqlite3.connect(self.path if write else self.path.resolve().as_uri()+'?mode=ro',uri=not write,timeout=self._wait_seconds())) as db:
+                db.row_factory=sqlite3.Row; db.execute('PRAGMA busy_timeout='+str(max(0,int(self._wait_seconds()*1000)))); db.execute('PRAGMA synchronous=FULL')
+                db.execute('PRAGMA busy_timeout='+str(max(0,int(self._wait_seconds()*1000))))
                 if write: db.execute('BEGIN IMMEDIATE')
-                else: db.execute('PRAGMA query_only=ON')
+                else:
+                    db.execute('PRAGMA query_only=ON')
+                    if getattr(self,'_operation_deadline',None) is not None:db.execute('BEGIN')
                 app=db.execute('PRAGMA application_id').fetchone()[0]; version=db.execute('PRAGMA user_version').fetchone()[0]
                 objects={(r[0],r[1],r[2]) for r in db.execute("SELECT type,name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'")}
                 if write and app==0 and version==0 and not objects:
@@ -107,7 +130,14 @@ class PipelineJournal:
                 self._validate_db(db)
                 try:
                     yield db
-                    if write: db.commit()
+                    if write:
+                        remaining=self._wait_seconds()
+                        # Shutdown must not enter a fresh lock wait at COMMIT.
+                        # A conflicting reader makes this bounded transaction
+                        # roll back, retaining uncertain ownership.
+                        wait=0 if getattr(self,'_operation_deadline',None) is not None else int(remaining*1000)
+                        db.execute('PRAGMA busy_timeout='+str(wait))
+                        db.commit()
                 except BaseException:
                     if write: db.rollback()
                     raise
@@ -221,7 +251,10 @@ class PipelineJournal:
             for key in ('old_state','new_state'):
                 if row[key] is not None and row[key] not in STATES: raise ValueError('Invalid event state')
         for row in db.execute('SELECT * FROM controller'):
-            _uuid(row['owner_id']); _sha(row['policy_sha256']); _neutral(_json(row['health']))
+            _uuid(row['owner_id']); _sha(row['policy_sha256']); self._health(_json(row['health']))
+            _integer(row['owner_pid'],1,2**63-1)
+            for key in ('started_at','last_tick_at'):
+                if datetime.datetime.fromisoformat(row[key]).tzinfo is None:raise ValueError('Invalid controller time')
             if row['singleton']!=1: raise ValueError('Invalid controller')
     @staticmethod
     def _event(db,run_id,kind,old=None,new=None,reason=None,**links):
@@ -293,17 +326,21 @@ class PipelineJournal:
             if owner_id in self._owners:
                 for saved in db.execute("SELECT * FROM runs WHERE state='ready' ORDER BY repository,issue"):
                     row=dict(saved)
+                    if self._repository_busy(db,row):continue
                     own=row['owner_id']==owner_id and row['owner_pid']==os.getpid()
                     dead=_dead(row['owner_pid'])
                     if not (own or dead) or not self._safe_ready(db,row): continue
                     if own: return self._run(row)
-                    changed=db.execute("UPDATE runs SET owner_id=?,owner_pid=?,updated_at=? WHERE run_id=? AND state='ready' AND owner_id=? AND owner_pid=? AND generation=? AND input_sha256 IS ?",(owner_id,os.getpid(),_now(),row['run_id'],row['owner_id'],row['owner_pid'],row['generation'],row['input_sha256'])).rowcount
+                    now=_now()
+                    if datetime.datetime.fromisoformat(now)<datetime.datetime.fromisoformat(row['updated_at']):raise ValueError('deadline')
+                    changed=db.execute("UPDATE runs SET owner_id=?,owner_pid=?,updated_at=? WHERE run_id=? AND state='ready' AND owner_id=? AND owner_pid=? AND generation=? AND input_sha256 IS ?",(owner_id,os.getpid(),now,row['run_id'],row['owner_id'],row['owner_pid'],row['generation'],row['input_sha256'])).rowcount
                     if changed!=1: raise ValueError('Ready handoff changed')
                     self._event(db,row['run_id'],'handoff','ready','ready',old_owner_id=row['owner_id'],new_owner_id=owner_id)
                     return self._run(db.execute('SELECT * FROM runs WHERE run_id=?',(row['run_id'],)).fetchone())
             if len(active)>=max_active: return None
             for saved in db.execute("SELECT * FROM runs WHERE state='queued' AND cancel_requested=0 ORDER BY repository,issue"):
                 row=self._run(saved)
+                if self._repository_busy(db,row):continue
                 if any(r['repository']==row['repository'] and ('*' in r['component_keys'] or '*' in row['component_keys'] or set(r['component_keys'])&set(row['component_keys'])) for r in active): continue
                 now=_now(); deadline=(datetime.datetime.fromisoformat(now)+datetime.timedelta(seconds=row['limits']['task_timeout_seconds'])).isoformat()
                 changed=db.execute("UPDATE runs SET state='preparing',owner_id=?,owner_pid=?,deadline_at=?,updated_at=? WHERE run_id=? AND state='queued' AND owner_id IS NULL AND generation=? AND input_sha256 IS ?",(owner_id,os.getpid() if owner_id in self._owners else None,deadline,now,row['run_id'],row['generation'],row['input_sha256'])).rowcount
@@ -311,6 +348,17 @@ class PipelineJournal:
                 self._event(db,row['run_id'],'claimed','queued','preparing')
                 return self._run(db.execute('SELECT * FROM runs WHERE run_id=?',(row['run_id'],)).fetchone())
             return None
+    @staticmethod
+    def _repository_busy(db,row):
+        """Global ref checks require serialized actions within one repository.
+
+        A live ready owner may still be freezing a checkpoint or returning its
+        result. Only positive death releases that action reservation; its durable
+        task/component slot is retained separately.
+        """
+        for other in db.execute('SELECT run_id,state,owner_pid FROM runs WHERE repository=? AND run_id<>?',(row['repository'],row['run_id'])):
+            if other['state'] in ACTIVE-{'ready'} or (other['state']=='ready' and not _dead(other['owner_pid'])):return True
+        return False
     @staticmethod
     def _owned(db,run_id,owner_id):
         _uuid(run_id); _uuid(owner_id)
@@ -346,6 +394,7 @@ class PipelineJournal:
             if key in transition: self._host_directory(transition[key])
         with self._db(True) as db:
             row=self._owned(db,run_id,owner_id)
+            if state in {'preparing','executing','reviewing','checking','publishing','ready'} and self._repository_busy(db,row):raise ValueError('Repository action already owned')
             if any(type(row[k]) is not type(v) or row[k]!=v for k,v in expected.items()): raise ValueError('Stale pipeline CAS')
             edges={'preparing':{'preparing','executing','ready','needs_input','cancelled','timed_out','unknown'},'executing':{'ready','needs_input','cancelled','timed_out','unknown'},'reviewing':{'ready','needs_input','cancelled','timed_out','unknown'},'checking':{'ready','needs_input','cancelled','timed_out','unknown'},'ready':{'executing','reviewing','checking','publishing','ready_for_pr','needs_input','cancelled','timed_out','unknown','ready'},'publishing':{'ready','awaiting_pr','ready_for_pr','needs_input','unknown','cancelled','timed_out'}}
             if state not in edges.get(row['state'],set()): raise ValueError('Illegal state transition')
@@ -423,8 +472,13 @@ class PipelineJournal:
             checks=list(db.execute("SELECT state,evidence FROM attempts WHERE run_id=? AND role='host_check' AND generation=?",(row['run_id'],row['generation'])))
             if not checks or any(c['state']!='completed' or _json(c['evidence']).get('source_unchanged') is not True for c in checks): raise ValueError('Completed unchanged host checks missing')
         if state=='ready' and row['state']=='checking' and not rework and not (transition.get('evidence',{}).get('cleanup_confirmed') is True and transition.get('evidence',{}).get('checks_sha256')): raise ValueError('Host checks proof missing')
-        if state in {'publishing','ready_for_pr','awaiting_pr'} and not all(accepted(s) for s in STAGES): raise ValueError('Publication requires three accepted stages')
-        if state in {'publishing','ready_for_pr','awaiting_pr'}:
+        if state=='ready' and row['state']=='publishing':
+            effect=db.execute('SELECT * FROM effects WHERE run_id=? ORDER BY ordinal DESC LIMIT 1',(row['run_id'],)).fetchone()
+            if effect is None or effect['status']!='completed' or effect['owner_id']!=row['owner_id'] or transition.get('evidence',{}).get('publication_effect_id')!=effect['effect_id'] or transition.get('evidence',{}).get('cleanup_confirmed') is not True:raise ValueError('Publication action completion missing')
+            intent=_json(effect['intent'])
+            if effect['kind']!='push' and not (effect['kind']=='commit' and intent.get('evidence_manifest_sha256') and intent.get('contributing_executor_attempt_id') is None):raise ValueError('Publication action proof missing')
+        if (state in {'publishing','ready_for_pr','awaiting_pr'} or state=='ready' and row['state']=='publishing') and not all(accepted(s) for s in STAGES): raise ValueError('Publication requires three accepted stages')
+        if state in {'publishing','ready_for_pr','awaiting_pr'} or state=='ready' and row['state']=='publishing':
             verdict=db.execute("SELECT input_sha256,generation FROM verdicts WHERE run_id=? AND stage='test' AND decision='approve' AND superseded=0 ORDER BY rowid DESC LIMIT 1",(row['run_id'],)).fetchone()
             if row['stage']!='test' or verdict is None or verdict['input_sha256']!=row['input_sha256'] or verdict['generation']!=row['generation']: raise ValueError('Current test acceptance missing')
         if state=='awaiting_pr' and not db.execute("SELECT 1 FROM effects WHERE run_id=? AND kind='pr_create' AND status='completed'",(row['run_id'],)).fetchone(): raise ValueError('PR observation missing')
@@ -440,6 +494,7 @@ class PipelineJournal:
         manifest=validate_stage_manifest(binding['manifest']); self._artifacts(binding['artifact_names'])
         with self._db(True) as db:
             row=self._owned(db,run_id,owner_id); role=binding['role']; digest=digest_manifest(manifest)
+            if self._repository_busy(db,row):raise ValueError('Repository action already owned')
             if row['state'] not in ({'checking'} if host_check else {'executing','reviewing'}) or row['cancel_requested'] or manifest['run_id']!=run_id or manifest['stage']!=row['stage'] or (row['stage']!='test' if host_check else role!=row['stage']+('_reviewer' if row['state']=='reviewing' else '_executor')) or row['input_sha256']!=digest or _json(row['manifest'])!=manifest: raise ValueError('Attempt is not current action')
             if self._unresolved(db,run_id): raise ValueError('Unresolved attempt/effect')
             if db.execute('SELECT 1 FROM attempts WHERE run_id=? AND generation=? AND role=? AND check_id IS ?',(run_id,row['generation'],role,binding.get('check_id'))).fetchone(): raise ValueError('Attempt already launched')
@@ -632,6 +687,7 @@ class PipelineJournal:
         with self._db(True) as db:
             row=self._owned(db,run_id,owner_id)
             allowed_states={'executing','checking','reviewing'} if intent['kind']=='rework_commit' else {'preparing','executing','ready','publishing'}
+            if self._repository_busy(db,row):raise ValueError('Repository action already owned')
             if row['state'] not in allowed_states or row['cancel_requested'] or self._unresolved(db,run_id): raise ValueError('Effect cannot start')
             if intent.get('branch')!=row['branch']: raise ValueError('Foreign effect branch')
             if intent['kind'] in {'push','pr_create'}:
@@ -706,10 +762,63 @@ class PipelineJournal:
             state='cancelled' if row['state']=='queued' else row['state']
             db.execute('UPDATE runs SET cancel_requested=1,state=?,updated_at=? WHERE run_id=?',(state,_now(),run_id))
             self._event(db,run_id,'cancel_requested',row['state'],state,'cancelled')
+            self._cancel_clean_ready(db,db.execute('SELECT * FROM runs WHERE run_id=?',(run_id,)).fetchone())
+    @staticmethod
+    def _cancel_clean_ready(db,row):
+        # No caller cleanup flag can release this reservation. Every process and
+        # effect must already have positive durable evidence, and its owner must
+        # be positively dead; live/null/reused/unknown ownership stays fenced.
+        if row['state']!='ready' or not row['cancel_requested'] or not _dead(row['owner_pid']) or not PipelineJournal._safe_ready(db,row):return False
+        db.execute("UPDATE runs SET state='cancelled',reason='cancelled',updated_at=? WHERE run_id=?",(_now(),row['run_id']))
+        PipelineJournal._event(db,row['run_id'],'transition','ready','cancelled','cancelled')
+        return True
+    @staticmethod
+    def _health(value):
+        if not isinstance(value,dict) or set(value)!={'ticks','read_failures','workers','dispatcher','stopped'} or type(value['stopped']) is not bool:
+            raise ValueError('Invalid controller health')
+        for key,limit in (('ticks',2**63-1),('read_failures',2**63-1),('workers',2),('dispatcher',1)):
+            _integer(value[key],0,limit)
+        return value
+    def claim_controller(self,owner_id,policy_sha256):
+        """One installation-local host owner; only positively dead owners yield."""
+        _uuid(owner_id);_sha(policy_sha256)
+        with self._db(True) as db:
+            saved=db.execute('SELECT * FROM controller WHERE singleton=1').fetchone()
+            if saved is not None and not _json(saved['health'])['stopped'] and not _dead(saved['owner_pid']):
+                raise ValueError('Pipeline controller already owned')
+            now=_now();health=dict(ticks=0,read_failures=0,workers=0,dispatcher=0,stopped=False)
+            db.execute('INSERT OR REPLACE INTO controller VALUES(1,?,?,?,?,?,?)',
+                       (owner_id,os.getpid(),now,now,policy_sha256,_dump(health)))
+        return self.controller_health()
+    def controller_tick(self,owner_id,health):
+        _uuid(owner_id)
+        if not isinstance(health,dict) or 'stopped' in health:raise ValueError('Invalid controller health')
+        health=self._health(dict(health,stopped=False))
+        with self._db(True) as db:
+            row=db.execute('SELECT health FROM controller WHERE singleton=1 AND owner_id=? AND owner_pid=?',(owner_id,os.getpid())).fetchone()
+            if row is None or _json(row['health'])['stopped']:raise ValueError('Foreign or stopped pipeline controller')
+            changed=db.execute('UPDATE controller SET last_tick_at=?,health=? WHERE singleton=1 AND owner_id=? AND owner_pid=?',
+                               (_now(),_dump(health),owner_id,os.getpid())).rowcount
+            if changed!=1:raise ValueError('Foreign pipeline controller')
+    def release_controller(self,owner_id):
+        _uuid(owner_id)
+        with self._db(True) as db:
+            row=db.execute('SELECT * FROM controller WHERE singleton=1 AND owner_id=? AND owner_pid=?',(owner_id,os.getpid())).fetchone()
+            if row is None:raise ValueError('Foreign pipeline controller')
+            health=_json(row['health']);health.update(stopped=True)
+            db.execute('UPDATE controller SET last_tick_at=?,health=? WHERE singleton=1',(_now(),_dump(health)))
+    def controller_health(self):
+        with self._db() as db:
+            row=None if db is None else db.execute('SELECT * FROM controller WHERE singleton=1').fetchone()
+            if row is None:return None
+            value=dict(row);value['health']=self._health(_json(value['health']))
+            return value
     def recover(self)->list[str]:
         recovered=[]
         with self._db(True) as db:
             for row in db.execute('SELECT * FROM runs WHERE owner_id IS NOT NULL'):
+                if self._cancel_clean_ready(db,row):
+                    recovered.append(row['run_id']);continue
                 if row['state']=='ready' and self._safe_ready(db,row): continue
                 if row['state'] in ACTIVE-{'unknown'} and _dead(row['owner_pid']):
                     db.execute("UPDATE runs SET state='unknown',reason='owner_dead',updated_at=? WHERE run_id=? AND owner_id=? AND state=?",(_now(),row['run_id'],row['owner_id'],row['state']))
