@@ -279,6 +279,87 @@ class WorkerTests(unittest.TestCase):
         with patch.object(worker.time,'monotonic',return_value=10**12):self.tick()
         self.assertEqual(self.state()['state'],'timed_out');self.assertEqual(self.state()['process_count'],0)
 
+class CheckpointFreshnessTests(unittest.TestCase):
+    def boundary(self,rework,revocation,when='tree'):
+        from task_tower import pipeline_inputs as inputs
+        fixture=WorkerTests();fixture.setUp()
+        try:
+            if rework:
+                fixture.until(lambda r,h:worker.next_action(r,h)=='advance_test')
+                fixture.control.write_text(json.dumps(dict(mutate_role='test_executor')))
+            else:
+                fixture.tick()
+                fixture.control.write_text(json.dumps(dict(mutate_spec_role='spec_executor')))
+                fixture.tick()
+            initial=fixture.state();root=Path(initial['worktree'])
+            head=inputs._git(root,'rev-parse','HEAD')
+            effects=len(fixture.journal.history(fixture.run_id)['effects'])
+            original=inputs._git;begin=fixture.journal.begin_effect;changed=[];commands=[]
+            def revoke():
+                if changed:return
+                changed.append(True)
+                if revocation=='main':fixture.fixture.sha='b'*40
+                elif revocation=='policy':
+                    path=fixture.fixture.path;value=json.loads(path.read_text());value['max_active']=1;path.write_text(json.dumps(value))
+                elif revocation=='pins':
+                    pins=fixture.fixture.profile['superpowers'];(Path(pins['root'])/next(iter(pins['manifest']))).write_bytes(b'drift')
+                elif revocation=='issue':
+                    snapshot=fixture.fixture.snapshot();snapshot['owner/repo']['issues'][16]['state']='closed'
+                    fixture.fixture.snapshot=lambda *args,**kwargs:snapshot
+                elif revocation=='cancel':fixture.journal.cancel(fixture.run_id)
+                else:raise AssertionError(revocation)
+            def git(path,*args,**kwargs):
+                if 'commit-tree' in args:commands.append('commit')
+                if 'update-ref' in args:commands.append('ref')
+                value=original(path,*args,**kwargs)
+                if when=='tree' and 'write-tree' in args or when=='commit' and 'commit-tree' in args:revoke()
+                return value
+            def intent(*args,**kwargs):
+                value=begin(*args,**kwargs)
+                if when=='intent':revoke()
+                return value
+            with patch.object(inputs,'_git',side_effect=git),patch.object(fixture.journal,'begin_effect',side_effect=intent):fixture.tick()
+            current=fixture.state();history=fixture.journal.history(fixture.run_id)
+            self.assertEqual(changed,[True])
+            self.assertEqual(original(root,'rev-parse','HEAD'),head)
+            self.assertEqual(current['checkpoint_sha'],initial['checkpoint_sha'])
+            self.assertNotEqual(original(root,'status','--porcelain'),b'')
+            self.assertEqual(current['process_count'],initial['process_count']+int(rework))
+            if when=='tree':
+                self.assertIn(current['state'],('needs_input','cancelled'))
+                self.assertEqual(commands,[])
+                self.assertEqual(len(history['effects']),effects)
+            else:
+                self.assertEqual(current['state'],'unknown')
+                self.assertEqual(commands,['commit'] if when=='commit' else [])
+                self.assertEqual(len(history['effects']),effects+1)
+                effect=history['effects'][-1]
+                self.assertEqual(effect['kind'],'rework_commit' if rework else 'commit')
+                self.assertIn(effect['status'],('intent','unknown'))
+                before=history
+                with patch.object(inputs,'_git',side_effect=AssertionError('unknown checkpoint replayed')):fixture.tick()
+                self.assertEqual(fixture.journal.history(fixture.run_id),before)
+            if not rework:self.assertEqual(history['verdicts'],[])
+            else:self.assertFalse(any(v['stage']=='test' for v in history['verdicts']))
+        finally:fixture.doCleanups()
+
+    def test_normal_preintent_main_policy_issue_pins_and_cancel_revocation(self):
+        for revocation in ('main','policy','issue','pins','cancel'):
+            with self.subTest(revocation=revocation):self.boundary(False,revocation)
+
+    def test_rework_preintent_main_and_policy_revocation(self):
+        for revocation in ('main','policy'):
+            with self.subTest(revocation=revocation):self.boundary(True,revocation)
+
+    def test_postintent_revocation_is_unknown_and_never_replays(self):
+        for rework in (False,True):
+            with self.subTest(rework=rework):self.boundary(rework,'main','intent')
+
+    def test_postcommit_revocation_prevents_ref_and_never_replays(self):
+        for rework in (False,True):
+            with self.subTest(rework=rework):self.boundary(rework,'policy','commit')
+
+
 class VerdictCIFreshnessTests(unittest.TestCase):
     def test_apply_seam_rechecks_authoritative_ci_bundle(self):
         from tests import test_github_source as github_fixture

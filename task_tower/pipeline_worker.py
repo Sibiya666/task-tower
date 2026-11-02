@@ -257,10 +257,16 @@ def apply_verdict(config:dict,run:dict,binding:dict,result:dict,journal,owner_id
     answer=_public(current);answer['receipt_sha256']=saved['receipt_sha256'];return answer
 
 
+def _checkpoint_policy(config,run,journal,owner):
+    """Private callable only: recheck this owner/input before checkpoint effects."""
+    return dict(_authority(config,run,journal,owner),
+        _before_effect=lambda:_authority(config,run,journal,owner))
+
+
 def _stale(config,run,journal,owner,stage):
     # A dirty tree cannot be paired with an older checkpoint. Only an actual
     # failed source-mutating attempt can authorize a forensic rework snapshot.
-    task=_authority(config,run,journal,owner)
+    task=_checkpoint_policy(config,run,journal,owner)
     history=journal.history(run['run_id'])
     failed=[a for a in history['attempts'] if a['owner_id']==owner and
         a['input_sha256']==run['input_sha256'] and a['state']=='failed' and
@@ -307,7 +313,7 @@ def _frozen_product(run,task,point):
 
 
 def _checkpoint_action(config,run,journal,owner):
-    task=_authority(config,run,journal,owner);history=journal.history(run['run_id']);executor=_executors(run,history)[-1]
+    task=_checkpoint_policy(config,run,journal,owner);history=journal.history(run['run_id']);executor=_executors(run,history)[-1]
     existing=[e for e in history['effects'] if e['kind']=='commit' and e['status']=='completed' and e['intent']['contributing_executor_attempt_id']==executor['attempt_id']]
     point=_checkpoint(run,task) if existing else freeze_checkpoint(run,task,journal,owner)
     if existing:_frozen_product(run,task,point)

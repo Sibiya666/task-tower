@@ -26,7 +26,11 @@
       "hash_scheme": "sha256-utf8-lf-v1"
     },
     "development": {
-      "status": "pending"
+      "status": "accepted",
+      "reviewer": "pipeline_development_acceptance",
+      "evidence": "evidence/TT-PIPELINE-001/development-review.md",
+      "sha256": "da935ae536b6ae72c7c06771c2ee53660298b205d4d6006b4a5b6e4dfe3cbaa4",
+      "hash_scheme": "sha256-utf8-lf-v1"
     },
     "test": {
       "status": "pending"

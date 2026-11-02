@@ -340,7 +340,7 @@ def _freeze_checkpoint(run,task_policy,journal,owner_id,failed_attempt_id=None):
             intent.update(kind='rework_commit',failed_attempt_id=failed_attempt_id,contributing_executor_attempt_id=None)
         before=task_policy.get('_before_effect')
         if before is not None:
-            if not host_evidence or not callable(before):raise ValueError('Invalid host effect guard')
+            if not callable(before):raise ValueError('Invalid host effect guard')
             before()
         effect = journal.begin_effect(run['run_id'],owner_id,intent)
         # Every effect below is fenced by the committed intent above. Exceptions
