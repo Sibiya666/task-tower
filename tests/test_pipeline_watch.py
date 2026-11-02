@@ -8,6 +8,7 @@ from pathlib import Path
 import sys
 import threading
 import time
+import traceback
 import unittest
 import uuid
 from unittest.mock import patch
@@ -345,6 +346,46 @@ class WatchTests(unittest.TestCase):
         self.assertEqual(before,self.journal.history(run['run_id']))
 
     def accepted_publication(self):
+        # Debug branch only: observe actual helpers without changing decisions.
+        observations=[]
+        runner=pipeline.processes.run_command
+        cancelled=pipeline._Host.cancelled
+        close=pipeline._Host.close
+        def invoke(argv,*args,**kwargs):
+            if '--host-result' in argv:
+                directory=Path(argv[argv.index('--host-result')+1]).parent/'diagnostic-streams'
+                directory.mkdir()
+                kwargs['capture']=dict(directory=directory,max_bytes_per_stream=65536)
+            return runner(argv,*args,**kwargs)
+        def observe_cancel(host):
+            try:return cancelled(host)
+            except Exception:
+                if len(observations)<64:
+                    observations.append(dict(kind='callback_exception',owner=host.owner,trace=traceback.format_exc()))
+                raise
+        def observe_close(host):
+            entry=dict(kind='host',owner=host.owner,outcome=host.outcome,result=host.result)
+            for name in ('stdout','stderr'):
+                path=host.path.parent/'diagnostic-streams'/(name+'.log')
+                try:entry[name]=path.read_bytes()[:16384].decode('utf-8','backslashreplace')
+                except OSError as error:entry[name]=dict(read_error=type(error).__name__)
+            if len(observations)<64:observations.append(entry)
+            return close(host)
+        with patch.object(pipeline.processes,'run_command',invoke),patch.object(pipeline._Host,'cancelled',observe_cancel),patch.object(pipeline._Host,'close',observe_close):
+            try:return self._accepted_publication()
+            except BaseException as error:
+                diagnostic=dict(label='debug_fixture_only_publication_failure',helpers=observations)
+                try:
+                    rows=self.journal.status()['runs']
+                    diagnostic['runs']=rows
+                    diagnostic['histories']=[self.journal.history(row['run_id']) for row in rows]
+                except Exception as read_error:
+                    diagnostic['journal_read_error']=dict(type=type(read_error).__name__,message=str(read_error))
+                text=json.dumps(diagnostic,sort_keys=True,default=str)
+                error.add_note(text.replace('fixture-env-only-private-value','[fixture token redacted]'))
+                raise
+
+    def _accepted_publication(self):
         f=self.source.fixture;f.row['publish']['enabled']=True;f.path.write_text(json.dumps(f.value))
         _git(f.profile['checkout'],'remote','add','origin','https://github.com/Owner/Repo.git')
         remote=self.root/'remote.git';_git(f.profile['checkout'],'init','--bare',str(remote))
