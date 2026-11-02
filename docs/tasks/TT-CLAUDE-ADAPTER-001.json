@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "id": "TT-CLAUDE-ADAPTER-001",
+  "title": "Execute bounded Claude Code tasks through the common backend",
+  "executor": "claude-adapter-implementation-team",
+  "project_root": "../..",
+  "mode": "autonomous",
+  "status": "in_progress",
+  "spec": "../superpowers/specs/2026-11-02-claude-adapter-design.md",
+  "plan": "../superpowers/plans/2026-11-02-claude-adapter.md",
+  "acceptance_criteria": [
+    "Official current noninteractive interface reuses installed authentication without model selection, configuration changes or permission bypass",
+    "Strict Claude profiles, installed-version/help probes and bounded structured observation preserve exact run/attempt/source binding",
+    "Denials, malformed output, timeout/cancel and unknown cleanup cannot claim successful execution; uncertain attempts never resume or replay",
+    "An actual bounded installed Claude task and distinct read-only reviewer pass through the existing common backend",
+    "Windows/macOS/Ubuntu fixture CI and genuine installed-runtime evidence are reported separately with honest unsupported combinations",
+    "Independent stage, exact-head/base PR and exact-main postmerge acceptance plus automatic Issue closure complete the task"
+  ],
+  "stages": {
+    "spec": {
+      "status": "accepted",
+      "reviewer": "claude_spec_acceptance",
+      "evidence": "evidence/TT-CLAUDE-ADAPTER-001/spec-review.md",
+      "sha256": "c3734febce6a976ed312c58745eb3a306139c21d11d037ab77c1c2517dd66a1d",
+      "hash_scheme": "sha256-utf8-lf-v1"
+    },
+    "development": {
+      "status": "pending"
+    },
+    "test": {
+      "status": "pending"
+    },
+    "postmerge": {
+      "status": "pending"
+    }
+  }
+}
