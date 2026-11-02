@@ -2,7 +2,7 @@
 
 The pipeline turns an explicitly authorized delivery into independently accepted specification, development and test stages, then an optional reviewable PR. It uses a private installation policy and journal, six fresh executor/reviewer role instances, fixed host checks and durable Git/publication intents. Public Markdown is an evidence projection; model output, Issue prose and editable cards do not grant authority.
 
-Issue16 implementation and Task7 operational acceptance are still in progress. The installed Codex pipeline pilot has **not run**. Local fixture tests, an installed executor scratch smoke and this guide do not establish unattended readiness. Issue17 owns PR acceptance/merge and the main/postmerge/Issue-closure barrier; this pipeline never merges or closes an Issue.
+Issue16 implementation and Task7 operational acceptance are still in progress. The first installed Codex pipeline pilot ran two fresh roles, then parked on a rejected specification at its zero-rework limit. The preserved UTF-8 source and reviewer shell rendering differed; the subsequent exact-shell diagnostic reproduced stdout encoding loss. See the [independent bounded negative-pilot audit](tasks/evidence/TT-PIPELINE-001/installed-codex-blocked-review.md). Agent-facing ASCII-escaped UTF-8 source-reading guidance is independently accepted; a complete six-role installed pilot remains pending. Local fixture tests, an installed executor scratch smoke and this guide do not establish unattended readiness. Issue17 owns PR acceptance/merge and the main/postmerge/Issue-closure barrier; this pipeline never merges or closes an Issue.
 
 ## Private setup
 

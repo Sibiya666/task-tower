@@ -57,6 +57,35 @@ class RoleProtocolTests(unittest.TestCase):
             with self.assertRaises(ValueError): harness.validate_role_result(self.path,self.bound,reviewer=True)
 
 
+class UnicodeReadingObligationTests(unittest.TestCase):
+    def obligations(self,role):
+        from task_tower.pipeline_roles import _role_obligations
+        return _role_obligations(role,dict(spec_path='docs/spec.md',plan_path='docs/plan.md',evidence_dir='docs/evidence/'),'a'*40)
+
+    def test_all_six_roles_require_byte_faithful_unicode_reading(self):
+        import sys
+        for role in harness.ROLE_NAMES:
+            with self.subTest(role=role):
+                obligations=' '.join(self.obligations(role))
+                self.assertIn('ASCII-escaped JSON or byte/codepoint view',obligations)
+                self.assertIn('actual source bytes govern findings',obligations)
+                self.assertIn(str(Path(sys.executable).resolve()),obligations)
+                self.assertIn('Do not change OS settings, environment configuration, authentication, home, model selection or sandbox flags',obligations)
+
+    def test_prompt_reader_example_roundtrips_unicode_through_cp866(self):
+        import subprocess
+        import sys
+        examples=[s.removeprefix('Python reader code: ') for s in self.obligations('spec_reviewer') if s.startswith('Python reader code: ')]
+        self.assertEqual(len(examples),1)
+        text='Stra\u00dfe \u2014 \u03a3\u03af\u03b3\u03bc\u03b1 \U0001f642\n'
+        with tempfile.TemporaryDirectory() as directory:
+            source=Path(directory).resolve()/'source.txt';source.write_text(text,encoding='utf-8')
+            env=dict(os.environ,PYTHONIOENCODING='cp866')
+            completed=subprocess.run([sys.executable,'-c',examples[0],str(source)],env=env,capture_output=True,check=True)
+            self.assertTrue(completed.stdout.isascii())
+            self.assertEqual(json.loads(completed.stdout.decode('ascii')),text)
+
+
 class RoleProcessTests(unittest.TestCase):
     def setUp(self):
         from tests.test_pipeline_policy import PipelinePolicyTests
@@ -261,6 +290,8 @@ class RoleProcessTests(unittest.TestCase):
             self.assertIn(expected['plan_path'],obligations)
             required={'spec_executor':'Create or revise the design specification','spec_reviewer':'design and implementation plan completeness','development_executor':'Implement the accepted specification','development_reviewer':'whole actual product diff from immutable initial source','test_executor':'private evidence only','test_reviewer':'actual host_checks manifest'}
             self.assertIn(required[role],obligations)
+            self.assertIn('actual source bytes govern findings',obligations)
+            self.assertIn('ensure_ascii=True',obligations)
             if role=='development_reviewer': self.assertIn(self.run['source_sha'],obligations)
             if role=='test_reviewer': self.assertEqual(request['host_checks']['checkpoint_sha'],run['manifest']['checkpoint_sha'])
             return result
