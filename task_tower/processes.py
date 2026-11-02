@@ -93,11 +93,12 @@ def run_command(argv, cwd, timeout_seconds, env=None):
 
 # Optional executor mode keeps raw output bounded in storage and memory.
 class _Drain:
-    def __init__(self, reader, log, cap):
+    def __init__(self, reader, log, cap, observer=None):
         import threading
         self.reader, self.log, self.cap = reader, log, cap
         self.digest, self.size, self.saved = hashlib.sha256(), 0, 0
         self.complete = False
+        self.observer, self.observer_failed = observer, False
         self.thread = threading.Thread(target=self.run, daemon=True)
         self.thread.start()
 
@@ -106,6 +107,13 @@ class _Drain:
             while chunk := self.reader.read(65536):
                 self.digest.update(chunk)
                 self.size += len(chunk)
+                if self.observer is not None and not self.observer_failed:
+                    try:
+                        self.observer(chunk)
+                    except BaseException:
+                        # A failed consumer must not kill the draining thread or
+                        # strand a child on a full pipe. The owner polls this bit.
+                        self.observer_failed = True
                 if self.log is not None and self.saved < self.cap:
                     part = chunk[:self.cap - self.saved]
                     self.log.write(part)
@@ -155,14 +163,17 @@ def _capture_files(capture):
 _legacy_run_command = run_command
 
 
-def run_command(argv, cwd, timeout_seconds, env=None, *, cancel_requested=None, capture=None):
+def run_command(argv, cwd, timeout_seconds, env=None, *, cancel_requested=None, capture=None,
+                stdout_observer=None):
     """Capture schema: {directory: private existing dir, max_bytes_per_stream: int}.
 
     Optional mode omits argv. Stream hashes/counts cover observed bytes, with
     tail_unknown set unless EOF was proved; .log files contain capped prefixes.
     The caller validates installation/checkouts exclusion of the directory.
     """
-    if cancel_requested is None and capture is None:
+    if stdout_observer is not None and not callable(stdout_observer):
+        raise ValueError('invalid_stdout_observer')
+    if cancel_requested is None and capture is None and stdout_observer is None:
         return _legacy_run_command(argv, cwd, timeout_seconds, env)
     started = time.monotonic()
     result = dict(status='unavailable', exit_code=None, started=False, cleanup_confirmed=True)
@@ -183,11 +194,11 @@ def run_command(argv, cwd, timeout_seconds, env=None, *, cancel_requested=None, 
         if Path(executable).suffix.lower() in ('.cmd', '.bat'):
             result['reason'] = 'shell_script_requires_explicit_interpreter'
             return result
-        for log in logs:
+        for index, log in enumerate(logs):
             read_fd, write_fd = os.pipe()
             reader = os.fdopen(read_fd, 'rb', buffering=0)
             writers.append(os.fdopen(write_fd, 'wb', buffering=0))
-            drains.append(_Drain(reader, log, cap))
+            drains.append(_Drain(reader, log, cap, stdout_observer if index == 0 else None))
         actual = [executable, *argv[1:]]
         if os.name == 'nt':
             from .windows_job import WindowsJobProcess
@@ -211,6 +222,9 @@ def run_command(argv, cwd, timeout_seconds, env=None, *, cancel_requested=None, 
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 result['status'] = 'timeout'
+                break
+            if drains[0].observer_failed:
+                result['status'] = 'failed'
                 break
             try:
                 code = process.wait(min(.25, remaining))
@@ -255,6 +269,19 @@ def run_command(argv, cwd, timeout_seconds, env=None, *, cancel_requested=None, 
             result[name + '_truncated'] = drain.size > drain.saved or not drain.complete
             if not drain.complete:
                 result.update(status='cleanup_failed', cleanup_confirmed=False)
+        if stdout_observer is not None:
+            result['stdout_observer_failed'] = bool(drains and drains[0].observer_failed)
+            # The final bytes can arrive after wait() observes process exit.
+            # Reconcile a late durable cancellation/predicate uncertainty before
+            # choosing observer failure, retaining all stronger known outcomes.
+            if result['stdout_observer_failed'] and result['status'] in ('passed','failed'):
+                try:
+                    result['status'] = ('cancelled' if cancel_requested is not None
+                                        and cancel_requested() else 'failed')
+                except Exception:
+                    result['status'] = 'unknown'
+                # Do not turn bounded join/cleanup latency after child exit into
+                # an execution timeout; its deadline was checked in the wait loop.
         if not drains:
             for log in logs:
                 if log is not None:

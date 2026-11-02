@@ -5,6 +5,7 @@ The caller must prove process exit, complete capture and cleanup separately.
 """
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -175,3 +176,201 @@ def claude_capabilities(profile: dict, evidence: dict | None = None) -> dict:
                 automatic_resume=False, version_supported=supported,
                 protocol_validated=protocol, installed_execution_verified=installed,
                 independent_review_verified=reviewed, os_evidence={})
+
+
+class ClaudeEventParser:
+    """Bounded observation of one NDJSON attempt, never execution authority.
+
+    Only an incomplete line and the bounded nested terminal result are retained.
+    feed records invalidity without raising. observe bridges invalidity to the
+    shared runner's neutral observer-failure termination path.
+    """
+    def __init__(self, attempt: dict, stream_max_bytes: int, line_max_bytes: int):
+        for key in ('run_id', 'attempt_id'):
+            if str(uuid.UUID(attempt[key])) != attempt[key]:
+                raise ValueError('Invalid parser identity')
+        if not isinstance(attempt['source_sha'], str) or not re.fullmatch('[0-9a-f]{40}', attempt['source_sha']):
+            raise ValueError('Invalid parser source')
+        if (type(stream_max_bytes) is not int or not 65536 <= stream_max_bytes <= 67108864 or
+                type(line_max_bytes) is not int or not 4096 <= line_max_bytes <= min(stream_max_bytes,1048576)):
+            raise ValueError('Invalid parser bounds')
+        self._attempt = {key: attempt[key] for key in ('run_id', 'attempt_id', 'source_sha')}
+        self._stream_cap, self._line_cap = stream_max_bytes, line_max_bytes
+        self._pending = bytearray()
+        self._size = self._events = self._unknown = self._denials = 0
+        self._init = self._final = False
+        self._reason, self._result = None, None
+
+    @property
+    def termination_requested(self):
+        return self._reason is not None
+
+    def _fail(self, reason):
+        if self._reason is None:
+            self._reason = reason
+        self._pending.clear()
+        self._result = None
+
+    def feed(self, chunk: bytes) -> None:
+        if self.termination_requested:
+            return
+        if type(chunk) is not bytes:
+            self._fail('invalid_chunk')
+            return
+        self._size += len(chunk)
+        if self._size > self._stream_cap:
+            self._fail('stream_limit')
+            return
+        offset = 0
+        while offset < len(chunk) and not self.termination_requested:
+            newline = chunk.find(b'\n', offset)
+            end = len(chunk) if newline == -1 else newline
+            if len(self._pending) + end - offset > self._line_cap:
+                self._fail('line_limit')
+                return
+            self._pending.extend(chunk[offset:end])
+            if newline == -1:
+                break
+            line = bytes(self._pending)
+            self._pending.clear()
+            self._line(line)
+            offset = newline + 1
+
+    def observe(self, chunk: bytes) -> None:
+        self.feed(chunk)
+        if self.termination_requested:
+            raise ValueError('invalid_claude_stream')
+
+    @staticmethod
+    def _pairs(pairs):
+        value = {}
+        for key, item in pairs:
+            if key in value:
+                raise ValueError('duplicate_json_key')
+            value[key] = item
+        return value
+
+    @staticmethod
+    def _reject_constant(value):
+        raise ValueError('nonfinite_json')
+
+    @staticmethod
+    def _bounded_json(line):
+        # Bound nesting before json.loads allocates recursive containers. Count
+        # only structural delimiters outside strings, respecting escaped quotes.
+        depth, quoted, escaped = 0, False, False
+        for byte in line:
+            if quoted:
+                if escaped:
+                    escaped = False
+                elif byte == 92:
+                    escaped = True
+                elif byte == 34:
+                    quoted = False
+            elif byte == 34:
+                quoted = True
+            elif byte in (123, 91):
+                depth += 1
+                if depth > 64:
+                    raise ValueError('json_depth')
+            elif byte in (125, 93):
+                depth -= 1
+        value = json.loads(line.decode('utf-8'),object_pairs_hook=ClaudeEventParser._pairs,
+                           parse_constant=ClaudeEventParser._reject_constant)
+        pending = [value]
+        while pending:
+            item = pending.pop()
+            if isinstance(item, str):
+                item.encode('utf-8')  # Reject escaped unpaired surrogates too.
+            elif isinstance(item, float) and not math.isfinite(item):
+                raise ValueError('nonfinite_json')
+            elif isinstance(item, dict):
+                pending.extend(item.keys()); pending.extend(item.values())
+            elif isinstance(item, list):
+                pending.extend(item)
+        if not isinstance(value, dict):
+            raise ValueError('nonobject_event')
+        return value
+
+    def _bound_result(self, value):
+        if (not isinstance(value, dict) or set(value) != {
+                'version','run_id','attempt_id','source_sha','status','summary'} or
+                type(value['version']) is not int or value['version'] != 1 or
+                any(value[key] != self._attempt[key] for key in ('run_id','attempt_id','source_sha')) or
+                value['status'] not in ('completed','failed','needs_input') or
+                not isinstance(value['summary'], str) or len(value['summary'].encode('utf-8')) > 4096 or
+                len(json.dumps(value,ensure_ascii=False).encode('utf-8')) > 65536):
+            raise ValueError('invalid_result_binding')
+        return value
+
+    def _line(self, line):
+        if not line.strip(b' \t\r'):
+            return
+        if self._final:
+            self._fail('event_after_result')
+            return
+        try:
+            value = self._bounded_json(line)
+            kind = value.get('type')
+            if not isinstance(kind,str) or not kind:
+                raise ValueError('invalid_event_type')
+            if 'session_id' in value and value['session_id'] != self._attempt['attempt_id']:
+                raise ValueError('invalid_event_session')
+            self._events += 1
+            if kind in ('control_request','control_response'):
+                self._fail('unsupported_control')
+            elif kind == 'system':
+                subtype = value.get('subtype')
+                if subtype == 'permission_denied':
+                    self._denials += 1
+                    self._fail('permission_denied')
+                elif subtype == 'init':
+                    if (self._init or value.get('session_id') != self._attempt['attempt_id'] or
+                            value.get('parent_tool_use_id') is not None):
+                        raise ValueError('invalid_init')
+                    for field in ('plugin_errors','mcp_server_errors'):
+                        if field in value and (not isinstance(value[field],list) or value[field]):
+                            raise ValueError('initialization_error')
+                    if 'mcp_servers' in value:
+                        servers = value['mcp_servers']
+                        if (not isinstance(servers,list) or any(not isinstance(server,dict) or
+                                server.get('status') not in ('connected','pending','disabled') for server in servers)):
+                            raise ValueError('initialization_error')
+                    self._init = True
+                elif subtype in ('error','configuration_error'):
+                    self._fail('initialization_error')
+                else:
+                    self._unknown += 1
+            elif kind == 'result':
+                if not self._init or value.get('session_id') != self._attempt['attempt_id']:
+                    raise ValueError('invalid_terminal_session')
+                denials = value.get('permission_denials')
+                if not isinstance(denials,list):
+                    raise ValueError('invalid_denials')
+                if denials:
+                    self._denials += len(denials)
+                    self._fail('permission_denied')
+                    return
+                if (value.get('subtype') != 'success' or value.get('is_error') is not False or
+                        value.get('parent_tool_use_id') is not None):
+                    raise ValueError('invalid_terminal')
+                self._result = self._bound_result(value.get('structured_output'))
+                self._final = True
+            elif kind not in ('assistant','user','rate_limit_event','stream_event','progress'):
+                self._unknown += 1
+        except (ValueError, UnicodeError, TypeError, OverflowError, RecursionError):
+            self._fail('invalid_event')
+
+    def finish(self) -> dict:
+        if self._pending and not self.termination_requested:
+            line = bytes(self._pending); self._pending.clear(); self._line(line)
+        if self._reason is None and not (self._init and self._final):
+            self._fail('missing_terminal')
+        reason = self._reason
+        evidence = dict(observed_bytes=self._size,event_count=self._events,
+                        unknown_events=self._unknown,denial_count=self._denials,
+                        session_id=self._attempt['attempt_id'],init_seen=self._init,
+                        result_seen=self._final,protocol_validated=reason is None)
+        # Return a fresh copy so consumers cannot mutate retained parser state.
+        return dict(valid=reason is None,reason=reason,
+                    result=dict(self._result) if reason is None else None,evidence=evidence)

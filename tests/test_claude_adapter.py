@@ -151,3 +151,120 @@ class ClaudeAdapterTests(unittest.TestCase):
                 self.skipTest('junction creation unavailable')
             with self.assertRaises(ValueError): api.prepare_mcp_config(alias)
             self.assertFalse((target/'claude-mcp.json').exists())
+
+
+class ClaudeStreamTests(unittest.TestCase):
+    def setUp(self):
+        self.attempt=dict(run_id=str(uuid.uuid4()),attempt_id=str(uuid.uuid4()),source_sha='a'*40)
+        self.result=dict(version=1,**self.attempt,status='completed',summary='café')
+
+    def parser(self,stream=65536,line=4096):
+        from task_tower import claude_adapter
+        self.assertTrue(hasattr(claude_adapter,'ClaudeEventParser'),'Claude stream parser missing')
+        return claude_adapter.ClaudeEventParser(self.attempt,stream,line)
+
+    def init(self):
+        return dict(type='system',subtype='init',session_id=self.attempt['attempt_id'])
+
+    def final(self,**changes):
+        return dict(type='result',subtype='success',session_id=self.attempt['attempt_id'],
+                    is_error=False,permission_denials=[],structured_output=self.result)|changes
+
+    def wire(self,*events,ending=b'\n'):
+        return b'\n'.join(json.dumps(e,ensure_ascii=False).encode() for e in events)+ending
+
+    def test_split_utf8_json_and_crlf_boundaries_and_no_final_newline(self):
+        data=self.wire(self.init(),dict(type='assistant',parent_tool_use_id=None,
+            message={'text':'é'}),self.final(),ending=b'').replace(b'\n',b'\r\n')
+        for split in range(len(data)+1):
+            parser=self.parser(); parser.feed(data[:split]); parser.feed(data[split:])
+            outcome=parser.finish()
+            self.assertTrue(outcome['valid'],(split,outcome['reason']))
+            self.assertEqual(outcome['result'],self.result)
+        parser=self.parser()
+        for byte in data: parser.feed(bytes([byte]))
+        self.assertTrue(parser.finish()['valid'])
+
+    def test_invalid_terminal_bindings_and_types_never_succeed(self):
+        cases=[dict(session_id=str(uuid.uuid4())),dict(subtype='future-success'),dict(is_error=0),
+               dict(is_error=True),dict(permission_denials={}),dict(permission_denials=['denied']),
+               dict(parent_tool_use_id='child'),dict(structured_output=self.result|{'extra':1}),
+               dict(structured_output=self.result|{'run_id':str(uuid.uuid4())}),
+               dict(structured_output=self.result|{'version':True}),
+               dict(structured_output=self.result|{'status':'accepted'}),
+               dict(structured_output=self.result|{'summary':'é'*2049})]
+        for change in cases:
+            with self.subTest(change=change):
+                parser=self.parser(line=16384); parser.feed(self.wire(self.init(),self.final(**change)))
+                self.assertFalse(parser.finish()['valid'])
+        for missing in ['session_id','subtype','is_error','permission_denials','structured_output']:
+            value=self.final(); del value[missing]
+            parser=self.parser(); parser.feed(self.wire(self.init(),value))
+            self.assertFalse(parser.finish()['valid'],missing)
+
+    def test_ambiguous_order_denial_control_and_initialization_errors(self):
+        bad_sequences=[[],[self.init()],[self.final()],
+                       [self.init(),self.init(),self.final()],
+                       [self.init(),self.final(),self.final()],
+                       [self.init(),self.final(),dict(type='assistant')],
+                       [self.init()|{'session_id':'wrong'},self.final()],
+                       [self.init()|{'plugin_errors':[{'type':'missing'}]},self.final()],
+                       [self.init()|{'mcp_server_errors':[{'type':'invalid'}]},self.final()],
+                       [self.init(),dict(type='system',subtype='permission_denied'),self.final()],
+                       [self.init(),dict(type='control_request'),self.final()]]
+        for events in bad_sequences:
+            with self.subTest(events=events):
+                parser=self.parser(); parser.feed(self.wire(*events))
+                self.assertFalse(parser.finish()['valid'])
+
+    def test_unknown_events_are_counted_without_retaining_raw_content(self):
+        parser=self.parser()
+        parser.feed(self.wire(self.init(),dict(type='future-progress',text='private-marker'),self.final()))
+        outcome=parser.finish()
+        self.assertTrue(outcome['valid']); self.assertEqual(outcome['evidence']['unknown_events'],1)
+        self.assertNotIn('private-marker',repr(outcome))
+        self.assertEqual(outcome['evidence']['session_id'],self.attempt['attempt_id'])
+
+    def test_malformed_duplicate_nonfinite_and_depth_inputs_fail_early(self):
+        malformed=[b'\xff\n',b'{"type":"system","type":"result"}\n',b'[]\n',
+                   b'{"type":"progress","value":NaN}\n',
+                   b'{"type":"progress","value":1e999}\n',
+                   b'{"type":"progress","value":"\\ud800"}\n',
+                   b'{"type":"progress","value":"bad\x00"}\n',
+                   b'{"x":'+b'['*65+b'0'+b']'*65+b'}\n']
+        for data in malformed:
+            with self.subTest(data=data):
+                parser=self.parser(); parser.feed(data); parser.feed(self.wire(self.init(),self.final()))
+                self.assertTrue(parser.termination_requested)
+                outcome=parser.finish(); self.assertFalse(outcome['valid']); self.assertIsNone(outcome['result'])
+
+    def test_line_stream_bounds_and_observer_bridge(self):
+        parser=self.parser(); parser.feed(b'x'*4097)
+        self.assertTrue(parser.termination_requested)
+        for _ in range(20): parser.feed(b'x'*65536)
+        self.assertFalse(parser.finish()['valid'])
+        parser=self.parser(); parser.feed(b'\n'*65536); parser.feed(b'\n')
+        self.assertTrue(parser.termination_requested)
+        parser=self.parser()
+        with self.assertRaises(ValueError): parser.observe(b'not-json\n')
+        self.assertFalse(parser.finish()['valid'])
+
+    def test_finish_is_stable_but_new_nonempty_input_invalidates_final(self):
+        parser=self.parser(); parser.feed(self.wire(self.init(),self.final()))
+        first=parser.finish(); self.assertEqual(first,parser.finish())
+        parser.feed(b'\n'); self.assertTrue(parser.finish()['valid'])
+        parser.feed(b'{"type":"progress"}\n')
+        self.assertFalse(parser.finish()['valid'])
+
+    def test_mismatched_intermediate_session_and_failed_mcp_are_not_harmless(self):
+        for events in [
+            [self.init(),dict(type='assistant',session_id=str(uuid.uuid4())),self.final()],
+            [self.init()|{'mcp_servers':[{'name':'unexpected','status':'failed'}]},self.final()]]:
+            parser=self.parser(); parser.feed(self.wire(*events))
+            self.assertFalse(parser.finish()['valid'])
+
+    def test_eof_missing_terminal_is_irreversibly_invalid(self):
+        parser=self.parser(); parser.feed(self.wire(self.init()))
+        self.assertFalse(parser.finish()['valid'])
+        parser.feed(self.wire(self.final()))
+        self.assertFalse(parser.finish()['valid'])

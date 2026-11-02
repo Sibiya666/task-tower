@@ -1,7 +1,9 @@
 import hashlib
+import inspect
 import pathlib
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from unittest.mock import patch
@@ -9,6 +11,126 @@ from task_tower.processes import run_command
 
 
 class ExecutorProcessesTests(unittest.TestCase):
+    def observer_command(self,*args,**kwargs):
+        self.assertIn('stdout_observer',inspect.signature(run_command).parameters,
+                      'contained process observer missing')
+        return run_command(*args,**kwargs)
+
+    def test_observer_receives_full_stream_beyond_stored_prefix(self):
+        digest=hashlib.sha256(); count=[0]
+        def observe(chunk): digest.update(chunk); count[0]+=len(chunk)
+        with tempfile.TemporaryDirectory() as directory:
+            result=self.observer_command([sys.executable,'-c',"import os;os.write(1,b'x'*250000)"],'.',5,
+                capture={'directory':pathlib.Path(directory).resolve(),'max_bytes_per_stream':32},
+                stdout_observer=observe)
+            self.assertEqual(result['status'],'passed')
+            self.assertEqual(count[0],250000)
+            self.assertEqual(digest.hexdigest(),hashlib.sha256(b'x'*250000).hexdigest())
+            self.assertEqual(result['stdout_captured_bytes'],32)
+            self.assertFalse(result['stdout_tail_unknown'])
+            self.assertFalse(result['stdout_observer_failed'])
+
+    def test_observer_exception_is_neutral_failure_but_drain_reaches_eof(self):
+        calls=[0]
+        def observe(chunk):
+            calls[0]+=1
+            raise RuntimeError('secret-observer-detail')
+        started=time.monotonic()
+        result=self.observer_command([sys.executable,'-c',
+            "import os,time;os.write(1,b'x'*300000);time.sleep(20)"],'.',10,stdout_observer=observe)
+        self.assertEqual(result['status'],'failed')
+        self.assertTrue(result['stdout_observer_failed'])
+        self.assertTrue(result['cleanup_confirmed'])
+        self.assertFalse(result['stdout_tail_unknown'])
+        self.assertEqual(calls[0],1)
+        self.assertLess(time.monotonic()-started,3)
+        self.assertNotIn('secret-observer-detail',repr(result))
+
+    def test_parser_invalidity_requests_contained_termination(self):
+        from task_tower import claude_adapter
+        self.assertTrue(hasattr(claude_adapter,'ClaudeEventParser'))
+        import uuid
+        parser=claude_adapter.ClaudeEventParser(dict(run_id=str(uuid.uuid4()),
+            attempt_id=str(uuid.uuid4()),source_sha='a'*40),65536,4096)
+        result=self.observer_command([sys.executable,'-c',
+            "import os,time;os.write(1,b'x'*10000);time.sleep(20)"],'.',10,stdout_observer=parser.observe)
+        self.assertEqual(result['status'],'failed')
+        self.assertTrue(result['cleanup_confirmed']); self.assertTrue(parser.termination_requested)
+        self.assertFalse(parser.finish()['valid'])
+
+    def test_observer_failure_cannot_override_unknown_cleanup(self):
+        if sys.platform!='win32': self.skipTest('Windows Job fault injection')
+        def fail(chunk): raise ValueError('private')
+        with patch('task_tower.windows_job.WindowsJobProcess.close',side_effect=OSError):
+            result=self.observer_command([sys.executable,'-c',"print('output')"],'.',3,stdout_observer=fail)
+        self.assertEqual(result['status'],'cleanup_failed')
+        self.assertFalse(result['cleanup_confirmed'])
+
+    def test_observer_base_exception_does_not_escape_drain_thread(self):
+        failures=[]
+        def fail(chunk): raise SystemExit('private-detail')
+        with patch('threading.excepthook',side_effect=lambda args:failures.append(args)):
+            result=self.observer_command([sys.executable,'-c',"print('output')"],'.',3,stdout_observer=fail)
+        self.assertEqual(failures,[])
+        self.assertEqual(result['status'],'failed')
+        self.assertTrue(result['stdout_observer_failed'])
+        self.assertTrue(result['cleanup_confirmed'])
+
+    def test_durable_cancel_precedes_simultaneous_observer_failure(self):
+        cancel=threading.Event()
+        def observe(chunk):
+            cancel.set()
+            raise ValueError('private')
+        result=self.observer_command([sys.executable,'-c',
+            "import os,time;os.write(1,b'x');time.sleep(10)"],'.',3,
+            cancel_requested=cancel.is_set,stdout_observer=observe)
+        self.assertEqual(result['status'],'cancelled')
+        self.assertTrue(result['stdout_observer_failed'])
+        self.assertTrue(result['cleanup_confirmed']); self.assertFalse(result['stdout_tail_unknown'])
+
+    def test_cancel_predicate_uncertainty_precedes_observer_failure(self):
+        emitted=threading.Event()
+        def observe(chunk):
+            emitted.set()
+            raise ValueError('observer-private')
+        def cancel():
+            if emitted.is_set(): raise RuntimeError('cancel-private')
+            return False
+        result=self.observer_command([sys.executable,'-c',
+            "import os,time;os.write(1,b'x');time.sleep(10)"],'.',3,
+            cancel_requested=cancel,stdout_observer=observe)
+        self.assertEqual(result['status'],'unknown')
+        self.assertTrue(result['stdout_observer_failed']); self.assertTrue(result['cleanup_confirmed'])
+        self.assertNotIn('private',repr(result))
+
+    def test_active_deadline_precedes_observer_failure(self):
+        def observe(chunk): raise ValueError('private')
+        result=self.observer_command([sys.executable,'-c',
+            "import os,time;os.write(1,b'x');time.sleep(10)"],'.',.2,stdout_observer=observe)
+        self.assertEqual(result['status'],'timeout')
+        self.assertTrue(result['stdout_observer_failed']); self.assertTrue(result['cleanup_confirmed'])
+
+    def test_late_observer_failure_after_fast_exit_is_failed_without_cleanup_timeout(self):
+        def observe(chunk):
+            time.sleep(.3)
+            raise ValueError('private')
+        result=self.observer_command([sys.executable,'-c',"print('output')"],'.',.2,stdout_observer=observe)
+        self.assertEqual(result['exit_code'],0)
+        self.assertEqual(result['status'],'failed')
+        self.assertTrue(result['stdout_observer_failed']); self.assertTrue(result['cleanup_confirmed'])
+
+    def test_durable_cancel_during_join_precedes_late_observer_failure(self):
+        cancel=threading.Event()
+        def observe(chunk):
+            time.sleep(.15)
+            cancel.set()
+            raise ValueError('private')
+        result=self.observer_command([sys.executable,'-c',"print('output')"],'.',3,
+            cancel_requested=cancel.is_set,stdout_observer=observe)
+        self.assertEqual(result['exit_code'],0)
+        self.assertEqual(result['status'],'cancelled')
+        self.assertTrue(result['stdout_observer_failed']); self.assertTrue(result['cleanup_confirmed'])
+
     def test_cancel_before_launch(self):
         with patch('task_tower.processes.shutil.which') as lookup:
             result = run_command([sys.executable, '-c', 'raise SystemExit(1)'], '.', 3,
