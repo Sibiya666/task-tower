@@ -49,3 +49,45 @@ Directly checked the sibling accepted Issue #17 R1 design at task-tower-pr-worke
 process_count now explicitly counts managed model/custom roles and configured checks. Fixed trusted host-control helper concurrency and task deadlines bound their separate orchestration; helper restart cannot renew persisted deadlines, erase attempts or create another process containment layer. This is a documented budget meaning, not a claim of a total OS subprocess count or monetary cap. Existing minimum profile limits, monotonic/backward-clock handling and pre-effect budget checks remain binding. Model/custom/check token stripping, safe Git environment filtering, no credential argv/JSON/config/log/artifact, existing authentication only and no added scopes remain unchanged.
 
 Implementation evidence remains outstanding. New real-process tests must prove two-repository overlap versus same-repository atomic exclusion (including public work and unknown owners), separate-process final commit -> push -> PR completion, blocked network Git cancellation for public work and watch, and safe-ready cancellation with positive proof. They supplement rather than replace earlier genuine dispatcher/dependency, environment-only auth, descendant cleanup, no-resubmit and unknown-lock tests. This design review ran no product tests, reviewed no WIP CLI implementation and accepts no implementation. Task 1-5 receipts remain bound to their original reviewed source/dependencies; changed journal/publication/worker paths need fresh focused review. Shared AGENTS/README runtime reconciliation remains the coordinator's Task 7 obligation before final integration. Whole-suite/three-OS CI, pilot limitations and independent PR/main acceptance gates remain unchanged. Builder check: nothing important left within this design boundary.
+
+
+---
+
+# Independent Windows release scope SPEC/PLAN review
+
+Date: 2026-11-02. Reviewer: windows_scope_spec_acceptance (fresh instance, distinct from amendment author). Scope: the six-file Windows release amendment only; this does not re-approve unrelated historical specification content or implementation. No tests, native/model execution, installations, authentication changes, product/card/documentation writes or GitHub mutations were performed.
+
+## Verdict
+
+Issue #16: ACCEPT amendment for the exact two hashes below. Windows-only native pipeline execution, early work/watch/_action/_dispatch rejection before _runtime/journal initialization, direct-entry defense, portable admission/lookup/status/cancel/inspect and mandatory Windows containment/shutdown/physical-DB identity/recovery gates are coherent. No permission to ship saved POSIX scope/bootstrap WIP is given.
+
+Issue #18: ACCEPT amendment for the exact two hashes below. Pure group policy/DAG/provenance remains portable; Windows resource admission and conditional real >=3 concurrency proof remain mandatory. Neither fallback resources nor pure Task1R acceptance enables unsupported native execution. The actual accepted #16 main/API/CI/postmerge/automatic-closure gate remains intact; this verdict does not open runtime integration now.
+
+Issue #21: ACCEPT amendment for the exact two hashes below. Windows native OpenCode/custom qualification and new stdin/containment are separated from portable policy/parser/provenance/closed dispatch. Existing Codex/custom behavior is explicitly preserved. Exact accepted #16 main API re-audit remains required before Task1; this verdict does not authorize coding before that gate or native probes without installation-owned qualification.
+
+No blocking amendment findings. The explicit dated precedence at line 5 in each file governs retained earlier native POSIX promises. Three-platform CI requirements remain requirements, not contradictions: they cover portable regressions and Windows native proof with explicit per-test classification. Historical POSIX-native Task3B and transport requirements are deferred by that precedence; they cannot be claimed accepted merely by running synthetic fixtures.
+
+## Review evidence and implementation constraints
+
+Compared every actual amendment against its preserved pre-amendment bytes with git diff --no-index. Independently recomputed all six current SHA256 hashes and all six prior SHA256 hashes; every value matches runtime/windows-scope-spec-manifest.json. Read repository instructions and inspected surrounding platform, native-evidence, dependency, legacy-interface and completion clauses. Diff contains the new normative sections, portability wording changes and explicit #61 collector deferral, not rewritten historical reviews.
+
+The amendment is honest about saved commit 18e9a3985ad3b86a02d58703ef8e8a2afdd9a0e2: unaccepted WIP/manual diagnostics, no runtime authority. Feature #58 and children #59-62 are named deferred work. Their live GitHub milestone/admission state and remote-branch contents were supplied by coordinator and were not independently queried in this local content review; operational verification remains coordinator responsibility.
+
+Required implementation review checks (already implied by the accepted text, not additional scope):
+
+- Record per-test classification before changing mixed modules. Keep all applicable portable regressions in Ubuntu/macOS/Windows CI and Windows-native tests on Windows. Retained native POSIX checklist entries in #18 Task3B and #21 Task2 must be marked deferred to #61/#62 in execution evidence, never silently marked PASS or used to delete an entire mixed module.
+- Prove unsupported-platform rejection at public and direct effect-producing paths, before helpers, checks, worktrees or publication. For #16 specifically prove no _runtime/journal side effect. Do not simulate a supported native OS as platform qualification.
+- Keep resource fallback subordinate to platform capability; verify Windows physical SQLite pin and ordinary/hot recovery fixes independently. Windows-only scope does not excuse known Windows defects or shared shutdown-budget failures.
+- Interpret #21 direct adapter/probe restriction as the new native OpenCode execution surface; preserve the established queue/protocol and existing Codex/custom surfaces. New stdin_spec native transport is Windows-only until #62 qualification; default None/DEVNULL legacy calls remain unchanged.
+- Retain head/base-bound independent PR acceptance, successful current CI, serialized merge barrier and exact-main independent postmerge/automatic verified closure. This review is SPEC/PLAN scope acceptance only, not any of those later stage verdicts or a night-readiness claim.
+
+## Exact reviewed raw SHA256
+
+| File | SHA256 |
+| --- | --- |
+| task-tower-github/docs/superpowers/specs/2026-11-01-stage-pipeline-design.md | `5524d16570530662e25006e91e4159afecbecd103f327d1c1b9b48fc3d3fc6f5` |
+| task-tower-github/docs/superpowers/plans/2026-11-01-stage-pipeline.md | `d48b782e476349103455996bebb9144149326842c59b7ff1959a8390c1a05ee3` |
+| task-tower-capture/docs/superpowers/specs/2026-11-02-agent-groups-design.md | `c488845f3fcd2cf446f820452c7c2dd1b22d2cae6fbd257bb3813e7b8aeae867` |
+| task-tower-capture/docs/superpowers/plans/2026-11-02-agent-groups.md | `cf8e7a6946c5a1c5fcf0869ed9b9a7f211212c62fd63d0422782638d7a28530a` |
+| task-tower-opencode/docs/superpowers/specs/2026-11-02-opencode-adapter-design.md | `aafe165c23182656f85fe272b8fa2ee0fd03a73627fb7e515bf6fa18cf93c03b` |
+| task-tower-opencode/docs/superpowers/plans/2026-11-02-opencode-adapter.md | `31369e1af8988d13fe97a20eeac5ef03723ae210d340a0b01b9521c94994a813` |

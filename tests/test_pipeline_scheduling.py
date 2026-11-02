@@ -340,6 +340,7 @@ class WorkerOrderingTests(unittest.TestCase):
 
 
 class SchedulingPublicReportTests(unittest.TestCase):
+    @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native pipeline execution')
     def test_cancel_before_claim_keeps_queue_unowned_without_effects(self):
         from tests.test_pipeline_watch import WatchTests
         case=WatchTests();case.setUp();self.addCleanup(case.doCleanups)
@@ -367,6 +368,7 @@ class SchedulingPublicReportTests(unittest.TestCase):
         for changes in (dict(run_id=str(uuid.uuid4()),stage='spec',generation=1),dict(reason='cleanup_unknown'),dict(receipt_sha256='a'*64)):
             with self.subTest(changes=changes),self.assertRaises(ValueError):pipeline._host_result(dict(report,**changes),'_action')
 
+    @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native pipeline execution')
     def test_real_public_work_source_failure_exits_one_without_claim(self):
         from tests.test_pipeline_watch import WatchTests
         case=WatchTests();case.setUp();self.addCleanup(case.doCleanups)
@@ -380,6 +382,7 @@ class SchedulingPublicReportTests(unittest.TestCase):
         self.assertEqual((answer['status'],answer['reason']),('unavailable','source_unavailable'))
         self.assertEqual(case.journal.status(),before)
 
+    @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native pipeline execution')
     def test_actual_unavailable_host_drives_queued_backoff_and_visible_health(self):
         from tests.test_pipeline_watch import WatchTests
         case=WatchTests();case.setUp();self.addCleanup(case.doCleanups)

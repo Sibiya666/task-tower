@@ -14,29 +14,30 @@
     "Bounded rejection routes preserve history, independent spec/development/test acceptance and actual host test evidence",
     "Durable local watch controller refills up to two independent authorized tasks without a chat, respecting component locks, limits and unknown-effect fencing",
     "Trusted host commit/push/PR creation persists effect intents and reconciles unknown outcomes without blind replay; reviewable PR includes exact task marker",
-    "Portable process containment, private state, pins, stripped child token variables and explicit capability limits preserve legacy executor and postmerge contracts",
-    "Independent stages, exact-head/base PR and exact-main postmerge acceptance precede publisher-driven Issue16 closure; awaiting_pr is not Done"
+    "Windows-qualified process containment, private state, pins, stripped child token variables and explicit capability limits preserve legacy executor and postmerge contracts",
+    "Independent stages, exact-head/base PR and exact-main postmerge acceptance precede publisher-driven Issue16 closure; awaiting_pr is not Done",
+    "Current native execution is Windows-qualified; unsupported pipeline work/watch/helpers fail closed before side effects, while portable read/control contracts and all applicable three-platform CI remain; Linux/macOS native support is deferred to Issues59/60"
   ],
   "stages": {
     "spec": {
       "status": "accepted",
-      "reviewer": "pipeline_task6_spec_review",
+      "reviewer": "windows_scope_spec_acceptance",
       "evidence": "evidence/TT-PIPELINE-001/task6-spec-review.md",
-      "sha256": "e87e96f8a4f92ba2dfd767e19e2eec3d2f71b745e0448d2fedf2d04e8399db53",
+      "sha256": "d495c4b735952ef34808a6f0671bf453888c96337ecff95050d3b99909fa0d8e",
       "hash_scheme": "sha256-utf8-lf-v1"
     },
     "development": {
       "status": "accepted",
       "reviewer": "pipeline_development_acceptance",
       "evidence": "evidence/TT-PIPELINE-001/development-review.md",
-      "sha256": "48510ed4c6b418687091e9f646211ccea8f0b8491a220efbbc17f6af1ccc1c8c",
+      "sha256": "a9d4ebf285894c56efe6e8f1fa63f62cc9cbce1fbc58dc73198edb5c9288bdc1",
       "hash_scheme": "sha256-utf8-lf-v1"
     },
     "test": {
       "status": "accepted",
-      "reviewer": "books_native_smoke_impl",
+      "reviewer": "windows_pipeline_test_acceptance",
       "evidence": "evidence/TT-PIPELINE-001/test-review.md",
-      "sha256": "3cc0b1ae80872e726be21cfaba927a19f2d3f274c282d9a989c483dae3f1b296",
+      "sha256": "c5d6fb0b5f2e62229d1ec9e3178bf072d350a1258867aab821b8c964911260ba",
       "hash_scheme": "sha256-utf8-lf-v1"
     },
     "postmerge": {
