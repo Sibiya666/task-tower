@@ -78,8 +78,9 @@ class OverlayBooksTests(unittest.TestCase):
         def aggregate(connections, include_library, on_update):
             return real_aggregate(connections, lambda c: store, include_library, on_update=on_update)
         with tempfile.TemporaryDirectory(prefix='books config Р® ') as directory:
-            path = Path(directory) / 'private connections.json'
-            path.write_text(json.dumps(dict(version=1, projects=[dict(id='p',repository='a/b',checkout=directory,runner_label='local')])), encoding='utf-8')
+            root = Path(directory).resolve()
+            path = root / 'private connections.json'
+            path.write_text(json.dumps(dict(version=1, projects=[dict(id='p',repository='a/b',checkout=str(root),runner_label='local')])), encoding='utf-8')
             with patch.object(module, 'aggregate', aggregate), patch('task_tower.project_worker.issue_lifecycle', return_value=dict(version=1,kind='task',status='done')), patch('task_tower.project_worker.verified_done', side_effect=proof):
                 thread = threading.Thread(target=lambda: final.append(module.snapshot(path, on_update=frames.append)))
                 thread.start()
@@ -88,7 +89,7 @@ class OverlayBooksTests(unittest.TestCase):
                     self.assertTrue(thread.is_alive())
                     self.assertEqual({r['book'] for r in frames[-1]['entries']}, {'tasks', 'library'})
                     self.assertEqual(frames[-1]['entries'][0]['verification'], 'pending')
-                    self.assertNotIn(directory, json.dumps(frames))
+                    self.assertNotIn(str(root), json.dumps(frames))
                 finally:
                     release.set(); thread.join(5)
                 self.assertEqual(final[0]['state'], 'ready')
