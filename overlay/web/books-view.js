@@ -1,0 +1,52 @@
+(function(){'use strict';
+const P=window.BooksPolicy;let healthTimer=null;let menuReturn=false;let snapshot=null,lastSuccess=null,opened=false,requested=false,invoker=null,selection=null,detailInvoker=null,page=0,expanded=new Set(),filters={book:'tasks',project:'all',status:'all',grouping:'stage'};
+const el=(tag,text,parent)=>{const n=document.createElement(tag);if(text!==undefined)n.textContent=String(text);if(parent)parent.append(n);return n};
+const modal=el('section');modal.id='books-dialog';modal.hidden=true;modal.setAttribute('role','dialog');modal.setAttribute('aria-modal','true');modal.setAttribute('aria-label','Книги проекта');document.body.append(modal);
+function send(value){window.chrome?.webview?.postMessage(value)}
+function button(text,parent,fn){const b=el('button',text,parent);b.type='button';b.onclick=fn;return b}
+function safeSource(url,e){
+ if(typeof url!=='string'||/[\\\x00-\x20\x7f-\x9f]/.test(url)||url.includes('?')||url.includes('#'))return false;
+ try{const prefix='https://github.com/'+e.repository+'/';if(!url.startsWith(prefix))return false;
+ const u=new URL(url);if(u.protocol!=='https:'||u.hostname!=='github.com'||u.port||u.username||u.password)return false;
+ const path=url.slice(prefix.length);if(/^(issues|pull|milestone)\/[1-9]\d*$/.test(path))return true;
+ const match=/^blob\/[a-f0-9]{40}\/(.+)$/.exec(path);if(!match)return false;
+ const relative=match[1],decoded=decodeURIComponent(relative);
+ if(!decoded.toLowerCase().endsWith('.md')||/[\\\x00-\x1f\x7f-\x9f:]/.test(decoded)||/%[0-9a-f]{2}/i.test(decoded)||decoded.split('/').some(x=>!x||x==='.'||x==='..'))return false;
+ const quote=x=>encodeURIComponent(x).replace(/[!'()*]/g,c=>'%'+c.charCodeAt(0).toString(16).toUpperCase());
+ return decoded.split('/').map(quote).join('/')===relative;
+ }catch{return false}
+}
+function source(url,e,parent){if(!url)return;if(safeSource(url,e))button('Открыть источник',parent,()=>send({action:'books-open-source',url}));el('p',url,parent)}
+function updateHealth(){const health=document.getElementById('books-health');if(opened&&health)health.textContent=snapshot?`${snapshot.state} · ${P.isStale(snapshot)?'Устаревшие данные':'Данные свежие'} · Последний успех: ${lastSuccess||'неизвестен'}`:'Данные ещё не загружены'}
+function refresh(){requested=true;if(snapshot){snapshot=P.normalizeEnvelope({...snapshot,state:'loading',stale:true});}render();send({action:'books-refresh'})}
+function selectControl(label,key,values,parent){const wrap=el('label',label,parent),s=el('select',undefined,wrap);s.dataset.filter=key;for(const [v,t]of values){const o=el('option',t,s);o.value=v}s.value=filters[key];s.onchange=()=>{filters[key]=s.value;page=0;selection=null;render();modal.scrollTop=0};}
+const names={ideas:'Идеи',tasks:'Задачи',library:'Библиотека проекта'};
+function render(){if(!opened)return;const active=document.activeElement,activeText=modal.contains(active)?active.textContent:null,activeIndex=[...modal.querySelectorAll('button,select')].indexOf(active);const restore=()=>{if(activeIndex>=0){const candidates=[...modal.querySelectorAll('button,select')];(candidates.find(n=>n.textContent===activeText)||candidates[activeIndex]||candidates[0])?.focus({preventScroll:true})}};const focusKey=document.activeElement?.dataset.filter;modal.replaceChildren();const header=el('div',undefined,modal);header.className='books-heading';el('h1','Книги проекта',header);button('Закрыть книги',header,close);
+const health=el('p',undefined,modal);health.id='books-health';health.setAttribute('role','status');updateHealth();button('Обновить',modal,refresh);
+if(selection){renderDetail();restore();return}
+const controls=el('div',undefined,modal);controls.className='books-filters';selectControl('Книга','book',Object.entries(names),controls);
+const projects=[...new Set((snapshot?.entries||[]).map(e=>e.project))].sort();if(filters.project!=='all'&&!projects.includes(filters.project))filters.project='all';selectControl('Проект','project',[['all','Все проекты'],...projects.map(x=>[x,x])],controls);
+selectControl('Статус','status',[['all','Все статусы'],...[...new Set(['proposed','ready','active','blocked','done','unknown','source',...(snapshot?.entries||[]).map(e=>e.status).filter(x=>typeof x==='string'&&x!=='all'),...(filters.status==='all'?[]:[filters.status])])].sort().map(x=>[x,x])],controls);if(filters.book==='tasks')selectControl('Группировка','grouping',[['stage','Этапы'],['features','Функции / подзадачи']],controls);
+const rows=P.buildRows(snapshot?.entries||[],{...filters,expanded:[...expanded]});const paged=P.pageRows(rows,page);page=paged.page;
+const content=el('div',undefined,modal);content.id='books-records';for(const row of paged.rows){if(row.kind==='group'){el('h2',row.title,content);continue}if(row.kind!=='record'){const ref=el('div',undefined,content);ref.className='books-reference';el('p',`${row.reason}: ${row.id}`,ref);if(row.kind==='reference')source(row.source,{repository:row.id.split('#')[0]},ref);continue}const e=row.entry,c=el('article',undefined,content);c.className='books-card';c.dataset.id=e.id;el('h2',e.title||e.path||e.id,c);el('p',e.id,c);el('p',e.book==='library'?`Заявлено: ${e.artifact_state} · ${e.available?'доступен':'недоступен'}`:`${e.status||'unknown'} · Проверка: ${e.verification} · GitHub: ${e.remote_state||'неизвестно'}`,c);
+if(e.book==='tasks'){el('p',`Принято ${row.progress.accepted}/${row.progress.loaded} · Закрыто ${row.progress.closed}/${row.progress.loaded} · Не разрешено: ${row.progress.unresolved}`,c);if(row.expandable)button(expanded.has(e.id)?'Свернуть подзадачи':'Подзадачи',c,()=>{expanded.has(e.id)?expanded.delete(e.id):expanded.add(e.id);render()})}button('Подробнее',c,event=>{selection=e.id;detailInvoker=e.id;render();modal.scrollTop=0;modal.querySelector('[data-detail-back]').focus()});}
+if(!paged.total)el('p','Нет записей для выбранных фильтров',content);const nav=el('nav',undefined,modal);const prev=button('Назад',nav,()=>{page--;render()});prev.disabled=page===0;el('span',`${page+1} / ${paged.pages} · Записей: ${paged.total}`,nav);const next=button('Далее',nav,()=>{page++;render()});next.disabled=page+1>=paged.pages;
+for(const error of snapshot?.errors||[])el('p',`${error.project}: ${error.error}`,modal);restore();if(focusKey)modal.querySelector(`[data-filter="${focusKey}"]`)?.focus();}
+function detailValue(value){if(value===undefined||value===null||value===''||(Array.isArray(value)&&!value.length))return 'Не записано';if(value?.status==='unavailable')return 'Недоступно';return typeof value==='object'?JSON.stringify(value,null,2):String(value)}
+function detailField(key,value,parent){el('h3',key,parent);const field=el('pre',detailValue(value),parent);field.dataset.field=key;}
+function renderDetail(){button('Назад к записям',modal,backDetail).dataset.detailBack='true';const d=el('article',undefined,modal);d.id='books-detail';const e=snapshot?.entries.find(x=>x.id===selection);if(!e){el('h2',selection,d);el('p','Недоступно: выбранная запись отсутствует в текущем снимке',d);return}el('h2',e.title||e.path||e.id,d);el('p',e.id,d);
+const required=e.book==='library'?['repository','path','commit','artifact_state','available','declaration_source','issues','milestone']:['description','status','verification','remote_state','phase','blockers','blocked_by','results','history','migrations','capture','stages','remote_attempt','repository'];
+for(const key of required)detailField(key,e[key],d);
+if(e.book!=='library'){el('h3','relationships',d);for(const key of ['parent','sub_issues','milestone'])detailField(key,e.relationships?.[key],d)}
+source(e.source,e,d);if(e.book==='library'){el('h3','Версии и декларации',d);for(const v of snapshot.entries.filter(x=>x.book==='library'&&x.repository===e.repository&&x.path===e.path)){button(`${v.commit} · Заявлено: ${v.artifact_state}`,d,()=>{selection=v.id;render()});el('p',v.declaration_source||'Декларация отсутствует',d)}}}
+function backDetail(){selection=null;render();modal.scrollTop=0;[...modal.querySelectorAll('.books-card')].find(x=>x.dataset.id===detailInvoker)?.querySelector('button:last-child')?.focus()}
+function open(projectId=null){if(opened)return;invoker=document.activeElement;opened=true;healthTimer=setInterval(updateHealth,1000);selection=null;filters.project=(snapshot?.entries.some(e=>e.project===projectId))?projectId:'all';modal.hidden=false;modal.scrollTop=0;menuReturn=!document.getElementById('world-menu').hidden;document.getElementById('world-menu').hidden=true;for(const n of document.body.children)if(n!==modal&&!['SCRIPT'].includes(n.tagName))n.inert=true;render();modal.querySelector('button')?.focus();if(!requested)refresh()}
+function close(){opened=false;clearInterval(healthTimer);healthTimer=null;modal.hidden=true;for(const n of document.body.children)n.inert=false;if(menuReturn)document.getElementById('world-menu').hidden=false;invoker?.isConnected&&invoker.focus()}
+function acceptSnapshot(value){if(value?.kind!=='books')return;try{const next=P.normalizeEnvelope(value);snapshot=next;if(next.final&&next.state==='ready')lastSuccess=next.fetched_at;render()}catch{if(snapshot)snapshot={...snapshot,stale:true,state:'unavailable'};render()}}
+document.addEventListener('keydown',e=>{if(!opened&&e.ctrlKey&&!e.altKey&&!e.metaKey&&!e.shiftKey&&(e.code==='KeyB'||(!e.code&&e.key.toLowerCase()==='b'))){e.preventDefault();open();return}if(!opened)return;if(e.key==='ContextMenu'||(e.shiftKey&&e.key==='F10')){e.preventDefault();e.stopImmediatePropagation();return}if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();selection?backDetail():close()}else if(e.key==='Tab'){const all=[...modal.querySelectorAll('button,select')].filter(n=>!n.disabled);const i=all.indexOf(document.activeElement);if(e.shiftKey&&i<=0){e.preventDefault();all.at(-1)?.focus()}else if(!e.shiftKey&&(i===all.length-1||i<0)){e.preventDefault();all[0]?.focus()}}},true);
+for(const type of ['pointerdown','click','contextmenu'])document.addEventListener(type,e=>{if(!opened)return;if(type==='contextmenu')e.preventDefault();if(!modal.contains(e.target)){e.preventDefault();e.stopImmediatePropagation()}},true);
+document.addEventListener('visibilitychange',updateHealth);
+window.chrome?.webview?.addEventListener('message',e=>acceptSnapshot(e.data));window.BooksView={open,close,acceptSnapshot};
+})();
+
+

@@ -1,5 +1,6 @@
 """Bounded GitHub Issue store. Issue bodies are data, never execution authority."""
 import json
+import base64
 from pathlib import Path
 import re
 import urllib.error
@@ -212,11 +213,45 @@ class GitHubTasks:
         return reconcile_and_repair(issue)
 
     def library(self):
+        self.library_invalid_paths = 0
         repository = self.request('GET', '/')
         branch = repository.get('default_branch')
         if not isinstance(branch, str): raise GitHubSourceError('Default branch unavailable')
         commit = self.request('GET', '/commits/' + quote(branch, safe='')).get('sha')
         if not isinstance(commit, str) or not re.fullmatch(r'[0-9a-f]{40}', commit): raise GitHubSourceError('Invalid library commit')
+        self.library_commit = commit
         tree = self.request('GET', '/git/trees/' + commit + '?recursive=1')
         if tree.get('truncated') is not False or not isinstance(tree.get('tree'), list): raise GitHubSourceError('Library tree incomplete')
-        return [dict(title=item['path'], source='https://github.com/' + self.repository + '/blob/' + commit + '/' + quote(item['path'], safe='/')) for item in tree['tree'] if item.get('type') == 'blob' and isinstance(item.get('path'), str) and item['path'].lower().endswith('.md')]
+        from .book_library import markdown_path
+        self.library_invalid_paths = sum(1 for item in tree['tree'] if item.get('type') == 'blob' and isinstance(item.get('path'),str) and item['path'].lower().endswith('.md') and not markdown_path(item['path']))
+        return [dict(title=item['path'], repository=self.repository, path=item['path'], commit=commit, source='https://github.com/' + self.repository + '/blob/' + commit + '/' + quote(item['path'], safe='/')) for item in tree['tree'] if item.get('type') == 'blob' and markdown_path(item.get('path'))]
+
+    def library_index(self, commit):
+        if not isinstance(commit,str) or not re.fullmatch('[0-9a-f]{40}',commit): raise ValueError('Invalid library commit')
+        try: row=self.request('GET','/contents/docs/task-tower-library.json?ref='+commit)
+        except GitHubRequestError as error:
+            if error.http_status==404: return None
+            raise
+        if not isinstance(row,dict) or row.get('type')!='file' or row.get('encoding')!='base64' or type(row.get('size')) is not int or not 0<=row['size']<=262144 or not isinstance(row.get('content'),str): raise GitHubSourceError('Library index unavailable or invalid')
+        try:
+            raw=base64.b64decode(row['content'].replace('\n',''),validate=True)
+            if len(raw)>262144 or len(raw)!=row['size']: raise ValueError()
+            def unique(pairs):
+                result={}
+                for key,value in pairs:
+                    if key in result: raise ValueError()
+                    result[key]=value
+                return result
+            result=json.loads(raw.decode('utf-8'),object_pairs_hook=unique)
+            if not isinstance(result,dict): raise ValueError()
+            return result
+        except (ValueError,UnicodeError): raise GitHubSourceError('Library index unavailable or invalid') from None
+
+    def markdown_exists(self, commit, path):
+        from .book_library import markdown_path
+        if not isinstance(commit,str) or not re.fullmatch('[0-9a-f]{40}',commit) or not markdown_path(path): raise ValueError('Invalid Markdown version')
+        try: row=self.request('GET','/contents/'+quote(path,safe='/')+'?ref='+commit)
+        except GitHubRequestError as error:
+            if error.http_status==404: return False
+            raise
+        return isinstance(row,dict) and row.get('type')=='file' and row.get('path')==path and isinstance(row.get('sha'),str) and re.fullmatch('[0-9a-f]{40}',row['sha']) is not None

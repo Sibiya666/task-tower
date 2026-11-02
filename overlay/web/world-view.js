@@ -29,9 +29,11 @@ function openMenu(x,y,project=null){
    const row=document.createElement('label'),input=document.createElement('input');input.type='checkbox';input.checked=settings[key];input.dataset.setting=key;input.onchange=()=>{settings[key]=input.checked;save();controller?.refresh()};row.append(input,document.createTextNode(title));menu.append(row);
   }
  }
+ const books=document.createElement('button');books.textContent='Книги проекта';books.onclick=()=>{window.BooksView?.open()};menu.append(books);
  const close=document.createElement('button');close.textContent='Закрыть';close.onclick=()=>{menu.hidden=true};menu.append(close);
  menu.hidden=false;placeMenu();menu.querySelector('select,button,input')?.focus();
 }
+document.addEventListener('keydown',e=>{if(e.key==='ContextMenu'||(e.shiftKey&&e.key==='F10')){e.preventDefault();openMenu(8,40)}});
 document.addEventListener('contextmenu',e=>{if(e.target.closest('#world-menu'))return;e.preventDefault();openMenu(e.clientX,e.clientY)});
 document.addEventListener('pointerdown',e=>{if(!menu.contains(e.target))menu.hidden=true});document.addEventListener('keydown',e=>{if(e.key==='Escape')menu.hidden=true});
 function sheet(ctx,image,t,count,columns,w,h,alpha,sourceHeight=180){if(!image.complete||!image.naturalWidth)return;const n=Math.floor(t*6)%count;ctx.globalAlpha=alpha;ctx.drawImage(image,(n%columns)*320,Math.floor(n/columns)*180,320,sourceHeight,0,0,w,h);ctx.globalAlpha=1}

@@ -38,6 +38,10 @@ class ProjectsTests(unittest.TestCase):
         def transport(method, url, headers, payload, limit):
             if '/comments?' in url:
                 return json.dumps([dict(id=10, body=LIFECYCLE + json.dumps(dict(status='in_progress')) + '\n-->')]).encode()
+            if url.endswith('/parent'):
+                import urllib.error
+                raise urllib.error.HTTPError(url,404,'Not Found',{},None)
+            if '/sub_issues?' in url: return b'[]'
             return json.dumps([dict(number=1, body=body, title='Task')]).encode()
         report = aggregate([self.connection()], lambda c: GitHubTasks(c, transport=transport))
         self.assertEqual(report['entries'][0]['status'], 'in_progress')
