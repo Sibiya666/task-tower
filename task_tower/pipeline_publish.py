@@ -120,7 +120,7 @@ def _commit_object(run,effect,projection):
     changed=set(filter(None,_git(root,'diff','--name-only','-z',intent['parent'],head,'--').decode().split('\0')))
     if changed!=set(projection['files']):raise ValueError('Host checkpoint changes product')
     for name,data in projection['files'].items():
-        if _git(root,'show',head+':'+name)!=data:raise ValueError('Host checkpoint evidence mismatch')
+        if _git(root,'cat-file','blob',head+':'+name)!=data:raise ValueError('Host checkpoint evidence mismatch')
     return dict(status='completed',commit_sha=head,tree_sha=intent['tree'])
 
 

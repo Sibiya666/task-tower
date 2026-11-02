@@ -3,7 +3,9 @@ import hashlib
 import json
 from pathlib import Path
 import subprocess
+import tempfile
 import unittest
+import uuid
 from unittest.mock import patch
 
 from task_tower import pipeline_worker as worker
@@ -328,6 +330,55 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(publish._pr_observation(mixed,dict(intent,repository='sibiya666/task-tower'),effect_id)['url'],'https://github.com/sibiya666/task-tower/pull/7')
         for url in ['https://github.com/Owner/Repo/PULL/7','https://github.com/Owner/Repo/pull/07','https://github.com/Owner/Repo/pull/7?x=1','https://github.com/Owner/Repo/pull/7#x','https://github.com:443/Owner/Repo/pull/7','https://owner@github.com/Owner/Repo/pull/7','https://github.com/Owner%2FRepo/pull/7','https://github.com/other/repo/pull/7']:
             with self.subTest(url=url),self.assertRaises(ValueError):publish._pr_observation(dict(row,html_url=url),intent,effect_id)
+
+
+class HostCommitBlobTests(unittest.TestCase):
+    def checkpoint(self,long_path=False):
+        from task_tower.pipeline_inputs import _git
+        temporary=tempfile.TemporaryDirectory();self.addCleanup(temporary.cleanup)
+        root=Path(temporary.name).resolve();worktree=root/'worktree'
+        if long_path:
+            while len(str(worktree))<180:
+                worktree/='x'*max(1,min(40,180-len(str(worktree))-1))
+        worktree.mkdir(parents=True)
+        hooks=root/'empty-hooks';hooks.mkdir()
+        run_id=str(uuid.uuid4());branch='pipeline/'+run_id
+        _git(root,'init','--separate-git-dir='+str(root/'git'),'--initial-branch='+branch,str(worktree))
+        def commit(message):
+            _git(worktree,'-c','core.hooksPath='+str(hooks),'-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','--no-gpg-sign','-m',message)
+            return _git(worktree,'rev-parse','HEAD').decode().strip()
+        (worktree/'baseline.txt').write_bytes(b'baseline\n');_git(worktree,'add','--','baseline.txt')
+        parent=commit('Baseline')
+        name='docs/evidence/pipeline-'+run_id+'.md';data=b'# Genuine host projection\n\nExact blob bytes.\n'
+        path=worktree/name;path.parent.mkdir(parents=True);path.write_bytes(data)
+        _git(worktree,'add','--',name);message='Task Tower publication '+run_id;head=commit(message)
+        tree=_git(worktree,'rev-parse','HEAD^{tree}').decode().strip()
+        run=dict(run_id=run_id,worktree=str(worktree),branch=branch,manifest=dict(checkpoint_sha=parent),checkpoint_sha=head)
+        effect=dict(intent=dict(kind='commit',parent=parent,branch=branch,message=message,contributing_executor_attempt_id=None,evidence_manifest_sha256='b'*64,tree=tree))
+        return run,effect,dict(files={name:data},manifest_sha256='b'*64)
+
+    def test_exact_blob_on_normal_path(self):
+        from task_tower.pipeline_publish import _commit_object
+        run,effect,projection=self.checkpoint()
+        self.assertEqual(_commit_object(run,effect,projection)['commit_sha'],run['checkpoint_sha'])
+
+    def test_exact_blob_on_long_cwd_with_short_separate_git_dir(self):
+        from task_tower.pipeline_publish import _commit_object
+        run,effect,projection=self.checkpoint(long_path=True)
+        name=next(iter(projection['files']))
+        self.assertGreater(len(run['worktree'])+1+len(run['checkpoint_sha']+':'+name),260)
+        self.assertLess(len(str(Path(run['worktree'])/name)),260)
+        self.assertEqual(_commit_object(run,effect,projection)['commit_sha'],run['checkpoint_sha'])
+
+    def test_parent_tree_message_file_set_and_blob_forgery_stay_rejected(self):
+        from task_tower.pipeline_publish import _commit_object
+        run,effect,projection=self.checkpoint()
+        for field,value in [('parent','a'*40),('tree','a'*40),('message','Other message')]:
+            bad=copy.deepcopy(effect);bad['intent'][field]=value
+            with self.subTest(field=field),self.assertRaises(ValueError):_commit_object(run,bad,projection)
+        name=next(iter(projection['files']))
+        for files in ({name:b'forged\n'},{},dict(projection['files'],extra=b'extra')):
+            with self.subTest(files=list(files)),self.assertRaises(ValueError):_commit_object(run,effect,dict(projection,files=files))
 
 
 class Store:
