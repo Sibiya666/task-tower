@@ -10,7 +10,7 @@ if(-not [TowerDllPath]::SetDllDirectory($loader)){throw 'Cannot configure WebVie
 [void][Reflection.Assembly]::LoadFrom($core)
 [void][Reflection.Assembly]::LoadFrom($wpf)
 $references=@('System.dll','System.Core.dll','System.Drawing.dll','System.Xaml.dll','System.Web.Extensions.dll',([Windows.Window].Assembly.Location),([Windows.Media.Brush].Assembly.Location),([Windows.Threading.Dispatcher].Assembly.Location),$core,$wpf)
-Add-Type -Path (Join-Path $PSScriptRoot 'TowerHost.cs') -ReferencedAssemblies $references
+Add-Type -Path @((Join-Path $PSScriptRoot 'BooksBridge.cs'),(Join-Path $PSScriptRoot 'TowerHost.cs')) -ReferencedAssemblies $references
 $python=Join-Path $env:USERPROFILE '.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe'
 $result=[TowerHost]::Run($PSScriptRoot,$python,$SmokeTest.IsPresent)
 if($result -ne 0){throw ('HTML overlay failed; see runtime/html-host-error.log (code '+$result+')')}
