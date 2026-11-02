@@ -7,6 +7,7 @@ using System.Web.Script.Serialization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -97,6 +98,7 @@ public sealed class TowerHost : Window
         Top=Math.Max(0,SystemParameters.WorkArea.Bottom-590);
         Icon=BitmapFrame.Create(new Uri(Path.Combine(folder,"assets/tower-icon.ico")));
         Content=web;
+        PreviewKeyDown+=(s,e)=>HandleBooksKeyDown(e,Keyboard.Modifiers);
         Directory.CreateDirectory(Path.Combine(folder,"runtime"));
         collector=Process.Start(new ProcessStartInfo(python,"\""+Path.Combine(folder,"collector.py")+"\" --watch --output \""+snapshotPath+"\""){
             UseShellExecute=false,CreateNoWindow=true,WorkingDirectory=folder});
@@ -180,6 +182,21 @@ public sealed class TowerHost : Window
     }
 
     void SetHeight(double height){MinHeight=0;MaxHeight=double.PositiveInfinity;Height=height;MinHeight=height;MaxHeight=height;}
+    static bool IsBooksDocument(string source){return source=="https://tower.local/index.html";}
+    void HandleBooksKeyDown(KeyEventArgs e,ModifierKeys modifiers)
+    {
+        // A focused native window need not have controller/DOM keyboard focus.
+        if(e.Handled || e.Key!=Key.B || modifiers!=ModifierKeys.Control || !ready ||
+           web.CoreWebView2==null)return;
+        e.Handled=true;
+        // WebView APIs must run after the native accelerator callback returns.
+        Dispatcher.BeginInvoke(new Action(async ()=>{
+            try{
+                if(ready && web.CoreWebView2!=null && IsBooksDocument(web.CoreWebView2.Source))
+                    await web.CoreWebView2.ExecuteScriptAsync("window.BooksView && window.BooksView.open()");
+            }catch(Exception ex){Log(ex);}
+        }));
+    }
     public Task RefreshBooksAsync()
     {
         return books.RefreshAsync(BooksBridge.HelperStartInfo(booksPython,Path.GetDirectoryName(folder)),raw=>{
@@ -211,6 +228,32 @@ public sealed class TowerHost : Window
 
     async Task SmokeBooks()
     {
+        // Real WPF event arguments, explicit synthetic modifiers; not OS keyboard input.
+        var shortcut=typeof(TowerHost).GetMethod("HandleBooksKeyDown",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic);
+        if(shortcut==null)throw new Exception("Books smoke: native shortcut handler missing");
+        foreach(var source in new[]{"https://tower.local/other.html","https://tower.local/index.html?x","https://tower.local/index.html#x","https://tower.local.evil/index.html",null})
+            if(IsBooksDocument(source))throw new Exception("Books smoke: native shortcut source guard");
+        if(!IsBooksDocument("https://tower.local/index.html"))throw new Exception("Books smoke: native shortcut trusted source");
+        var handledArgs=new KeyEventArgs(Keyboard.PrimaryDevice,PresentationSource.FromVisual(this),0,Key.B);
+        handledArgs.RoutedEvent=Keyboard.PreviewKeyDownEvent;handledArgs.Handled=true;
+        shortcut.Invoke(this,new object[]{handledArgs,ModifierKeys.Control});
+        await Task.Delay(100);
+        await SmokeBooksAssert("document.getElementById('books-dialog').hidden","already-handled native shortcut excluded");
+        Action<System.Windows.Input.Key,System.Windows.Input.ModifierKeys,bool> checkShortcut=(key,modifiers,expected)=>{
+            var args=new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,PresentationSource.FromVisual(this),0,key);
+            args.RoutedEvent=System.Windows.Input.Keyboard.PreviewKeyDownEvent;
+            shortcut.Invoke(this,new object[]{args,modifiers});
+            if(args.Handled!=expected)throw new Exception("Books smoke: native shortcut admission mismatch");
+        };
+        checkShortcut(System.Windows.Input.Key.B,System.Windows.Input.ModifierKeys.None,false);
+        foreach(var extra in new[]{System.Windows.Input.ModifierKeys.Shift,System.Windows.Input.ModifierKeys.Alt,System.Windows.Input.ModifierKeys.Windows})
+            checkShortcut(System.Windows.Input.Key.B,System.Windows.Input.ModifierKeys.Control|extra,false);
+        checkShortcut(System.Windows.Input.Key.C,System.Windows.Input.ModifierKeys.Control,false);
+        ready=false;checkShortcut(System.Windows.Input.Key.B,System.Windows.Input.ModifierKeys.Control,false);ready=true;
+        checkShortcut(System.Windows.Input.Key.B,System.Windows.Input.ModifierKeys.Control,true);
+        await Task.Delay(150);
+        await SmokeBooksAssert("!document.getElementById('books-dialog').hidden","native WPF shortcut opens without DOM key event");
+        await web.CoreWebView2.ExecuteScriptAsync("BooksView.close()");
         // Deterministic public fixtures are confined to -SmokeTest, never source evidence.
         await web.CoreWebView2.ExecuteScriptAsync("document.getElementById('pin').focus();document.dispatchEvent(new KeyboardEvent('keydown',{key:'b',code:'KeyB',ctrlKey:true,bubbles:true,cancelable:true}))");
         var helperWait=Stopwatch.StartNew();
@@ -224,6 +267,8 @@ public sealed class TowerHost : Window
         await SmokeBooksAssert("document.querySelectorAll('.books-card').length===1 && document.getElementById('books-records').textContent.includes('pending')","progressive pending fixture rendered via native message");
         await web.CoreWebView2.ExecuteScriptAsync("document.querySelector('.books-card button:last-child').click()");
         await SmokeBooksAssert("document.getElementById('books-detail').textContent.includes('<img src=x') && !document.querySelector('#books-detail img')","plain text detail");
+        checkShortcut(Key.B,ModifierKeys.Control,true);await Task.Delay(100);
+        await SmokeBooksAssert("Boolean(document.getElementById('books-detail'))","native shortcut preserves open detail selection");
         using(var stream=File.Create(Path.Combine(folder,"runtime/books-native-overview.png")))
             await web.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png,stream);
         await web.CoreWebView2.ExecuteScriptAsync("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}))");

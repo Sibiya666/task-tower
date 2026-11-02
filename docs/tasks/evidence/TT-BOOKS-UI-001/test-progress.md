@@ -11,3 +11,9 @@ On the final test-file bytes, the implementer ran the complete documented Node l
 The coordinator's actual native Windows PowerShell 5.1 smoke with the corrected BooksBridge exited 0. Independent R1 native smoke also exited 0 and regenerated matching fixture screenshots; its product source remained unchanged by the cwd correction. These are actual composition tests with deterministic data and synthetic DOM keyboard events, not physical input or genuine GitHub UI observations.
 
 The authorized test window remains available for the user's manual Ctrl+B check. Automated Shift+F10 opened its actual world menu, but automated Ctrl+B did not open Books and Windows Graphics Capture timed out. The user's manual keyboard observation and actual configured Books refresh are still required. Issue #23 and its own GitHub Project are marked needs_input while this external gate is pending. The Issue is open; no PR merge or automatic completion is claimed.
+
+## Manual keyboard gate failed
+
+2026-11-02. The user explicitly confirmed in three replies that the visible test window did not open Books after clicking inside and pressing physical Ctrl+B. This supersedes the pending manual observation above: native keyboard acceptance FAILED. The failure is not attributed solely to automation. Root cause is under investigation across native composition focus/key routing, loaded assets and the test executable version; no cause or fix is yet established. Historical synthetic DOM passes remain limited to handler behavior. No test acceptance, merge or task completion is granted. Further confirmation of app access is unnecessary; access was already granted.
+
+2026-11-02 follow-up: the user physically closed and reopened Books with Ctrl+B in the final corrected native window and confirmed success. The manual shortcut gate is now passed for the final native-keyboard-fix.md binding. Prior failure history is retained; broader test and integration gates remain separate.
