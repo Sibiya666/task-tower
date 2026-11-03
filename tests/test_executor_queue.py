@@ -85,6 +85,37 @@ with q.owner(owner):
             for child in children:
                 if child.poll() is None: child.kill(); child.wait()
 
+    def test_sqlite_sidecar_disappearing_after_exists_does_not_block_claim(self):
+        from unittest.mock import patch
+        self.q.submit(self.request(),'a'*64)
+        sidecar=Path(str(self.q.path)+'-journal')
+        sidecar.write_bytes(b'transient SQLite rollback journal')
+        original=Path.exists; removed=False; calls=0
+        def exists(path):
+            nonlocal removed,calls
+            result=original(path)
+            if path==sidecar:calls+=1
+            if path==sidecar and result and calls==2:
+                # The safety check must allow a genuinely absent transient
+                # file after another writer removes it following exists().
+                sidecar.unlink(); removed=True
+            return result
+        with patch.object(Path,'exists',exists):
+            claimed=self.q.claim(str(uuid.uuid4()))
+        self.assertTrue(removed)
+        self.assertEqual(claimed['state'],'claimed')
+
+    def test_hardlinked_sqlite_sidecars_remain_rejected(self):
+        import os
+        self.q.submit(self.request(),'a'*64)
+        for suffix in ('-journal','-wal','-shm'):
+            sidecar=Path(str(self.q.path)+suffix)
+            with self.subTest(suffix=suffix):
+                os.link(self.q.path,sidecar)
+                try:
+                    with self.assertRaises(ValueError):ExecutionQueue(self.q.path)
+                finally:sidecar.unlink()
+
     def test_wal_lookup_is_fail_closed_without_sidecar_changes(self):
         import sqlite3
         r=self.request(); self.q.submit(r,'a'*64)

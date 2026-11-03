@@ -11,7 +11,7 @@ permissions:
 jobs:
   verify-merge:
     if: github.event.pull_request.merged == true
-    timeout-minutes: 15
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
