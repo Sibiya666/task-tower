@@ -1,0 +1,41 @@
+{
+  "host_only_capture_limit_bytes": 1048576,
+  "qualified_current_review": true,
+  "source_unchanged": true,
+  "binary_unchanged": true,
+  "result": {
+    "status": "passed",
+    "exit_code": 0,
+    "started": true,
+    "cleanup_confirmed": true,
+    "pid": 197016,
+    "stdout_sha256": "12308ca87b53a2a3d9934fef00b0947fb7130bc47319f2ea12d47813f0758f51",
+    "stdout_bytes": 237154,
+    "stdout_captured_bytes": 237154,
+    "stdout_tail_unknown": false,
+    "stdout_truncated": false,
+    "stderr_sha256": "5a05a0066d84309a1e1b57b1c666d364ff57c3a3c98fb0f78c6b8407e3f91ce8",
+    "stderr_bytes": 7613,
+    "stderr_captured_bytes": 7613,
+    "stderr_tail_unknown": false,
+    "stderr_truncated": false,
+    "duration_seconds": 53.875
+  },
+  "verdict": {
+    "run_id": "e38068fc-e34c-4301-ac3f-a00f44ca7f79",
+    "attempt_id": "c94f992d-b487-4ba6-a5b8-ca20118e38b6",
+    "instance_id": "68ac1026-dad2-4092-9866-9df22e423f5b",
+    "stage": "development",
+    "generation": 1,
+    "source_sha": "8531ecb35f1be84134b3a56cdcf2254c0365cbb9",
+    "checkpoint_sha": "8531ecb35f1be84134b3a56cdcf2254c0365cbb9",
+    "input_sha256": "dcaf1ae3872d6ba0e5e8175bdcea09a8edd5f1d916adc41260b9eb2bd9df8bc5",
+    "version": 2,
+    "summary": "Approve the bounded unpublished semantic-proof slice. Candidate and pinned instruction hashes match. Typed current/retained validation preserves canonical receipt, authority, private provenance and immutable source/CI equality. Added transport fixtures cover changed reviews, own statuses and still-green CI drift with ready snapshots and unchanged journal bytes. Inspected coordinator evidence records 12 passing tests, complete output and confirmed cleanup; tests were not rerun. Deferred effect execution, own-publication exceptions, Task5 lifecycle and readiness gates remain outside this approval.",
+    "verdict": "approve",
+    "return_stage": null,
+    "findings": []
+  },
+  "validation_error": null,
+  "runner_sha256": "3b5fcf421295e98ff25baaf3633f24b438172703dc03cb1eae8e5103160d0c9a"
+}

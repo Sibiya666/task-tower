@@ -1,0 +1,47 @@
+{
+  "host_only_capture_limit_bytes": 1048576,
+  "qualified_current_review": true,
+  "source_unchanged": true,
+  "binary_unchanged": true,
+  "result": {
+    "status": "passed",
+    "exit_code": 0,
+    "started": true,
+    "cleanup_confirmed": true,
+    "pid": 207540,
+    "stdout_sha256": "1bf2283825f98648822e99478fd5ebb30c1a8dca844f9566a633a9d2066230fd",
+    "stdout_bytes": 203776,
+    "stdout_captured_bytes": 203776,
+    "stdout_tail_unknown": false,
+    "stdout_truncated": false,
+    "stderr_sha256": "6ba8dc02b77436ea209f525c00d00a5ba0efd8131f4d7a6198960ea4d94b3a48",
+    "stderr_bytes": 13696,
+    "stderr_captured_bytes": 13696,
+    "stderr_tail_unknown": false,
+    "stderr_truncated": false,
+    "duration_seconds": 51.093
+  },
+  "verdict": {
+    "run_id": "66deb114-cae6-48f2-a1ec-d5d4a38351d8",
+    "attempt_id": "9655dcd5-b646-43f1-ab68-73cefbfe49f6",
+    "instance_id": "9573cd12-4d0a-4560-bb97-6b62bc3313a9",
+    "stage": "development",
+    "generation": 1,
+    "source_sha": "8531ecb35f1be84134b3a56cdcf2254c0365cbb9",
+    "checkpoint_sha": "8531ecb35f1be84134b3a56cdcf2254c0365cbb9",
+    "input_sha256": "9604ddd8c5b46263a0063bf216591041d797e261a014208de9edd402032a1814",
+    "version": 2,
+    "summary": "Typed retained/current proof and canonical receipt checks are consistent with the bounded scope; pinned files match and preserved evidence records 11 passing tests. Essential adversarial coverage is missing: exercise _unpublished_proof with changed reviews, any acceptance status, and changed CI observations that remain ready. Existing title-drift and pure-gate tests do not verify these semantic refusal boundaries. Add actual transport-fixture cases asserting refusal and unchanged journal. Deferred effects, own-publication exceptions, controller and pilot functionality were excluded as requested. No tests were rerun or files changed.",
+    "verdict": "reject",
+    "return_stage": "development",
+    "findings": [
+      {
+        "code": "criteria_unmet",
+        "path": "tests/test_pr_effects.py",
+        "line": 125
+      }
+    ]
+  },
+  "validation_error": null,
+  "runner_sha256": "adbd416d870593e7feec740319b43da5e6b281d7ce8d8593889901cf4644d34a"
+}

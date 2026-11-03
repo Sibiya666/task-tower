@@ -144,3 +144,5 @@ Active-chat authorization continues to the next eligible backlog task after ever
 ## Explicit session capture
 
 [Capture, idea promotion and legacy migration](docs/session-capture.md) use explicit input and the selected project. Original text/session provenance and native parent/milestone links are retained. Ideas do not execute implicitly; migration keeps the original card/evidence bytes and exposes drift while GitHub remains canonical. No all-chat scraping or Codex database writes are involved.
+
+Task4c has bounded read-only unpublished semantic-proof acceptance; see docs/tasks/evidence/TT-PR-WORKER-001/task4c-unpublished-acceptance.md. It authenticates genuine retained/current evidence before any own publication; own statuses/changed reviews refuse. No HTTP effects, controller, merge or setup attestation follows from this helper.
