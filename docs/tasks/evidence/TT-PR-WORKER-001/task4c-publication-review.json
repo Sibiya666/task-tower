@@ -1,0 +1,41 @@
+{
+  "host_only_capture_limit_bytes": 1048576,
+  "qualified_current_review": true,
+  "source_unchanged": true,
+  "binary_unchanged": true,
+  "result": {
+    "status": "passed",
+    "exit_code": 0,
+    "started": true,
+    "cleanup_confirmed": true,
+    "pid": 183324,
+    "stdout_sha256": "933dd96719405165ec5fe4b5f91e6f78216f75fd26d6f8176771c262c11d3501",
+    "stdout_bytes": 255542,
+    "stdout_captured_bytes": 255542,
+    "stdout_tail_unknown": false,
+    "stdout_truncated": false,
+    "stderr_sha256": "0d69c4e13c24ede1e8c08d8b0550c9c03a8cafa1d2f4c386e7f1092b6e6aa0fb",
+    "stderr_bytes": 9532,
+    "stderr_captured_bytes": 9532,
+    "stderr_tail_unknown": false,
+    "stderr_truncated": false,
+    "duration_seconds": 67.0
+  },
+  "verdict": {
+    "run_id": "f17ec2e4-267e-4627-9e75-44289fa8162e",
+    "attempt_id": "4e2c321b-3223-4ab2-aa7c-d099c9b3587a",
+    "instance_id": "8bd00ba0-3bc0-4c83-8db9-72d520e2ee1a",
+    "stage": "development",
+    "generation": 1,
+    "source_sha": "76c186a52d970acf6f79b141942721669010ce18",
+    "checkpoint_sha": "76c186a52d970acf6f79b141942721669010ce18",
+    "input_sha256": "83e3a836886638a58cbb75bbf2153fa38004003da86c90faabfda74dd08faa4f",
+    "version": 2,
+    "summary": "Approve bounded positive publication only. Verified pinned instructions and candidate hashes, reviewed typed authority, durable intents, own-publication matching, fresh private-byte/owner/deadline gates and no-replay handling. Three response tests passed independently; inspected Root's 21-test regression and subsequent 6- and 4-test fix evidence with matching log hashes and unchanged inputs. Excluded pending/failure publication, merge, controller/CLI, pilot and whole-suite readiness per explicit scope.",
+    "verdict": "approve",
+    "return_stage": null,
+    "findings": []
+  },
+  "validation_error": null,
+  "runner_sha256": "60bfc815b0cf072f630c85077dd7909d5b7309d1f2598fa95284f42c4c10a9d4"
+}

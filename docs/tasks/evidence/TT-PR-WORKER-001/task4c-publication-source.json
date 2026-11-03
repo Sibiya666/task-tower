@@ -1,0 +1,8 @@
+{
+  "base": "76c186a52d970acf6f79b141942721669010ce18",
+  "files": {
+    "task_tower/pr_effects.py": "4f1eee08da79931354fde0b772343f351e63627931b759fe3a3eba716b47c75c",
+    "tests/test_pr_publication_effects.py": "fff471bdd24860f110a70168f24c8e95d7ffff8b733bfecd76ac77eda11a94ea",
+    "tests/test_pr_publication_response.py": "4fab15819d6b61915a46fc6218dbd7a0d5ae3145e57a75c7a8daf20a6fb1dbe6"
+  }
+}
