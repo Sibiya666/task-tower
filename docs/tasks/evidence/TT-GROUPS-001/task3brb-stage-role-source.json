@@ -1,0 +1,8 @@
+{
+  "base": "9752becb0845988f5aa50f468f1dde4f1732abc7",
+  "files": {
+    "task_tower/executor_harness.py": "6646b1de45f3bd8502412f49f1682ab8d5a986dc3e61ccec9b98a7049b62b9ea",
+    "task_tower/group_wire.py": "b7855a9b1fd126653eb370152c47878e472d89354493d9fb2e76e9c006ecfdf8",
+    "tests/test_group_wire.py": "dcc92c6beb586268537d7fdb79c3b0b50e22a6366d6390535659fd326962014f"
+  }
+}

@@ -271,3 +271,7 @@ Task3A uses the exact typed group_actions.origin CHECK/FK branches and atomic ad
 - [ ] Verify migration+journal/legacy protocol tests and full suite; fresh independent exact-diff migration review before commit. Task3B consumes only independently accepted representation and actual accepted #16 main.
 
 P2 capacity evidence clarification: already-held live actions finish within original authority/budgets during debt; that is neither an additional action nor reacquisition. A cleaned-up product owner must obtain fresh feasible CPU/memory/pool resources before every next action. Competing-process tests separately prove historical v1 caps and R2 >=3 when approved budget/current observations permit, optional operator caps and unknown fences. No global fixed-two acceptance obligation remains.
+
+## Task3BRb bounded implementation checkpoint — 2026-11-03
+
+Pure group_wire epoch/stage2/role3 helpers and shared legacy role-value refactor passed independent acceptance and70 affected tests; see ../../tasks/evidence/TT-GROUPS-001/task3brb-stage-role-acceptance.md. This completes only the named shape subset of the approved wire map. Invocation/aggregate/verdict/checkpoint/evidence bodies and real resource/workspace/epoch consumers remain pending; actual registered execution and group effect writes stay closed.

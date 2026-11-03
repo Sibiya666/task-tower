@@ -67,22 +67,28 @@ def validate_role_result(path:Path, binding:dict, max_bytes:int=65536, *, review
         path=safe_config_path(path)
         if type(max_bytes) is not int or max_bytes<1 or not path.is_file() or path.stat().st_nlink!=1 or path.stat().st_size>max_bytes: raise ValueError('Unsafe role result')
         value=json.loads(path.read_bytes().decode('utf-8'),object_pairs_hook=_unique)
-        schema=role_result_schema(binding,reviewer=reviewer)
-        if not isinstance(value,dict) or set(value)!=set(schema['required']) or type(value['version']) is not int or value['version']!=2: raise ValueError('Invalid role result schema')
-        if type(value['generation']) is not int or any(type(value[k]) is not type(binding[k]) or value[k]!=binding[k] for k in ROLE_BINDING): raise ValueError('Invalid role result binding')
-        if not isinstance(value['summary'],str) or len(value['summary'].encode('utf-8'))>4096: raise ValueError('Invalid role summary')
-        if not reviewer:
-            if value['status'] not in ('completed','failed','needs_input'): raise ValueError('Invalid role status')
-        else:
-            if value['verdict'] not in ('approve','reject','needs_input'): raise ValueError('Invalid verdict')
-            if value['verdict']=='reject':
-                if value['return_stage'] not in schema['properties']['return_stage']['enum'][1:]: raise ValueError('Invalid return route')
-            elif value['return_stage'] is not None: raise ValueError('Unexpected return route')
-            if not isinstance(value['findings'],list) or len(value['findings'])>32: raise ValueError('Invalid findings')
-            for finding in value['findings']:
-                if not isinstance(finding,dict) or set(finding)!={'code','path','line'} or finding['code'] not in FINDING_CODES: raise ValueError('Invalid finding')
-                if finding['path'] is not None: _relative(finding['path'])
-                if finding['line'] is not None and (type(finding['line']) is not int or finding['line']<1): raise ValueError('Invalid finding line')
-        return value
+        return _validate_role_result_value(value,binding,reviewer=reviewer)
     except (OSError,UnicodeError,TypeError,KeyError,AttributeError) as error:
         raise ValueError('Invalid role result') from error
+
+
+def _validate_role_result_value(value,binding,*,reviewer):
+    """Shared legacy shape rules only; callers retain separate version gates."""
+    from .pipeline_inputs import _relative
+    schema=role_result_schema(binding,reviewer=reviewer)
+    if not isinstance(value,dict) or set(value)!=set(schema['required']) or type(value['version']) is not int or value['version']!=2: raise ValueError('Invalid role result schema')
+    if type(value['generation']) is not int or any(type(value[k]) is not type(binding[k]) or value[k]!=binding[k] for k in ROLE_BINDING): raise ValueError('Invalid role result binding')
+    if not isinstance(value['summary'],str) or len(value['summary'].encode('utf-8'))>4096: raise ValueError('Invalid role summary')
+    if not reviewer:
+        if value['status'] not in ('completed','failed','needs_input'): raise ValueError('Invalid role status')
+    else:
+        if value['verdict'] not in ('approve','reject','needs_input'): raise ValueError('Invalid verdict')
+        if value['verdict']=='reject':
+            if value['return_stage'] not in schema['properties']['return_stage']['enum'][1:]: raise ValueError('Invalid return route')
+        elif value['return_stage'] is not None: raise ValueError('Unexpected return route')
+        if not isinstance(value['findings'],list) or len(value['findings'])>32: raise ValueError('Invalid findings')
+        for finding in value['findings']:
+            if not isinstance(finding,dict) or set(finding)!={'code','path','line'} or finding['code'] not in FINDING_CODES: raise ValueError('Invalid finding')
+            if finding['path'] is not None: _relative(finding['path'])
+            if finding['line'] is not None and (type(finding['line']) is not int or finding['line']<1): raise ValueError('Invalid finding line')
+    return value
