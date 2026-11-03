@@ -732,10 +732,8 @@ PipelineJournal(Path(sys.argv[1])).migrate_groups()
         # SQLite counts requested sleep, not a strict elapsed-time upper bound.
         # Preserve genuine contention and the single shared operation deadline.
         self.assertEqual(wait['deadline'],preflight['deadline'],timing)
-        self.assertGreater(operation['deadline']-operation['started'],0,timing)
-        self.assertLessEqual(operation['deadline']-operation['started'],60,timing)
-        self.assertGreater(preflight['deadline']-preflight['finished'],0,timing)
-        self.assertLessEqual(preflight['deadline']-preflight['finished'],60,timing)
+        self.assert_operation_window(operation['deadline'],operation['started'],timing)
+        self.assert_operation_window(preflight['deadline'],preflight['finished'],timing)
         self.assertLess(total,60,timing)
         self.assertEqual(getattr(self.journal,'_operation_deadline',None),operation.get('outer_deadline'))
         self.assertEqual(self.path.read_bytes(),before)
@@ -757,6 +755,20 @@ PipelineJournal(Path(sys.argv[1])).migrate_groups()
         self.assertEqual(budget['deadline'],original_deadline)
         self.assertLessEqual(budget['budget_seconds'],min(5,original_deadline-budget['started']))
         self.assertEqual(wait['timeout_ms'],max(0,int(budget['budget_seconds']*1000)))
+
+    def assert_operation_window(self,deadline,observed_at,timing=None):
+        self.assertGreater(deadline,observed_at,timing)
+        self.assertLessEqual(deadline,observed_at+60,timing)
+
+    def test_operation_window_preserves_cap_at_binary_rounding_boundary(self):
+        # Exact values from the Windows CI failure. The source adds60 once;
+        # subtracting its observed start introduces cancellation rounding.
+        started=227.109
+        deadline=started+60
+        self.assert_operation_window(deadline,started)
+        for invalid in (started,started+61):
+            with self.subTest(deadline=invalid),self.assertRaises(AssertionError):
+                self.assert_operation_window(invalid,started)
 
     def test_busy_budget_observation_rejects_excess_and_renewal(self):
         sample=dict(timeout_ms=5000,deadline=60.,budget=dict(started=1.,deadline=60.,budget_seconds=5.))
