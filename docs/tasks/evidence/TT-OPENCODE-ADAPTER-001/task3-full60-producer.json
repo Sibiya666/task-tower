@@ -1,0 +1,34 @@
+{
+  "scope": "actual prepare_attempt plus frozen producer and controlled Python transport; no native OpenCode or local result manufactured",
+  "producer_source_freeze_sha256": "35c553056937faf1c1751522b87fcd8f899814dcd17c7c831741b5c1bf7f59a0",
+  "producer_source_sha256": "042f148c5c88449634fa645eb320fd916416dda9e76fc6a122cff6e178e02e1d",
+  "producer_unchanged_in_fix1": true,
+  "fixture_script_sha256": "50b7e25be9e6d1bad6038786c3dece2e5c4809edc8e6287105139472c3546d23",
+  "python_exit_code": 0,
+  "observation": {
+    "claim": "actual prepare_attempt+producer+Python transport only; no native OpenCode or completed local result",
+    "file_count": 60,
+    "framed_input_bytes": 377412,
+    "manifest_sha256": "1db765e99a5f991df69b15799e79862ef991001f136ab70f644f0187df940098",
+    "raw_instruction_bytes": 357576,
+    "result": {
+      "cleanup_confirmed": true,
+      "duration_seconds": 0.062,
+      "exit_code": 0,
+      "pid": 33520,
+      "started": true,
+      "status": "passed",
+      "stderr_bytes": 0,
+      "stderr_captured_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_tail_unknown": false,
+      "stderr_truncated": false,
+      "stdout_bytes": 74,
+      "stdout_captured_bytes": 74,
+      "stdout_sha256": "458d43a6f459a3b0823fa4fa907b414ce719e3131ccce065a883c8b24edca0d9",
+      "stdout_tail_unknown": false,
+      "stdout_truncated": false
+    },
+    "stdin_sha256": "7a6a49bd3a7fc9c61b9549cf4a560aed34b4512bca031451e88a8e0070acd9e8"
+  }
+}

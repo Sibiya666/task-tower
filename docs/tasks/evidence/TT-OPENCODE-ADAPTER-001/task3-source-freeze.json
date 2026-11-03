@@ -1,0 +1,23 @@
+{
+  "head": "f2d22199e581a4a1e61cfe39b67e17e1292a5012",
+  "previous_freeze_sha256": "35c553056937faf1c1751522b87fcd8f899814dcd17c7c831741b5c1bf7f59a0",
+  "fix_round": 1,
+  "files": [
+    {
+      "path": "task_tower/opencode_adapter.py",
+      "sha256": "3d8f5746c8122a8494e27222ed0527c3d72ca1cf909a53364af30398baad833b"
+    },
+    {
+      "path": "tests/test_opencode_events.py",
+      "sha256": "2e22ed0fb3d623ecfee6911dbaad5870c72112b64a8d8964429d9e9b5e40f716"
+    },
+    {
+      "path": "tests/fixtures/opencode-v2/live-reconciled-stop.synthetic.jsonl",
+      "sha256": "761b5f7e8fe4b97e6fbf32d7fcbb3f00b2a02ec5f7b26b526a1f1a76d8786d91"
+    },
+    {
+      "path": "tests/fixtures/opencode-v2/SOURCE.md",
+      "sha256": "5bb0120ddcfde04be9f59fcebf3c0ac9ffd6de8878a43d56714cc8a3f2f0d06c"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "scope": "focused regression, not full project suite or native qualification",
+  "base_sha": "f2d22199e581a4a1e61cfe39b67e17e1292a5012",
+  "source_freeze_sha256": "f11ba86c214d80668dede504afe5eb1be61316ac1c40992c0af2110d868f92b6",
+  "command": "python -m unittest tests.test_opencode_events tests.test_opencode_policy tests.test_opencode_discovery tests.test_opencode_templates tests.test_opencode_registration tests.test_opencode_preflight tests.test_opencode_transport tests.test_executor_closed_dispatch tests.test_executor_harness -v",
+  "tests": 116,
+  "seconds": 17.156,
+  "skips": 0,
+  "python_exit_code": 0,
+  "tool_exit_code": 0,
+  "log_sha256": "630b538edb52873b5c5244b6220f134936d6e71f58ca0c35efef81876e6a95e1",
+  "exit_propagation": "original LASTEXITCODE captured, appended as PYTHON_EXIT=0 and propagated"
+}
