@@ -1,5 +1,13 @@
 # Agent Groups Implementation Plan
 
+## Accepted-main binding — 2026-11-03
+
+Issue16's integration gate is now satisfied for exact main `4875381be68282a7ad77ab7b1c5a3898cbc09304`: current same-attempt three-platform CI41503463955, independent approve, automatic [Issue16 publication](https://github.com/Sibiya666/task-tower/issues/16#issuecomment-6595253516) and native Project Done. The dated pre-acceptance restrictions below remain historical; they do not describe a still-open Issue16. A later main change requires affected-interface re-audit.
+
+Task3A must consume the frozen six-table SCHEMAS digest `5b37731384a2d5a8aa87f38f589bcced2b78db2205861e6aa5290d4b4ccdc9b6`, application_id1414808656/user_version1. Actual signatures are `PipelineJournal(path, *, checkouts=(), forbidden_paths=())`, `operation_deadline(deadline)`, private `_pinned_database()`, `_existing_database(identity)`, `_assert_existing()`, `_recover_existing()` and `_db(write=False, *, initialize=True)`; `_shutdown(config,journal,state,*,cancel_runs=True)` preserves its4.8s deadline. There is no public PinnedDatabase class or existing group migration API.
+
+Concrete regression modules: test_pipeline_journal, test_pipeline_shutdown_recovery, test_pipeline_cli, test_pipeline_platform, test_pipeline_scheduling, test_pipeline_watch, test_pipeline_worker, test_pipeline_inputs, test_pipeline_roles, test_pipeline_publish, test_pipeline_policy, test_dispatcher, test_dispatch_delivery and test_dispatch_selection under tests/. New test_group_migration remains TDD work. Freeze committed source hashes and exact SQL from [accepted-main audit](../../tasks/evidence/TT-GROUPS-001/accepted-main-487-contract-audit.md). This binding changes no R3/R4 schema, legacy-fence/resource/unknown, Windows scope or authority requirements. Obtain fresh independent affected-document acceptance before Task3A code. The separate fetch fix #63/PR64 is not part of accepted main at this binding.
+
 ## Release scope amendment — user decision 2026-11-02
 
 The user explicitly deferred work not covered by Windows to the next project version. This dated amendment supersedes earlier native three-platform promises in this document; it does not change unrelated established portable interfaces or turn failed historical evidence into success.

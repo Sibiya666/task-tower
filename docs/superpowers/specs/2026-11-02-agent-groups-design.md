@@ -1,5 +1,9 @@
 # Agent groups, dependency scheduling and local capacity — TT-GROUPS-001 / #18
 
+## Accepted foundation binding — 2026-11-03
+
+Issue16 completed actual main `4875381be68282a7ad77ab7b1c5a3898cbc09304`, same-attempt three-platform CI41503463955, independent exact-main approve and automatic [publication/closure](https://github.com/Sibiya666/task-tower/issues/16#issuecomment-6595253516), with native Project Done. The original six-table SCHEMAS digest is `5b37731384a2d5a8aa87f38f589bcced2b78db2205861e6aa5290d4b4ccdc9b6`, application_id1414808656/user_version1, unchanged from the proposal's accepted foundation. Source hashes, exact SQL and actual private pin/noncreating/recovery signatures are frozen in [the accepted-main audit](../../tasks/evidence/TT-GROUPS-001/accepted-main-487-contract-audit.md) and the plan's dated binding. No semantic amendment to the R3 typed legacy-fence and R4 Windows scope contract is introduced. Earlier pending-gate text is historical; later main changes require re-audit. Migration does not create G/epoch, redirect legacy deliveries or grant runtime execution. Fresh independent review binds these changed document bytes before implementation.
+
 ## Release scope amendment — user decision 2026-11-02
 
 The user explicitly deferred work not covered by Windows to the next project version. This dated amendment supersedes earlier native three-platform promises in this document; it does not change unrelated established portable interfaces or turn failed historical evidence into success.
