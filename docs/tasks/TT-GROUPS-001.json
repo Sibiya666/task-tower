@@ -22,9 +22,9 @@
   "stages": {
     "spec": {
       "status": "accepted",
-      "reviewer": "accepted-main-binding-reviewer",
-      "evidence": "evidence/TT-GROUPS-001/accepted-main-binding-review.md",
-      "sha256": "3b2026a575c8b52a01a3207efa16a8ff9ee48fbe0fc6ed854af1400f572a9db6",
+      "reviewer": "independent-boundary-spec-reviewer",
+      "evidence": "evidence/TT-GROUPS-001/hot-boundary-spec-review.md",
+      "sha256": "f361b60786c69be334e49a82994b26e1d2b6652d61e136bcde1d9db066c92fbf",
       "hash_scheme": "sha256-utf8-lf-v1"
     },
     "development": {

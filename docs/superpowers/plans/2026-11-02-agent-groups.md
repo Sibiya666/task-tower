@@ -1,5 +1,9 @@
 # Agent Groups Implementation Plan
 
+## Task3A hot boundary and child65 — 2026-11-03, pending fresh review
+
+Apply the design's dated Hot-journal availability boundary only after fresh independent acceptance. Preserve originalhot RED evidence; do not restore a cache-only fixture or perform preparatory RW reads to make it green. Add real-spill own/foreign hot cases asserting exact recovery_required/version:null, unchanged source/sidecar hashes, no writer/backup/DDL/owner or version approval, and no branch on generic/non776 errors. Keep cold migration/metadata/provenance/sequence/crash-postcommit controls and the exact17-table/3-index contract unchanged. Independent Task3A review must explicitly qualify its cold-storage/hot-refusal scope. Original automatic hot recovery is tracked by current-version sub-Issue65 and remains required before full Issue18 completion; it is not deferred to Linux/macOS work or counted as accepted by these refusal tests. No source reset or unreviewed native/VFS helper is authorized.
+
 ## Accepted-main binding — 2026-11-03
 
 Issue16's integration gate is now satisfied for exact main `4875381be68282a7ad77ab7b1c5a3898cbc09304`: current same-attempt three-platform CI41503463955, independent approve, automatic [Issue16 publication](https://github.com/Sibiya666/task-tower/issues/16#issuecomment-6595253516) and native Project Done. The dated pre-acceptance restrictions below remain historical; they do not describe a still-open Issue16. A later main change requires affected-interface re-audit.
