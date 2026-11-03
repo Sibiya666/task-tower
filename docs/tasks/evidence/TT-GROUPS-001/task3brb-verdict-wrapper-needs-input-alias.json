@@ -1,0 +1,47 @@
+{
+  "host_only_capture_limit_bytes": 1048576,
+  "qualified_current_review": true,
+  "source_unchanged": true,
+  "binary_unchanged": true,
+  "result": {
+    "status": "passed",
+    "exit_code": 0,
+    "started": true,
+    "cleanup_confirmed": true,
+    "pid": 200800,
+    "stdout_sha256": "77bfe054534067e58192abad54d8f4845e8f089b6878411a6509d3edc2fa9f04",
+    "stdout_bytes": 182319,
+    "stdout_captured_bytes": 182319,
+    "stdout_tail_unknown": false,
+    "stdout_truncated": false,
+    "stderr_sha256": "22fc66d4ec0d0f03c739e14d6e3c9d16023e403222a712a06d489ebcbabe73ce",
+    "stderr_bytes": 8810,
+    "stderr_captured_bytes": 8810,
+    "stderr_tail_unknown": false,
+    "stderr_truncated": false,
+    "duration_seconds": 59.36
+  },
+  "verdict": {
+    "run_id": "3edce318-7494-4e5d-8a26-9e2c382f5b62",
+    "attempt_id": "57fb54b5-6311-4eb0-ab4b-ffaca3eeac45",
+    "instance_id": "613364ba-47c4-49f6-b2bf-f8240484d421",
+    "stage": "development",
+    "generation": 1,
+    "source_sha": "a34f2c6f03ef15f446e6bb2d3cc2fb1096bbcdda",
+    "checkpoint_sha": "a34f2c6f03ef15f446e6bb2d3cc2fb1096bbcdda",
+    "input_sha256": "b5b90e3dce447fa0a37cebc0bbf6e05e225c1950a5b946f2364f43d4e1bc0ddf",
+    "version": 2,
+    "summary": "Static review found no concrete defect in the bounded two-file wire change; pinned instructions and candidate hashes match. Independent focused verification could not run because the available Python executable failed to launch. Durable authority and execution consumers remain outside this review.",
+    "verdict": "needs_input",
+    "return_stage": null,
+    "findings": [
+      {
+        "code": "environment_unavailable",
+        "path": null,
+        "line": null
+      }
+    ]
+  },
+  "validation_error": null,
+  "runner_sha256": "4536ca02dcde848142a025ee61e606b648754d681ea5d09931aaa48e0a355791"
+}

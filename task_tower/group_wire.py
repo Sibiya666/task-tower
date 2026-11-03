@@ -74,6 +74,52 @@ def validate_group_evidence_shape(value):
     return value
 
 
+def validate_group_check_request_shape(value):
+    """Actual check invocation keeps wrapper1; nested stage2 is syntax only."""
+    fields={'version','run_id','attempt_id','instance_id','manifest','check','check_sha256'}
+    if (not isinstance(value,dict) or set(value)!=fields
+            or type(value['version']) is not int or value['version']!=1):
+        raise ValueError('Invalid group check invocation')
+    manifest=validate_group_stage_shape(value['manifest'])
+    if manifest['stage']!='test': raise ValueError('Group check outside test stage')
+    for key in ('run_id','attempt_id','instance_id'): _uuid(value[key])
+    if value['run_id']!=manifest['run_id']: raise ValueError('Foreign group check run')
+    check=value['check']
+    if (not isinstance(check,dict) or set(check)!={'id','argv','timeout_seconds'}
+            or not isinstance(check['id'],str) or not re.fullmatch('[A-Za-z0-9][A-Za-z0-9_.-]{0,99}',check['id'])
+            or not isinstance(check['argv'],list) or not check['argv']
+            or any(not isinstance(arg,str) or not arg or '\x00' in arg for arg in check['argv'])
+            or type(check['timeout_seconds']) is not int or not 1<=check['timeout_seconds']<=3600):
+        raise ValueError('Invalid group check configuration syntax')
+    _wire_digest(value['check_sha256'])
+    if digest_manifest(check)!=value['check_sha256']: raise ValueError('Group check configuration hash mismatch')
+    return value
+
+
+def validate_group_verdict_shape(value):
+    """Closed verdict2 syntax; never stores or authenticates a contribution."""
+    from .pipeline_journal import PipelineJournal
+    fields={'manifest','input_sha256','stage','generation','executor_instance_id','reviewer_instance_id',
+        'reviewer_attempt_id','superpowers_sha256','policy_sha256','result_sha256','process','decision','return_stage'}
+    if (not isinstance(value,dict) or set(value)!=fields|EPOCH_FIELDS|{'version'}
+            or type(value['version']) is not int or value['version']!=2
+            or type(value['generation']) is not int):
+        raise ValueError('Invalid group verdict shape')
+    manifest=validate_group_stage_shape(value['manifest'])
+    validate_epoch_shape({key:value[key] for key in EPOCH_FIELDS})
+    if any(type(value[key]) is not type(manifest[key]) or value[key]!=manifest[key] for key in EPOCH_FIELDS):
+        raise ValueError('Group verdict epoch mismatch')
+    if digest_manifest(manifest)!=value['input_sha256']: raise ValueError('Group verdict input mismatch')
+    # Reuse original closed scalar/process/decision/return rules on a temporary
+    # projection only. Original group manifest, bytes and digest stay untouched;
+    # no projected body is admitted or passed to a durable journal writer.
+    legacy={key:value[key] for key in fields}
+    legacy['manifest']={key:manifest[key] for key in STAGE_FIELDS}; legacy['manifest']['version']=1
+    legacy['input_sha256']=digest_manifest(legacy['manifest'])
+    PipelineJournal._receipt_body(legacy)
+    return value
+
+
 def validate_epoch_shape(value):
     if not isinstance(value,dict) or set(value)!=EPOCH_FIELDS:
         raise ValueError('Invalid group epoch shape')

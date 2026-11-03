@@ -1,0 +1,41 @@
+{
+  "host_only_capture_limit_bytes": 1048576,
+  "qualified_current_review": true,
+  "source_unchanged": true,
+  "binary_unchanged": true,
+  "result": {
+    "status": "passed",
+    "exit_code": 0,
+    "started": true,
+    "cleanup_confirmed": true,
+    "pid": 207868,
+    "stdout_sha256": "388ebada33a54bcd21fbe5d977e82ce82cb48e108e9095021bc0e1b43ee02cad",
+    "stdout_bytes": 141944,
+    "stdout_captured_bytes": 141944,
+    "stdout_tail_unknown": false,
+    "stdout_truncated": false,
+    "stderr_sha256": "c6fb5a60404e750646a5338501fbac926eef836970f1e57ea2e0dc8eb13237a3",
+    "stderr_bytes": 6169,
+    "stderr_captured_bytes": 6169,
+    "stderr_tail_unknown": false,
+    "stderr_truncated": false,
+    "duration_seconds": 38.782
+  },
+  "verdict": {
+    "run_id": "8fd37034-64f9-4ca2-a5bd-cb4dd7fe63ab",
+    "attempt_id": "09196e21-7222-4301-846d-e5717d0b4a1d",
+    "instance_id": "5f4e5b70-62c8-4981-a946-b6ed294c5bd0",
+    "stage": "development",
+    "generation": 1,
+    "source_sha": "a34f2c6f03ef15f446e6bb2d3cc2fb1096bbcdda",
+    "checkpoint_sha": "a34f2c6f03ef15f446e6bb2d3cc2fb1096bbcdda",
+    "input_sha256": "b5b90e3dce447fa0a37cebc0bbf6e05e225c1950a5b946f2364f43d4e1bc0ddf",
+    "version": 2,
+    "summary": "Approve bounded pure wire changes. Pinned instruction and candidate hashes match. Four focused tests independently passed with the qualified interpreter; retained Root evidence confirms 23 regression tests passed. Closed wrapper/version rules, nested epoch/input binding and legacy refusal remain intact. No concrete defects found. Durable contribution, current-epoch, resource, workspace and execution authority remain deferred and gated; no broader readiness accepted.",
+    "verdict": "approve",
+    "return_stage": null,
+    "findings": []
+  },
+  "validation_error": null,
+  "runner_sha256": "186ffbb243c1cdc30899b40fc4343e425148c9719d48d2a4a1b44327518cd772"
+}

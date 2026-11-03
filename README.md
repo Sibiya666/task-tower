@@ -153,3 +153,5 @@ Task3BRb now has [bounded pure epoch/stage2/role3 shape acceptance](docs/tasks/e
 Task3BRb pure request3/check-aggregate2 syntax and owned macOS temporary-path fixture correction have [bounded acceptance](docs/tasks/evidence/TT-GROUPS-001/task3brb-request-check-acceptance.md). Actual group producers, instructions/check membership/current-epoch proof and durable consumers remain gated; parser shape success is not execution authority.
 
 Pure group checkpoint2/evidence2 syntax has bounded independent acceptance; see docs/tasks/evidence/TT-GROUPS-001/task3brb-checkpoint-evidence-acceptance.md. Product manifest1 and legacy producers remain unchanged; syntax never grants group execution or epoch authority. Actual resource/workspace/epoch consumers and Windows hot recovery65 remain required.
+
+The remaining pure group check-wrapper1/stage2 and verdict2 shapes passed bounded independent acceptance; see docs/tasks/evidence/TT-GROUPS-001/task3brb-verdict-wrapper-acceptance.md. All named wire syntax is present, while durable group consumers/execution remain closed pending actual resource/workspace/current-epoch authority.

@@ -1,0 +1,52 @@
+{
+  "host_only_capture_limit_bytes": 1048576,
+  "qualified_current_review": true,
+  "source_unchanged": true,
+  "binary_unchanged": true,
+  "result": {
+    "status": "passed",
+    "exit_code": 0,
+    "started": true,
+    "cleanup_confirmed": true,
+    "pid": 205372,
+    "stdout_sha256": "92f1bc0fb0b3c17adecda0bf4ad2e4c64c4fb07372672060237580118e70f63c",
+    "stdout_bytes": 185842,
+    "stdout_captured_bytes": 185842,
+    "stdout_tail_unknown": false,
+    "stdout_truncated": false,
+    "stderr_sha256": "dcd0874effbb3a5e31f15c18f58d8a7b843b6f31f2fb83c696f08390a6c06a69",
+    "stderr_bytes": 5808,
+    "stderr_captured_bytes": 5808,
+    "stderr_tail_unknown": false,
+    "stderr_truncated": false,
+    "duration_seconds": 45.672
+  },
+  "verdict": {
+    "run_id": "80f16636-fb5c-40c7-aabf-a9459ea5e913",
+    "attempt_id": "a08d1af2-f7d5-4c95-abe2-fac2f02def44",
+    "instance_id": "63efff69-4364-48de-a749-ff70f7bbd9d7",
+    "stage": "development",
+    "generation": 1,
+    "source_sha": "a34f2c6f03ef15f446e6bb2d3cc2fb1096bbcdda",
+    "checkpoint_sha": "a34f2c6f03ef15f446e6bb2d3cc2fb1096bbcdda",
+    "input_sha256": "b5b90e3dce447fa0a37cebc0bbf6e05e225c1950a5b946f2364f43d4e1bc0ddf",
+    "version": 2,
+    "summary": "Candidate and pinned instruction hashes match. No concrete source defect or authority activation found. Qualified interpreter ran 23 focused tests: 17 passed, including all four new verdict/check tests; six errored because the read-only environment provides no usable temporary directory (FileNotFoundError: [Errno 2] No usable temporary directory found). Full focused verification remains blocked. Durable execution, filesystem authority and current-epoch proofs were excluded as explicitly deferred.",
+    "verdict": "needs_input",
+    "return_stage": null,
+    "findings": [
+      {
+        "code": "environment_unavailable",
+        "path": "tests/test_group_wire.py",
+        "line": 154
+      },
+      {
+        "code": "environment_unavailable",
+        "path": "tests/test_group_wire.py",
+        "line": 114
+      }
+    ]
+  },
+  "validation_error": null,
+  "runner_sha256": "8aafc1897611eb4156edcfd9b25ec48a25a9c2a124f75c244219de7ce4b6f24f"
+}
