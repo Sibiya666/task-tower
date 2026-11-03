@@ -1,0 +1,11 @@
+{
+  "base": "10bd07a9b466b560a7850c2d2d108e0a840733bd",
+  "files": {
+    "task_tower/group_resources.py": "ad9cc43cad3748868316a3812debfda4b48b4cfd0312fdb188ef6b6e40f2d36e",
+    "tests/test_group_resource_math.py": "c17c6fb2e694f47e68218b4cb836b97d8daa16cd075c369599329201433c0457",
+    "tests/test_group_resource_observation.py": "2b325164386638a275d4d82c63441c6feeecda7fc996f63de275ca7b9715f03c",
+    "tests/test_group_resource_native.py": "b08003f266a05889d76dd419f8806fa24858431535d5e0f7a52418467315a923",
+    "tests/test_group_resource_clock.py": "28ab401dd8fb607c790e30d187fb211a9e40cd6ff644afb07ff0bef5f7c52889",
+    "tests/fixtures/group_resource_observer.py": "762f74ce67a687c16fa2f84a59d92555adad0dc9be9cf09251735a7025cbb006"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "host_only_capture_limit_bytes": 1048576,
+  "qualified_current_review": true,
+  "source_unchanged": true,
+  "binary_unchanged": true,
+  "result": {
+    "status": "passed",
+    "exit_code": 0,
+    "started": true,
+    "cleanup_confirmed": true,
+    "pid": 200672,
+    "stdout_sha256": "4d0edc9187a0aa1b13f2a009c5a6e1c2fbc171405ec518d345e4114943bcebe6",
+    "stdout_bytes": 201956,
+    "stdout_captured_bytes": 201956,
+    "stdout_tail_unknown": false,
+    "stdout_truncated": false,
+    "stderr_sha256": "3adda2d89cf58da891d38838b72dab4722c4190b4f3c769ebc8150240acfbcfd",
+    "stderr_bytes": 6891,
+    "stderr_captured_bytes": 6891,
+    "stderr_tail_unknown": false,
+    "stderr_truncated": false,
+    "duration_seconds": 65.172
+  },
+  "verdict": {
+    "run_id": "ccfd12c0-818a-4e70-902f-54d49fd5d7ca",
+    "attempt_id": "98a2259b-f4e1-4a4d-a598-78e3d981fea5",
+    "instance_id": "2f3ab5f7-59f5-47b3-a074-9455726906f4",
+    "stage": "development",
+    "generation": 1,
+    "source_sha": "10bd07a9b466b560a7850c2d2d108e0a840733bd",
+    "checkpoint_sha": "10bd07a9b466b560a7850c2d2d108e0a840733bd",
+    "input_sha256": "c7650aa026ce86900d9ab2f814a58c2dcafc45d099775bfde126188f6e5200bd",
+    "version": 2,
+    "summary": "Approve bounded arithmetic and read-only observation implementation. Candidate and pinned instruction hashes match. Reviewed genuine registration provenance, immutable bounded process-local samples, lifetime/clock/expiry checks, conservative native unknowns and fallback arithmetic. Independently ran 15 pure tests successfully; inspected the 57-test receipt, matching log digest and unchanged input manifests. Atomic claims, scheduling, workspace/epoch execution, native overlap and wider readiness remain outside this review as explicitly deferred.",
+    "verdict": "approve",
+    "return_stage": null,
+    "findings": []
+  },
+  "validation_error": null,
+  "runner_sha256": "eed55537b8299eedfeca485e5a159221bf74806ad49e5bf0aa6b5863879b3827"
+}

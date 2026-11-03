@@ -1,0 +1,41 @@
+{
+  "host_only_capture_limit_bytes": 1048576,
+  "qualified_current_review": true,
+  "source_unchanged": true,
+  "binary_unchanged": true,
+  "result": {
+    "status": "passed",
+    "exit_code": 0,
+    "started": true,
+    "cleanup_confirmed": true,
+    "pid": 207580,
+    "stdout_sha256": "c2a15525272e889eeb814d45860dd1c40a483c89f35c2ac05dd361db7dfaa72f",
+    "stdout_bytes": 127993,
+    "stdout_captured_bytes": 127993,
+    "stdout_tail_unknown": false,
+    "stdout_truncated": false,
+    "stderr_sha256": "a5ca79375aafd8b5ac5c7c207134914ee1d94edec67e53a3cb4bf5b05c6eec1e",
+    "stderr_bytes": 6169,
+    "stderr_captured_bytes": 6169,
+    "stderr_tail_unknown": false,
+    "stderr_truncated": false,
+    "duration_seconds": 34.672
+  },
+  "verdict": {
+    "run_id": "1df6e1d0-0179-4761-b4ce-3b854ef73ae1",
+    "attempt_id": "c4e02911-fd5a-457a-97f3-e8923e4aebcd",
+    "instance_id": "39040141-fc23-441a-8f84-73d55c7529bc",
+    "stage": "spec",
+    "generation": 1,
+    "source_sha": "10bd07a9b466b560a7850c2d2d108e0a840733bd",
+    "checkpoint_sha": "10bd07a9b466b560a7850c2d2d108e0a840733bd",
+    "input_sha256": "38a7336366d001dc32bb7230830ed22257841e919b7aa2c5b18cd67a7e5ffde9",
+    "version": 2,
+    "summary": "Approve bounded specification only. Candidate and pinned instruction hashes match. Contract preserves R3 and actual registration/storage boundaries: genuine revalidated context, immutable bounded same-process samples, audit-only SQL history, original deadlines, transactional authority checks and conservative Windows unknowns. Collector-lifetime nonce is a sound conservative refinement with no restart reuse or OS boot-UUID claim. Native implementation, atomic-claim verification, actual overlap, installed pilot and Task5 execution acceptance remain outside this review; tests were not rerun.",
+    "verdict": "approve",
+    "return_stage": null,
+    "findings": []
+  },
+  "validation_error": null,
+  "runner_sha256": "7e3434fb74042b2b648f203e3c0da6c96e79c69c7d0791487a70caecb3d4c48e"
+}

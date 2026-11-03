@@ -1,0 +1,24 @@
+{
+  "runner_release": "7586df4ac2e59316521463b7526089c8314024e4",
+  "source_unchanged": true,
+  "verified_success": true,
+  "result": {
+    "status": "passed",
+    "exit_code": 0,
+    "started": true,
+    "cleanup_confirmed": true,
+    "pid": 197760,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 0,
+    "stdout_captured_bytes": 0,
+    "stdout_tail_unknown": false,
+    "stdout_truncated": false,
+    "stderr_sha256": "86badf208d1cfdaee2126a4297c2061b2187f0938668e2658c8b50291086967c",
+    "stderr_bytes": 11132,
+    "stderr_captured_bytes": 11132,
+    "stderr_tail_unknown": false,
+    "stderr_truncated": false,
+    "duration_seconds": 42.016
+  },
+  "runner_sha256": "cf4f2e5732a7b089f69a0eb96b853056aaac8b9409f13a9c302ca0908243c488"
+}
