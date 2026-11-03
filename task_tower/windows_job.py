@@ -45,6 +45,8 @@ def _kernel():
     kernel = C.WinDLL("kernel32", use_last_error=True)
     declarations = {
         "CreateJobObjectW": ([C.c_void_p, W.LPCWSTR], W.HANDLE),
+        "GetThreadErrorMode": ([], W.DWORD),
+        "SetThreadErrorMode": ([W.DWORD, C.POINTER(W.DWORD)], W.BOOL),
         "SetInformationJobObject": ([W.HANDLE, C.c_int, C.c_void_p, W.DWORD], W.BOOL),
         "AssignProcessToJobObject": ([W.HANDLE, W.HANDLE], W.BOOL),
         "CreateProcessW": ([W.LPCWSTR, W.LPWSTR, C.c_void_p, C.c_void_p, W.BOOL,
@@ -89,10 +91,21 @@ class WindowsJobProcess:
                     environment = None if env is None else C.create_unicode_buffer("\0".join(
                         key + "=" + value for key, value in sorted(env.items(), key=lambda item: item[0].upper())) + "\0\0")
                     # No command runs before successful assignment to the job.
-                    if not kernel.CreateProcessW(argv[0], command, None, None, True,
-                                                 0x08000404, environment, str(cwd),
-                                                 C.byref(startup), C.byref(self.info)):
+                    # A malformed image must return an error rather than wait
+                    # for an interactive Windows error box before our timeout
+                    # loop can start. Preserve unrelated bits and restore this
+                    # thread's mode; never change the host process-wide mode.
+                    old_mode=kernel.GetThreadErrorMode()
+                    if not kernel.SetThreadErrorMode(old_mode|0x8003,None):
                         raise C.WinError(C.get_last_error())
+                    try:
+                        if not kernel.CreateProcessW(argv[0], command, None, None, True,
+                                                     0x08000404, environment, str(cwd),
+                                                     C.byref(startup), C.byref(self.info)):
+                            raise C.WinError(C.get_last_error())
+                    finally:
+                        if not kernel.SetThreadErrorMode(old_mode,None):
+                            raise C.WinError(C.get_last_error())
                 finally:
                     for handle, old in zip(handles, old_inheritance):
                         os.set_handle_inheritable(handle, old)

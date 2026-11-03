@@ -1,0 +1,15 @@
+{
+  "base": "1a59fa71316557614fd389458820fe9f4f4934c7",
+  "files": {
+    "task_tower/pr_context.py": "02cf8ba7e80bbf37e461b27fb69a5fab5b7c91486190963c0665b7109af20d73",
+    "task_tower/pr_effects.py": "28fadcea8b0fd41f1d68a35c8cb4be2113ebb3045f8dad1e7b915d714795bba2",
+    "task_tower/pr_journal.py": "39c8efdfda98f0d75ff3f137fb1dc7333eefa69c26880d4a901c95d42cc870bf",
+    "task_tower/pr_records.py": "87e64146af01c12aa26dbd5093e261a6dc7a8c1b0f35e4b2b6469da9574fb7de",
+    "task_tower/windows_job.py": "a8fdec15ad84dec4e940f2bd56c7374b42485273f73585fbf2436be9daa01805",
+    "tests/test_pr_diagnostic_effects.py": "7c351a3844d412e5d69268d8cf240662115aad7922a866a5e1d2a9d5fbeafe22",
+    "tests/test_pr_failed_observation.py": "d58e67bd610fdaf1df6e25e265dd5e5f27c619caff52e9373fed2ea283ea0915",
+    "tests/test_pr_failure_records.py": "7988ef2817fc57292f57411a93ba043fce20392a68b7efe50038a9b36669ac88",
+    "tests/test_windows_job_launch.py": "e7e1e0921e2d01180dbdb840d16c405a2efc2d87e61eaac2228a71be611b60f6",
+    "docs/superpowers/specs/2026-11-03-pr-diagnostic-publication-contract.md": "4732814f1e75d0bc695efcd3da63ed8d7895e88d7e32cbf109f3104a6036242b"
+  }
+}

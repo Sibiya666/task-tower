@@ -1,0 +1,41 @@
+{
+  "host_only_capture_limit_bytes": 1048576,
+  "qualified_current_review": true,
+  "source_unchanged": true,
+  "binary_unchanged": true,
+  "result": {
+    "status": "passed",
+    "exit_code": 0,
+    "started": true,
+    "cleanup_confirmed": true,
+    "pid": 209872,
+    "stdout_sha256": "30e9e82b68b9985910b5c4f4b49abee54cdc906170ac4e69b6d1bc582905c5e4",
+    "stdout_bytes": 174998,
+    "stdout_captured_bytes": 174998,
+    "stdout_tail_unknown": false,
+    "stdout_truncated": false,
+    "stderr_sha256": "c2a7cb3924288916aad527a1f4cef623576c0737006287152240b8ce0264c328",
+    "stderr_bytes": 9171,
+    "stderr_captured_bytes": 9171,
+    "stderr_tail_unknown": false,
+    "stderr_truncated": false,
+    "duration_seconds": 63.578
+  },
+  "verdict": {
+    "run_id": "9417d51d-a02c-41ca-86ea-762912eefc69",
+    "attempt_id": "38c56cd7-5dec-405f-a173-284a6d186f9f",
+    "instance_id": "4837419f-f0af-49ee-8541-7e906709f579",
+    "stage": "spec",
+    "generation": 1,
+    "source_sha": "1a59fa71316557614fd389458820fe9f4f4934c7",
+    "checkpoint_sha": "1a59fa71316557614fd389458820fe9f4f4934c7",
+    "input_sha256": "c4454212d55d10baf7606145d4a1d980b3ffedc1fc944eb29a5499871a421bc2",
+    "version": 2,
+    "summary": "Approve specification only. Verified HEAD and all candidate/pinned instruction hashes. Actual readers, runner validation, journal observations/phase gates and positive/async effects support the proposed narrow extension: genuine failed-host evidence, exact confirmed no-launch shape, unchanged attempt budgets, explicit pending and authenticated failure diagnostics. Unknown outcomes remain fenced; private identity uncertainty prohibits publication. No essential incompatibility found. Implementation, persistence/controller, pilot and main acceptance remain outside this verdict. No tests or network actions performed; no behaviors silently set aside.",
+    "verdict": "approve",
+    "return_stage": null,
+    "findings": []
+  },
+  "validation_error": null,
+  "runner_sha256": "0bdeea5c5e6a6d955b232a6290541274ff50a436b1a30e4312eb69aa0536faeb"
+}

@@ -251,6 +251,10 @@ class PRHostContext:
         from .pr_records import read_review_record
         return read_review_record(self,input_sha256)
 
+    def failure_record(self,input_sha256):
+        from .pr_records import read_failure_record
+        return read_failure_record(self,input_sha256)
+
     def _fresh_inputs(self):
         """Internal factory gate; not a stage-authority or effect authorization."""
         self._check_pins()

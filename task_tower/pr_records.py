@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 
 from .pr_review import MAX_RESULT_BYTES, _request, validate_pr_review
-from .pr_policy import exact, text, HASH, identifier, authorized_task, canonical, strict_json
+from .pr_policy import exact, text, HASH, identifier, authorized_task, canonical, strict_json, policy_fingerprint
 from .pr_journal import BINDING
 from .pipeline_journal import _open_database_pin, _pin_identity
 from .project_connections import safe_config_path
@@ -178,3 +178,61 @@ def read_review_record(context,input_sha256):
         return record
     except (OSError,ValueError,TypeError,KeyError,AttributeError,UnicodeError,RecursionError,OverflowError):
         raise ValueError('Private verified PR record unavailable or unverified') from None
+
+def read_failure_record(context,input_sha256):
+    """Authenticate one genuinely failed host role; never issue a receipt."""
+    import math
+    from .pr_review import ENVELOPE_KEYS,_result
+    from .pr_journal import _observation
+    prepared=read_prepared_record(context,input_sha256)
+    request=prepared['request'];provenance=context.private_input_provenance
+    try:
+        with context._pr_snapshot() as db:
+            rows=[strict_json(r['body']) for r in db.execute('SELECT body FROM prs')]
+            current=[r for r in rows if r['input_sha256']==input_sha256]
+            if len(current)!=1 or any(type(current[0][k]) is not type(request[k]) or current[0][k]!=request[k] for k in BINDING):raise ValueError('Changed failed admission')
+            row=current[0]
+            effects=[strict_json(r['body']) for r in db.execute('SELECT body FROM effects')]
+            reviews=[e for e in effects if e['kind']=='pr_review' and all(type(e['binding'][k]) is type(request[k]) and e['binding'][k]==request[k] for k in BINDING)]
+            if len(reviews)!=1 or reviews[0]['status']!='failed':raise ValueError('No unique failed host review')
+            effect=reviews[0]
+            if (effect['owner_id']!=row['owner_id'] or effect['owner_pid']!=row['owner_pid']
+                    or effect['payload']['reviewer_instance_id']!=request['reviewer_instance_id']
+                    or effect['payload']['request_sha256']!=input_sha256):raise ValueError('Failed host identity changed')
+            _observation('pr_review',effect['observation'])
+            record,_,_=_file(Path(provenance['artifact_namespace'])/'failure-records'/(effect['effect_id']+'.json'))
+            exact(record,{'request','envelope','review_effect_id','private_input_provenance'})
+            if (record['review_effect_id']!=effect['effect_id'] or canonical(record['request'])!=canonical(request)
+                    or canonical(record['private_input_provenance'])!=canonical(provenance)):raise ValueError('Failed private record mismatch')
+            envelope=record['envelope'];exact(envelope,ENVELOPE_KEYS)
+            if canonical(envelope['request'])!=canonical(request) or envelope['reviewer_instance_id']!=request['reviewer_instance_id']:raise ValueError('Failed request mismatch')
+            process=envelope['process']
+            required={'status','exit_code','started','cleanup_confirmed','duration_seconds','pid'}
+            allowed={'reason'}
+            for stream in ('stdout','stderr'):required|={stream+s for s in ('_sha256','_bytes','_captured_bytes','_tail_unknown','_truncated')}
+            exact(process,required,allowed)
+            if process['status'] not in ('passed','failed','unavailable','timeout') or process['cleanup_confirmed'] is not True:raise ValueError('Unknown failed process cleanup')
+            if type(process['started']) is not bool:raise ValueError('Invalid failed started state')
+            if not process['started'] and (process['status']!='unavailable' or process['pid'] is not None or process['exit_code'] is not None):raise ValueError('Unconfirmed no-launch process')
+            for k in ('pid','exit_code','started','cleanup_confirmed'):
+                if type(process[k]) is not type(effect['observation']['process'][k]) or process[k]!=effect['observation']['process'][k]:raise ValueError('Failed process mismatch')
+            duration=process['duration_seconds']
+            if type(duration) not in (int,float) or not math.isfinite(duration) or duration<0:raise ValueError('Invalid failed duration')
+            from .pr_policy import integer
+            for stream in ('stdout','stderr'):
+                text(process[stream+'_sha256'],HASH)
+                total=integer(process[stream+'_bytes'],0);captured=integer(process[stream+'_captured_bytes'],0,total)
+                if process[stream+'_tail_unknown'] is not False or type(process[stream+'_truncated']) is not bool or process[stream+'_truncated']!=(total>captured):raise ValueError('Unconfirmed failure capture')
+            if envelope['result'] is None:
+                if envelope['result_sha256'] is not None:raise ValueError('Failed result digest mismatch')
+            else:
+                _result(envelope['result'],request)
+                if policy_fingerprint(envelope['result'])!=envelope['result_sha256']:raise ValueError('Failed result changed')
+            excluded=[e['payload']['reviewer_instance_id'] for e in effects if e['effect_id']!=effect['effect_id'] and 'reviewer_instance_id' in e['payload']]
+            refusal=validate_pr_review(envelope,request,excluded)
+            if set(refusal)!={'verdict','reason'} or refusal['verdict']!='needs_input':raise ValueError('Failed host record contains completed receipt')
+            if effect['observation'].get('reviewer_instance_id')!=request['reviewer_instance_id']:raise ValueError('Missing failed reviewer observation')
+        context._fresh_inputs()
+        return record
+    except (OSError,ValueError,TypeError,KeyError,AttributeError,UnicodeError,RecursionError,OverflowError):
+        raise ValueError('Private failed PR record unavailable or unverified') from None

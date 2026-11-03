@@ -276,6 +276,92 @@ class PREffects:
     def inspect_effect(self,effect_id):
         return self.journal.effect(effect_id)
 
+    def _diagnostic_proof(self,phase):
+        """Actual retained admission/current host outcome; never merge proof."""
+        row=self.journal.get(self.task['repository'],self.task['pr_number'])
+        if row is None:raise ValueError('Missing diagnostic admission')
+        binding={k:row[k] for k in BINDING}
+        prepared=self.context.prepared_record(row['input_sha256']);request=prepared['request']
+        if any(type(request[k]) is not type(binding[k]) or request[k]!=binding[k] for k in BINDING):raise ValueError('Foreign diagnostic request')
+        provenance=self.context.private_input_provenance
+        if provenance['pr_journal'] is None or provenance['pr_journal']['path']!=str(self.journal.path):raise ValueError('Foreign diagnostic journal')
+        fresh=self.context.current(self.source,self.task);snapshot=fresh['snapshot'];material=request['input']
+        if (fresh['private_inputs_sha256']!=material['private_inputs_sha256']
+                or canonical(material['private_input_provenance'])!=canonical(provenance)
+                or any(type(fresh['task'][k]) is not type(binding[k]) or fresh['task'][k]!=binding[k]
+                    for k in ('repository','pr_number','issue','issue_id','task_id'))):raise ValueError('Diagnostic private identity changed')
+        # Source.snapshot authenticates marker/repository/immutable Issue identity.
+        # A changed head can invalidate its recorded old head, never approve it.
+        same_head=snapshot['head_sha']==binding['head_sha']
+        reviews=snapshot['reviews']
+        if same_head:
+            reviews=_remaining_feedback(snapshot,self.journal.effects(row['repository'],row['pr_number']),binding,fresh['task']['publisher_account'])
+        changed=(fresh['authority_error'] is not None or canonical(fresh['authority'])!=canonical(material['authority']))
+        for key,old in material['source'].items():
+            new=reviews if key=='reviews' else snapshot[key]
+            if key=='pr':
+                volatile={'updated_at','comments','review_comments'}
+                old={k:v for k,v in old.items() if k not in volatile};new={k:v for k,v in new.items() if k not in volatile}
+            changed=changed or canonical(old)!=canonical(new)
+        changed=changed or canonical(material['ci'])!=canonical({k:v for k,v in snapshot['ci'].items() if k!='acceptance_statuses'})
+        receipt=None;failed=None
+        if phase=='pending':
+            if changed or snapshot['ready'] is not True or snapshot['reasons']!=[]:raise ValueError('Pending source unavailable or changed')
+        else:
+            try:receipt=self.context.review_record(row['input_sha256'])['receipt']
+            except ValueError:
+                try:failed=self.context.failure_record(row['input_sha256'])
+                except ValueError:pass
+            negative=receipt is not None and receipt['verdict'] in ('reject','needs_input')
+            if not (negative or failed is not None or changed or snapshot['ready'] is False):raise ValueError('No genuine negative host outcome')
+        if canonical(self.context.prepared_record(row['input_sha256']))!=canonical(prepared):raise ValueError('Diagnostic preparation changed')
+        return dict(row=row,binding=binding,current=fresh,receipt=receipt)
+
+    def _publish_diagnostic(self,phase):
+        if phase not in ('pending','failure'):raise ValueError('Invalid diagnostic phase')
+        row=self.journal.get(self.task['repository'],self.task['pr_number'])
+        if row is None:raise ValueError('Missing diagnostic admission')
+        effects=[e for e in self.journal.effects(row['repository'],row['pr_number'])
+            if all(type(e['binding'][k]) is type(row[k]) and e['binding'][k]==row[k] for k in BINDING)]
+        previous=[e for e in effects if e['kind']=='acceptance_status' and e['payload']['state']==phase]
+        if previous:
+            if len(previous)!=1 or previous[0]['status']!='confirmed':raise ValueError('Diagnostic intent already consumed')
+            return previous[0]  # Retained inspection only, never another write.
+        proof=self._diagnostic_proof(phase);binding=proof['binding'];receipt=proof['receipt']
+        reference=binding['input_sha256'] if receipt is None else receipt['receipt_sha256']
+        negative=receipt is not None and receipt['verdict'] in ('reject','needs_input')
+        reports=[e for e in effects if e['kind']=='acceptance_review']
+        if phase=='failure' and negative and not reports:
+            if proof['row']['state']!='publishing_acceptance':raise ValueError('Negative receipt not durably bound for publication')
+            kind='acceptance_review'
+            body=('Task Tower PR acceptance\nTask: '+binding['task_id']+'\nHead: '+binding['head_sha']+
+                '\nBase: '+binding['base_sha']+'\nReceipt: '+reference+'\nVerdict: '+receipt['verdict']+'\n')
+            payload=dict(commit_id=binding['head_sha'],event='COMMENT',body=body,receipt_sha256=reference)
+        else:
+            kind='acceptance_status'
+            payload=dict(state=phase,context='task-tower/pr-acceptance',sha=binding['head_sha'],
+                target_url='https://github.com/'+binding['repository']+'/pull/'+str(binding['pr_number']),
+                description=phase+' '+reference,receipt_sha256=reference)
+        effect=self.journal.begin_effect(binding['repository'],binding['pr_number'],self.owner_id,kind,payload)
+        try:
+            fresh=self._diagnostic_proof(phase)
+            current_reference=binding['input_sha256'] if fresh['receipt'] is None else fresh['receipt']['receipt_sha256']
+            if reference!=current_reference:raise ValueError('Diagnostic receipt changed')
+            observation=self._write(effect,publisher=fresh['current']['task']['publisher_account'])
+        except BaseException as error:
+            try:self.journal.observe(effect['effect_id'],self.owner_id,dict(status='unknown'))
+            except ValueError:pass
+            if not isinstance(error,Exception):raise
+            raise ValueError('pr_diagnostic_uncertain') from None
+        return self.journal.observe(effect['effect_id'],self.owner_id,observation)
+
+    def publish_pending(self):
+        """Explicit opt-in only; the controller never calls this by default."""
+        return self._publish_diagnostic('pending')
+
+    def publish_failure(self):
+        return self._publish_diagnostic('failure')
+
     def _proof(self,receipt):
         return _current_proof(self.context,self.source,self.journal,self.task,receipt,
             allow_own=True,merge_policy=False)
@@ -290,10 +376,13 @@ class PREffects:
             row=self.journal._get(db,binding['repository'],binding['pr_number'])
             self.journal._owned(db,row,self.owner_id); self.journal._tick(row)
             saved=self.journal._load(db,'effects','effect_id',effect['effect_id'])
-            expected_state='merge_intent' if effect['kind']=='merge' else 'publishing_acceptance'
+            states={'merge_intent'} if effect['kind']=='merge' else {'publishing_acceptance'}
+            if effect['kind']=='acceptance_status':
+                if effect['payload']['state']=='pending':states={'validating','reviewing'}
+                elif effect['payload']['state']=='failure':states={'validating','reviewing','reviewed','publishing_acceptance','rejected','stale','needs_input'}
             if (saved!=effect or effect['status']!='intent' or effect['owner_id']!=self.owner_id
                     or effect['owner_pid']!=os.getpid() or row['owner_pid']!=os.getpid()
-                    or row['cancel_requested'] or row['state']!=expected_state
+                    or row['cancel_requested'] or row['state'] not in states
                     or any(type(row[k]) is not type(binding[k]) or row[k]!=binding[k] for k in BINDING)):
                 raise ValueError('PR publication intent fenced')
             if effect['kind']=='merge':

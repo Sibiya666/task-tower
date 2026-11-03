@@ -1,0 +1,41 @@
+{
+  "host_only_capture_limit_bytes": 1048576,
+  "qualified_current_review": true,
+  "source_unchanged": true,
+  "binary_unchanged": true,
+  "result": {
+    "status": "passed",
+    "exit_code": 0,
+    "started": true,
+    "cleanup_confirmed": true,
+    "pid": 193460,
+    "stdout_sha256": "fee83478b911888b9c9dcd6d16c4e941248787b30d294e806c5b5bf0716adcb3",
+    "stdout_bytes": 273419,
+    "stdout_captured_bytes": 273419,
+    "stdout_tail_unknown": false,
+    "stdout_truncated": false,
+    "stderr_sha256": "80f3286ca5bc5ffdd5a029c29831c651d5eacfd199e7d9d9e622fdc10eed0c86",
+    "stderr_bytes": 7974,
+    "stderr_captured_bytes": 7974,
+    "stderr_tail_unknown": false,
+    "stderr_truncated": false,
+    "duration_seconds": 79.86
+  },
+  "verdict": {
+    "run_id": "9d55b3f0-349d-43de-8c79-7a2ea8d6cc45",
+    "attempt_id": "7df9950d-b310-48da-b35b-14b449c3d2dd",
+    "instance_id": "3ec9b730-dc48-4513-8644-9b90fea395c5",
+    "stage": "development",
+    "generation": 1,
+    "source_sha": "1a59fa71316557614fd389458820fe9f4f4934c7",
+    "checkpoint_sha": "1a59fa71316557614fd389458820fe9f4f4934c7",
+    "input_sha256": "bbf49deb283f554cfb091cee310f49338d8b9e1f9ecb1f0aa25481ef137573bb",
+    "version": 2,
+    "summary": "Approve bounded diagnostic implementation and Windows no-launch correction; no blocking defect found in actual diff. Candidate and pinned instruction hashes match. Independently ran eight pure publication/merge response tests successfully; inspected Root's completed 60-test diagnostic and 30-test native captures, each with one platform skip and confirmed cleanup. Positive/async fixture regression remains pending; full suite was not run under the explicit read-only restriction. Controller, CLI, pilot and whole-feature acceptance remain outside scope.",
+    "verdict": "approve",
+    "return_stage": null,
+    "findings": []
+  },
+  "validation_error": null,
+  "runner_sha256": "28b1c96ed37d8412fb21d9d6dd7c716a64bfc31afcb88270d95ff04582e1568e"
+}

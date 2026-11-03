@@ -1,0 +1,78 @@
+{
+  "diagnostic": {
+    "argv": [
+      "C:\\Users\\sibiya666\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+      "-B",
+      "-m",
+      "unittest",
+      "tests.test_pr_diagnostic_effects",
+      "tests.test_pr_failure_records",
+      "tests.test_pr_failed_observation",
+      "tests.test_pr_journal",
+      "tests.test_windows_job_launch",
+      "tests.test_processes",
+      "tests.test_executor_processes",
+      "tests.test_process_pid",
+      "-v"
+    ],
+    "runner_release": "7586df4ac2e59316521463b7526089c8314024e4",
+    "source_unchanged": true,
+    "verified_success": true,
+    "result": {
+      "status": "passed",
+      "exit_code": 0,
+      "started": true,
+      "cleanup_confirmed": true,
+      "pid": 203004,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 0,
+      "stdout_captured_bytes": 0,
+      "stdout_tail_unknown": false,
+      "stdout_truncated": false,
+      "stderr_sha256": "eacffcdf5d8b6e0fa67aacaabfb798358f802326086f72e512e18a1183e66021",
+      "stderr_bytes": 9787,
+      "stderr_captured_bytes": 9787,
+      "stderr_tail_unknown": false,
+      "stderr_truncated": false,
+      "duration_seconds": 323.734
+    },
+    "runner_sha256": "cf4f2e5732a7b089f69a0eb96b853056aaac8b9409f13a9c302ca0908243c488"
+  },
+  "positive_async_regression": {
+    "argv": [
+      "C:\\Users\\sibiya666\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+      "-B",
+      "-m",
+      "unittest",
+      "tests.test_pr_publication_effects.PublicationEffectsTests",
+      "tests.test_pr_merge_effects",
+      "tests.test_pr_source",
+      "tests.test_pr_publication_response",
+      "tests.test_pr_merge_response",
+      "tests.test_pr_merge_transaction",
+      "-v"
+    ],
+    "runner_release": "7586df4ac2e59316521463b7526089c8314024e4",
+    "source_unchanged": true,
+    "verified_success": true,
+    "result": {
+      "status": "passed",
+      "exit_code": 0,
+      "started": true,
+      "cleanup_confirmed": true,
+      "pid": 208880,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_bytes": 0,
+      "stdout_captured_bytes": 0,
+      "stdout_tail_unknown": false,
+      "stdout_truncated": false,
+      "stderr_sha256": "022c4c92f8429be7c446e3dd2b2893293bd6b0803dc87b30eb78ce56c3755527",
+      "stderr_bytes": 5262,
+      "stderr_captured_bytes": 5262,
+      "stderr_tail_unknown": false,
+      "stderr_truncated": false,
+      "duration_seconds": 432.156
+    },
+    "runner_sha256": "cf4f2e5732a7b089f69a0eb96b853056aaac8b9409f13a9c302ca0908243c488"
+  }
+}

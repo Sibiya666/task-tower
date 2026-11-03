@@ -155,8 +155,11 @@ def _observation(kind,value):
         elif key=='state_reason' and item!='completed': raise ValueError('Invalid Issue reason')
         elif key=='process':
             exact(item,{'pid','exit_code','started','cleanup_confirmed'})
-            integer(item['pid']); integer(item['exit_code'],-2**31,2**32-1)
             if type(item['started']) is not bool or type(item['cleanup_confirmed']) is not bool: raise ValueError('Invalid review process')
+            no_launch=(value['status']=='failed' and kind in ('pr_review','postmerge_review')
+                and item==dict(pid=None,exit_code=None,started=False,cleanup_confirmed=True))
+            if not no_launch:
+                integer(item['pid']); integer(item['exit_code'],-2**31,2**32-1)
     if value['status']=='confirmed':
         required=allowed[kind]-({'request_uuid'} if kind=='merge' else set())
         if not required<=set(value): raise ValueError('Incomplete effect observation')
@@ -164,7 +167,8 @@ def _observation(kind,value):
         if kind=='merge' and (value['result']!='merged' or value['main_sha']!=value['merge_commit']): raise ValueError('Unconfirmed merge')
         if kind in ('pr_review','postmerge_review') and (value['process']['started'] is not True or value['process']['cleanup_confirmed'] is not True or value['process']['exit_code']!=0): raise ValueError('Unclean review process')
     if value['status']=='failed':
-        if kind not in ('pr_review','postmerge_review') or 'process' not in value or value['process']['started'] is not True or value['process']['cleanup_confirmed'] is not True: raise ValueError('Unproven failed review cleanup')
+        if kind not in ('pr_review','postmerge_review') or 'process' not in value or value['process']['cleanup_confirmed'] is not True: raise ValueError('Unproven failed review cleanup')
+        if value['process']['started'] is not True and value['process']!=dict(pid=None,exit_code=None,started=False,cleanup_confirmed=True):raise ValueError('Unproven no-launch review')
 
 
 def _receipt(receipt):
