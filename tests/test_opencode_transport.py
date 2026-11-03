@@ -60,10 +60,17 @@ class TransportTests(unittest.TestCase):
             if os.name!='nt':self.assertEqual(os.fstat(stream.fileno()).st_nlink,0)
 
     def test_replace_after_producer_hash_before_runner_open(self):
-        spec=self.spec();self.path.unlink();self.path.write_bytes(self.data)
-        with patch.object(processes.shutil,'which',side_effect=AssertionError('lookup reached')):
+        spec=self.spec();retained=self.root/'retained-original.txt'
+        # Keep the original inode allocated: unlink/recreate may reuse its ID.
+        self.path.rename(retained);self.path.write_bytes(self.data)
+        self.assertEqual(identity(retained.stat()),spec['expected_identity'])
+        self.assertNotEqual(identity(self.path.stat()),spec['expected_identity'])
+        self.assertEqual(hashlib.sha256(self.path.read_bytes()).hexdigest(),spec['expected_sha256'])
+        with patch.object(processes.shutil,'which',side_effect=AssertionError('lookup reached')) as lookup:
             result=processes.run_command([sys.executable,'-c','pass'],self.root,3,stdin_spec=spec)
+        lookup.assert_not_called()
         self.assertFalse(result['started']);self.assertEqual(result['reason'],'stdin_binding_mismatch')
+        self.assertEqual(result['status'],'unavailable');self.assertTrue(result['cleanup_confirmed'])
 
     def test_staging_failure_closes_all_handles(self):
         with patch.object(processes,'_stdin_storage',side_effect=OSError('private stage failure')):
