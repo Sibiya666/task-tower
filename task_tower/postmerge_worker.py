@@ -55,7 +55,8 @@ class Worker:
         match = re.fullmatch(r'(?:https://github\.com/|git@github\.com:)([^\s]+?)(?:\.git)?/?', remote)
         if not match or match[1].lower().removesuffix('.git') != expected:
             raise ValueError('origin does not match the configured GitHub repository')
-        tasks._git(self.project, 'fetch', 'origin', 'main')
+        # Remote HTTPS teardown can outlast the short local-validation budget.
+        tasks._git(self.project, 'fetch', 'origin', 'main', timeout=60)
 
     def _mark(self, path, state, bundle, detail):
         return tasks.update_postmerge_state(path, state, bundle['merge_commit'], detail,

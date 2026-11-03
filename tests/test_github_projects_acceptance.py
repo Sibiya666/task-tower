@@ -24,6 +24,10 @@ class BooksAcceptanceTests(unittest.TestCase):
     def test_malformed_issue_row_is_visible_and_other_namespace_survives(self):
         def factory(connection):
             def transport(method, url, headers, payload, limit):
+                if url.endswith('/parent'):
+                    import urllib.error
+                    raise urllib.error.HTTPError(url,404,'Not Found',{},None)
+                if '/sub_issues?' in url: return b'[]'
                 rows = [None] if connection.id == 'one' else [dict(number=7, title='valid', body='')]
                 return json.dumps(rows).encode()
             return GitHubTasks(connection, transport=transport)

@@ -27,10 +27,10 @@ def _safe_path(path: Path) -> Path:
     return path.resolve()
 
 
-def _git(root: Path, *args: str) -> str:
+def _git(root: Path, *args: str, timeout: int = 10) -> str:
     try:
         result = subprocess.run(['git', '-C', str(root), *args], capture_output=True,
-                                text=True, timeout=10, check=True)
+                                text=True, timeout=timeout, check=True)
     except (OSError, subprocess.SubprocessError) as error:
         raise ValueError('Git validation failed: ' + ' '.join(args)) from error
     return result.stdout.strip()

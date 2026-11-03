@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "id": "TT-PIPELINE-001",
+  "title": "Run a durable local independently accepted spec/development/test pipeline",
+  "executor": "stage-pipeline-implementation-team",
+  "project_root": "../..",
+  "mode": "autonomous",
+  "status": "awaiting_merge",
+  "spec": "../superpowers/specs/2026-11-01-stage-pipeline-design.md",
+  "plan": "../superpowers/plans/2026-11-01-stage-pipeline.md",
+  "acceptance_criteria": [
+    "Installation-owned exact task policy and owner-bound continuation keep immutable criteria and fresh authority distinct from mutable stage projection",
+    "Host checkpoints and canonical stable input manifests bind fresh executor/reviewer instances; stale or forged model/card outputs cannot advance stages",
+    "Bounded rejection routes preserve history, independent spec/development/test acceptance and actual host test evidence",
+    "Durable local watch controller refills up to two independent authorized tasks without a chat, respecting component locks, limits and unknown-effect fencing",
+    "Trusted host commit/push/PR creation persists effect intents and reconciles unknown outcomes without blind replay; reviewable PR includes exact task marker",
+    "Windows-qualified process containment, private state, pins, stripped child token variables and explicit capability limits preserve legacy executor and postmerge contracts",
+    "Independent stages, exact-head/base PR and exact-main postmerge acceptance precede publisher-driven Issue16 closure; awaiting_pr is not Done",
+    "Current native execution is Windows-qualified; unsupported pipeline work/watch/helpers fail closed before side effects, while portable read/control contracts and all applicable three-platform CI remain; Linux/macOS native support is deferred to Issues59/60"
+  ],
+  "stages": {
+    "spec": {
+      "status": "accepted",
+      "reviewer": "windows_scope_spec_acceptance",
+      "evidence": "evidence/TT-PIPELINE-001/task6-spec-review.md",
+      "sha256": "d495c4b735952ef34808a6f0671bf453888c96337ecff95050d3b99909fa0d8e",
+      "hash_scheme": "sha256-utf8-lf-v1"
+    },
+    "development": {
+      "status": "accepted",
+      "reviewer": "pipeline_development_acceptance",
+      "evidence": "evidence/TT-PIPELINE-001/development-review.md",
+      "sha256": "a9d4ebf285894c56efe6e8f1fa63f62cc9cbce1fbc58dc73198edb5c9288bdc1",
+      "hash_scheme": "sha256-utf8-lf-v1"
+    },
+    "test": {
+      "status": "accepted",
+      "reviewer": "windows_pipeline_test_acceptance",
+      "evidence": "evidence/TT-PIPELINE-001/test-review.md",
+      "sha256": "c5d6fb0b5f2e62229d1ec9e3178bf072d350a1258867aab821b8c964911260ba",
+      "hash_scheme": "sha256-utf8-lf-v1"
+    },
+    "postmerge": {
+      "status": "pending"
+    }
+  }
+}

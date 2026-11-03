@@ -30,6 +30,10 @@ class PublicationBookTests(unittest.TestCase):
         self.set_receipt()
     def request(self,method,path,payload=None):
         if '/comments?' in path: return self.comments
+        if path.endswith('/parent'):
+            from task_tower.github_tasks import GitHubRequestError
+            raise GitHubRequestError(http_status=404)
+        if '/sub_issues?' in path: return []
         if '/compare/' in path: return {'status':'ahead'}
         self.fail('Unexpected request '+path)
     def set_receipt(self,author='publisher'):

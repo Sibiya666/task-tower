@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -7,6 +7,7 @@ using System.Web.Script.Serialization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Interop;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
@@ -23,6 +24,8 @@ public sealed class TowerHost : Window
     readonly DispatcherTimer timer = new DispatcherTimer();
     readonly DispatcherTimer deadline = new DispatcherTimer();
     readonly JavaScriptSerializer json = new JavaScriptSerializer();
+    readonly BooksBridge books;
+    readonly string booksPython;
     Process collector;
     bool ready, collapsed;
     bool floorView;
@@ -83,7 +86,8 @@ public sealed class TowerHost : Window
 
     TowerHost(string folder,string python,bool smoke)
     {
-        this.folder=folder;this.smoke=smoke;
+        this.folder=folder;this.smoke=smoke;booksPython=python;
+        books=BooksBridge.FromConfiguration(Environment.GetEnvironmentVariable("TASK_TOWER_CONNECTIONS"));
         snapshotPath=Path.Combine(folder,"runtime/snapshot-"+Process.GetCurrentProcess().Id+".json");
         Title=WindowTitle;Width=650;MinWidth=470;MaxWidth=1000;
         Height=560;MinHeight=560;MaxHeight=560;
@@ -94,6 +98,7 @@ public sealed class TowerHost : Window
         Top=Math.Max(0,SystemParameters.WorkArea.Bottom-590);
         Icon=BitmapFrame.Create(new Uri(Path.Combine(folder,"assets/tower-icon.ico")));
         Content=web;
+        PreviewKeyDown+=(s,e)=>HandleBooksKeyDown(e,Keyboard.Modifiers);
         Directory.CreateDirectory(Path.Combine(folder,"runtime"));
         collector=Process.Start(new ProcessStartInfo(python,"\""+Path.Combine(folder,"collector.py")+"\" --watch --output \""+snapshotPath+"\""){
             UseShellExecute=false,CreateNoWindow=true,WorkingDirectory=folder});
@@ -105,7 +110,7 @@ public sealed class TowerHost : Window
         SourceInitialized+=(s,e)=>HwndSource.FromHwnd(new WindowInteropHelper(this).Handle).AddHook(WindowMessages);
         ContentRendered+=(s,e)=>{ShowWindow(new WindowInteropHelper(this).Handle,5);KeepInsideMonitor();};
         Closed+=(s,e)=>{
-            timer.Stop();deadline.Stop();ready=false;
+            timer.Stop();deadline.Stop();ready=false;books.Dispose();
             try{web.Dispose();}catch{}
             if(collector!=null){try{if(!collector.HasExited){collector.Kill();collector.WaitForExit(2000);}}catch{}collector.Dispose();}
         };
@@ -123,11 +128,18 @@ public sealed class TowerHost : Window
             core.Settings.IsZoomControlEnabled=false;
             core.Settings.AreBrowserAcceleratorKeysEnabled=false;
             core.SetVirtualHostNameToFolderMapping("tower.local",Path.Combine(folder,"web"),CoreWebView2HostResourceAccessKind.DenyCors);
-            core.NavigationStarting+=(s,e)=>{Uri uri;if(!Uri.TryCreate(e.Uri,UriKind.Absolute,out uri)||uri.Scheme!="https"||uri.Host!="tower.local")e.Cancel=true;};
+            core.NavigationStarting+=(s,e)=>{if(e.Uri!="https://tower.local/index.html")e.Cancel=true;};
             core.NewWindowRequested+=(s,e)=>e.Handled=true;
             core.WebMessageReceived+=(s,e)=>{
-                if(!e.Source.StartsWith("https://tower.local/",StringComparison.Ordinal))return;
+                if(e.Source!="https://tower.local/index.html")return;
                 try{
+                    string bookAction,bookUrl;
+                    if(BooksBridge.TryMessage(e.Source,e.WebMessageAsJson,out bookAction,out bookUrl)){
+                        if(bookAction=="books-refresh")GC.KeepAlive(RefreshBooksAsync());
+                        else OpenBookSource(bookUrl);
+                        return;
+                    }
+                    if(System.Text.Encoding.UTF8.GetByteCount(e.WebMessageAsJson)>16384)return;
                     var message=json.Deserialize<System.Collections.Generic.Dictionary<string,string>>(e.WebMessageAsJson);
                     string action;if(!message.TryGetValue("action",out action))return;
                     switch(action){
@@ -170,6 +182,35 @@ public sealed class TowerHost : Window
     }
 
     void SetHeight(double height){MinHeight=0;MaxHeight=double.PositiveInfinity;Height=height;MinHeight=height;MaxHeight=height;}
+    static bool IsBooksDocument(string source){return source=="https://tower.local/index.html";}
+    void HandleBooksKeyDown(KeyEventArgs e,ModifierKeys modifiers)
+    {
+        // A focused native window need not have controller/DOM keyboard focus.
+        if(e.Handled || e.Key!=Key.B || modifiers!=ModifierKeys.Control || !ready ||
+           web.CoreWebView2==null)return;
+        e.Handled=true;
+        // WebView APIs must run after the native accelerator callback returns.
+        Dispatcher.BeginInvoke(new Action(async ()=>{
+            try{
+                if(ready && web.CoreWebView2!=null && IsBooksDocument(web.CoreWebView2.Source))
+                    await web.CoreWebView2.ExecuteScriptAsync("window.BooksView && window.BooksView.open()");
+            }catch(Exception ex){Log(ex);}
+        }));
+    }
+    public Task RefreshBooksAsync()
+    {
+        return books.RefreshAsync(BooksBridge.HelperStartInfo(booksPython,Path.GetDirectoryName(folder)),raw=>{
+            long attemptId=books.AttemptId;
+            Dispatcher.BeginInvoke(new Action(()=>{
+                // Queued callbacks from a closed/superseded attempt cannot repaint.
+                if(ready && books.AttemptId==attemptId)web.CoreWebView2.PostWebMessageAsJson(raw);
+            }));
+        });
+    }
+    public bool OpenBookSource(string url)
+    {
+        return books.OpenSource(url,target=>Process.Start(new ProcessStartInfo(target){UseShellExecute=true}));
+    }
     void PushSnapshot()
     {
         if(!ready)return;
@@ -178,6 +219,98 @@ public sealed class TowerHost : Window
             if(raw==lastData)return;
             web.CoreWebView2.PostWebMessageAsJson(raw);lastData=raw;
         }catch(IOException){}catch(Exception ex){Log(ex);}
+    }
+
+    async Task SmokeBooksAssert(string expression,string message)
+    {
+        if(await web.CoreWebView2.ExecuteScriptAsync(expression)!="true")throw new Exception("Books smoke: "+message);
+    }
+
+    async Task SmokeBooks()
+    {
+        // Real WPF event arguments, explicit synthetic modifiers; not OS keyboard input.
+        var shortcut=typeof(TowerHost).GetMethod("HandleBooksKeyDown",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic);
+        if(shortcut==null)throw new Exception("Books smoke: native shortcut handler missing");
+        foreach(var source in new[]{"https://tower.local/other.html","https://tower.local/index.html?x","https://tower.local/index.html#x","https://tower.local.evil/index.html",null})
+            if(IsBooksDocument(source))throw new Exception("Books smoke: native shortcut source guard");
+        if(!IsBooksDocument("https://tower.local/index.html"))throw new Exception("Books smoke: native shortcut trusted source");
+        var handledArgs=new KeyEventArgs(Keyboard.PrimaryDevice,PresentationSource.FromVisual(this),0,Key.B);
+        handledArgs.RoutedEvent=Keyboard.PreviewKeyDownEvent;handledArgs.Handled=true;
+        shortcut.Invoke(this,new object[]{handledArgs,ModifierKeys.Control});
+        await Task.Delay(100);
+        await SmokeBooksAssert("document.getElementById('books-dialog').hidden","already-handled native shortcut excluded");
+        Action<System.Windows.Input.Key,System.Windows.Input.ModifierKeys,bool> checkShortcut=(key,modifiers,expected)=>{
+            var args=new System.Windows.Input.KeyEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,PresentationSource.FromVisual(this),0,key);
+            args.RoutedEvent=System.Windows.Input.Keyboard.PreviewKeyDownEvent;
+            shortcut.Invoke(this,new object[]{args,modifiers});
+            if(args.Handled!=expected)throw new Exception("Books smoke: native shortcut admission mismatch");
+        };
+        checkShortcut(System.Windows.Input.Key.B,System.Windows.Input.ModifierKeys.None,false);
+        foreach(var extra in new[]{System.Windows.Input.ModifierKeys.Shift,System.Windows.Input.ModifierKeys.Alt,System.Windows.Input.ModifierKeys.Windows})
+            checkShortcut(System.Windows.Input.Key.B,System.Windows.Input.ModifierKeys.Control|extra,false);
+        checkShortcut(System.Windows.Input.Key.C,System.Windows.Input.ModifierKeys.Control,false);
+        ready=false;checkShortcut(System.Windows.Input.Key.B,System.Windows.Input.ModifierKeys.Control,false);ready=true;
+        checkShortcut(System.Windows.Input.Key.B,System.Windows.Input.ModifierKeys.Control,true);
+        await Task.Delay(150);
+        await SmokeBooksAssert("!document.getElementById('books-dialog').hidden","native WPF shortcut opens without DOM key event");
+        await web.CoreWebView2.ExecuteScriptAsync("BooksView.close()");
+        // Deterministic public fixtures are confined to -SmokeTest, never source evidence.
+        await web.CoreWebView2.ExecuteScriptAsync("document.getElementById('pin').focus();document.dispatchEvent(new KeyboardEvent('keydown',{key:'b',code:'KeyB',ctrlKey:true,bubbles:true,cancelable:true}))");
+        var helperWait=Stopwatch.StartNew();
+        while(books.IsRefreshing && helperWait.ElapsedMilliseconds<125000)await Task.Delay(50);
+        if(books.IsRefreshing)throw new Exception("Books smoke: helper did not finish within bounded wait");
+        await Task.Delay(100);
+        await SmokeBooksAssert("!document.getElementById('books-dialog').hidden && document.getElementById('books-dialog').contains(document.activeElement)","Ctrl+B handler/focus");
+        var fixture=new {kind="books",version=1,sequence=1,final=false,state="partial",fetched_at=DateTime.UtcNow.ToString("o"),entries=new[]{new {id="smoke/fixture#1",number=1,repository="smoke/fixture",project="native-smoke",book="tasks",title="Native Books fixture — Unicode",status="active",verification="pending",remote_state="closed",description="<img src=x onerror=alert(1)>",source="https://github.com/smoke/fixture/issues/1",relationships=new {parent=(object)null,sub_issues=new object[0],milestone=(object)null}}},errors=new object[0]};
+        web.CoreWebView2.PostWebMessageAsJson(json.Serialize(fixture));
+        await Task.Delay(150);
+        await SmokeBooksAssert("document.querySelectorAll('.books-card').length===1 && document.getElementById('books-records').textContent.includes('pending')","progressive pending fixture rendered via native message");
+        await web.CoreWebView2.ExecuteScriptAsync("document.querySelector('.books-card button:last-child').click()");
+        await SmokeBooksAssert("document.getElementById('books-detail').textContent.includes('<img src=x') && !document.querySelector('#books-detail img')","plain text detail");
+        checkShortcut(Key.B,ModifierKeys.Control,true);await Task.Delay(100);
+        await SmokeBooksAssert("Boolean(document.getElementById('books-detail'))","native shortcut preserves open detail selection");
+        using(var stream=File.Create(Path.Combine(folder,"runtime/books-native-overview.png")))
+            await web.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png,stream);
+        await web.CoreWebView2.ExecuteScriptAsync("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}))");
+        await SmokeBooksAssert("!document.getElementById('books-detail') && !document.getElementById('books-dialog').hidden","Escape detail first");
+        await web.CoreWebView2.ExecuteScriptAsync("const bs=[...document.querySelectorAll('#books-dialog button,#books-dialog select')].filter(n=>!n.disabled);bs.at(-1).focus();document.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',bubbles:true,cancelable:true}))");
+        await SmokeBooksAssert("document.activeElement===document.querySelector('#books-dialog button')","Tab boundary trap handler");
+        await web.CoreWebView2.ExecuteScriptAsync("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Tab',shiftKey:true,bubbles:true,cancelable:true}))");
+        await SmokeBooksAssert("document.activeElement===[...document.querySelectorAll('#books-dialog button,#books-dialog select')].filter(n=>!n.disabled).at(-1)","Shift+Tab boundary trap handler");
+        // No source opener receives an allowed URL. Verify the production bridge rejects bad input.
+        if(OpenBookSource("https://github.com.evil/smoke/fixture/issues/1"))throw new Exception("Books smoke: native invalid source accepted");
+        using(var sourceBoundary=new BooksBridge(new[]{"smoke/fixture"},new string[0])){
+            int opened=0;
+            if(!sourceBoundary.OpenSource("https://github.com/smoke/fixture/issues/1",url=>opened++))throw new Exception("Books smoke: configured source rejected");
+            if(sourceBoundary.OpenSource("https://github.com/other/repo/issues/1",url=>opened++) || opened!=1)throw new Exception("Books smoke: source allowlist boundary failed");
+        }
+        await web.CoreWebView2.ExecuteScriptAsync("BooksView.acceptSnapshot({kind:'books',version:1,sequence:2,final:true,state:'unavailable',stale:true,fetched_at:null,entries:[],errors:[{project:'native-smoke',error:'Smoke unavailable fixture'}]})");
+        await SmokeBooksAssert("document.getElementById('books-health').textContent.includes('unavailable')","unavailable state");
+        await web.CoreWebView2.ExecuteScriptAsync("document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true,cancelable:true}))");
+        await SmokeBooksAssert("document.getElementById('books-dialog').hidden && document.activeElement.id==='pin'","dialog Escape/focus restoration");
+        await web.CoreWebView2.ExecuteScriptAsync("document.dispatchEvent(new KeyboardEvent('keydown',{key:'F10',shiftKey:true,bubbles:true,cancelable:true}))");
+        await SmokeBooksAssert("!document.getElementById('world-menu').hidden","context keyboard handler");
+        await web.CoreWebView2.ExecuteScriptAsync("document.querySelector('#world-menu button').click()");
+        await SmokeBooksAssert("!document.getElementById('books-dialog').hidden","context Books entry");
+        await web.CoreWebView2.ExecuteScriptAsync("BooksView.close();document.getElementById('world-menu').hidden=true");
+        using(var failedHelper=new BooksBridge(new string[0],new string[0])){
+            var start=BooksBridge.HelperStartInfo(Path.Combine(folder,"runtime/nonexistent-smoke-python.exe"),Path.GetDirectoryName(folder));
+            await failedHelper.RefreshAsync(start,raw=>web.CoreWebView2.PostWebMessageAsJson(raw),1000);
+            await Task.Delay(100);
+            await web.CoreWebView2.ExecuteScriptAsync("BooksView.open()");
+            await SmokeBooksAssert("document.getElementById('books-health').textContent.includes('unavailable')","actual helper launch failure reaches view");
+            await web.CoreWebView2.ExecuteScriptAsync("BooksView.close();document.getElementById('world-menu').hidden=true");
+        }
+        await web.CoreWebView2.ExecuteScriptAsync("document.querySelector('.overview-floor').click()");await Task.Delay(150);
+        var compactBounds=new Rect(Left,Top,Width,Height);
+        await web.CoreWebView2.ExecuteScriptAsync("BooksView.open()");
+        await Task.Delay(100);
+        await SmokeBooksAssert("!document.getElementById('books-dialog').hidden && document.getElementById('books-dialog').scrollWidth<=document.getElementById('books-dialog').clientWidth","compact modal horizontal fit");
+        if(new Rect(Left,Top,Width,Height)!=compactBounds)throw new Exception("Books smoke: dialog changed native bounds");
+        using(var stream=File.Create(Path.Combine(folder,"runtime/books-native-compact.png")))
+            await web.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png,stream);
+        await web.CoreWebView2.ExecuteScriptAsync("BooksView.close();document.getElementById('back-icon').click()");await Task.Delay(150);
+        File.WriteAllText(Path.Combine(folder,"runtime/books-native-result.txt"),"PASS: real composition WebView2 public fixture message; synthetic DOM Ctrl+B/Tab/Shift+Tab/Escape handlers and focus; inert detail; native source rejection and recording allowlist; unavailable fixture; compact bounds/fit; CoreWebView2 captures. This is not hardware keyboard or human acceptance.");
     }
 
     async Task SmokeTest()
@@ -239,7 +372,8 @@ public sealed class TowerHost : Window
                 await web.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png,stream);
             using(var bitmap=new System.Drawing.Bitmap(Path.Combine(folder,"runtime/html-host-smoke.png")))
                 if(bitmap.GetPixel(0,0).A!=0)throw new Exception("WebView capture background is opaque");
-            File.WriteAllText(Path.Combine(folder,"runtime/html-host-result.txt"),"PASS: transparent composition window, clear alpha background, native pin controls, live towers, wide-window layout");
+            await SmokeBooks();
+            File.WriteAllText(Path.Combine(folder,"runtime/html-host-result.txt"),"PASS: Books native smoke; transparent composition window, clear alpha background, native pin controls, live towers, wide-window layout");
         }catch(Exception ex){result=1;File.WriteAllText(Path.Combine(folder,"runtime/html-host-result.txt"),"FAIL: "+ex);}
         Close();
     }

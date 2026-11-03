@@ -53,6 +53,9 @@ def main(argv=None):
     if supplied and supplied[0] == "executor":
         from .executor import main as executor_main
         return executor_main(supplied[1:])
+    if supplied and supplied[0] == 'pipeline':
+        from .pipeline import main as pipeline_main
+        return pipeline_main(supplied[1:])
     if supplied and supplied[0] == "dispatcher":
         from .dispatcher import main as dispatcher_main
         return dispatcher_main(supplied[1:])
