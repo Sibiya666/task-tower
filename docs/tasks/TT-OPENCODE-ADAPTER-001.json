@@ -20,9 +20,9 @@
   "stages": {
     "spec": {
       "status": "accepted",
-      "reviewer": "opencode-wire-spec-reviewer",
-      "evidence": "evidence/TT-OPENCODE-ADAPTER-001/wire-spec-review.md",
-      "sha256": "40be335cdc89eae5611313473e5f6567fbbb702f9443972b10ba20361a915dc6",
+      "reviewer": "independent-boundary-spec-reviewer",
+      "evidence": "evidence/TT-OPENCODE-ADAPTER-001/template-spec-review.md",
+      "sha256": "34963936760161d36db075e45325d4921799906ce5a1a26b944fcebd98db9aaa",
       "hash_scheme": "sha256-utf8-lf-v1"
     },
     "development": {
