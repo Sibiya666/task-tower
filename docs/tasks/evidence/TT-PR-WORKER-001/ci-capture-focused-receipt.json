@@ -1,0 +1,42 @@
+{
+  "modules": [
+    "tests.test_pr_evidence",
+    "tests.test_postmerge_worker",
+    "tests.test_github_publication",
+    "tests.test_project_worker",
+    "tests.test_reviewer"
+  ],
+  "argv": [
+    "C:\\Users\\sibiya666\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+    "-m",
+    "unittest",
+    "tests.test_pr_evidence",
+    "tests.test_postmerge_worker",
+    "tests.test_github_publication",
+    "tests.test_project_worker",
+    "tests.test_reviewer",
+    "-v"
+  ],
+  "runner_release": "7586df4ac2e59316521463b7526089c8314024e4",
+  "source_unchanged": true,
+  "verified_success": true,
+  "result": {
+    "status": "passed",
+    "exit_code": 0,
+    "started": true,
+    "cleanup_confirmed": true,
+    "pid": 200140,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 0,
+    "stdout_captured_bytes": 0,
+    "stdout_tail_unknown": false,
+    "stdout_truncated": false,
+    "stderr_sha256": "152fadbecf4a0749ea1f218f10c9acc779ec6104cd900cbb94ddc3462f63c743",
+    "stderr_bytes": 15447,
+    "stderr_captured_bytes": 15447,
+    "stderr_tail_unknown": false,
+    "stderr_truncated": false,
+    "duration_seconds": 345.125
+  },
+  "runner_sha256": "3134ef4d17e467ac9f41fbdb39f9f482f84bc5669d359f4ebc49e60388536543"
+}

@@ -5,10 +5,50 @@ import hashlib
 import json
 from pathlib import Path
 import unittest
+import os
+import subprocess
+import tempfile
+from unittest.mock import patch
 
 from tests import test_pipeline_publish as pipeline_fixture
 from task_tower import pr_evidence as evidence
 from task_tower.pr_policy import policy_fingerprint
+
+
+class OwnedCaptureDirectoryTests(unittest.TestCase):
+    def test_owned_canonical_temp_runs_real_git(self):
+        with tempfile.TemporaryDirectory() as directory:
+            self.assertTrue(evidence._git(Path(directory).resolve(),'--version').startswith(b'git version '))
+
+    def test_owned_temp_under_os_style_alias_is_canonicalized_but_callers_are_not(self):
+        from task_tower.processes import run_command
+        from task_tower.pr_review import _private_directory
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory).resolve(); target=root/'physical';target.mkdir()
+            alias=root/'alias'
+            try:
+                alias.symlink_to(target,target_is_directory=True)
+            except OSError:
+                if os.name!='nt': self.skipTest('Directory symlinks unavailable')
+                result=subprocess.run(['cmd','/c','mklink','/J',str(alias),str(target)],capture_output=True)
+                if result.returncode: self.skipTest('Directory symlinks and junctions unavailable')
+            try:
+                factory=tempfile.TemporaryDirectory
+                def owned_temp(**kwargs):
+                    return factory(dir=alias,**kwargs)
+                # Only the OS temp creation boundary is controlled; the real
+                # Git runner and strict capture validator execute unchanged.
+                with patch.object(evidence.tempfile,'TemporaryDirectory',side_effect=owned_temp):
+                    self.assertTrue(evidence._git(root,'--version').startswith(b'git version '))
+                caller_output=alias/'caller-output';caller_output.mkdir()
+                with self.assertRaisesRegex(ValueError,'unsafe_capture_directory'):
+                    run_command(['git','--version'],root,10,capture=dict(directory=caller_output,max_bytes_per_stream=4096))
+                with self.assertRaises(ValueError):
+                    _private_directory(alias/'review-output',root/'checkout')
+                self.assertFalse((target/'review-output').exists())
+            finally:
+                if alias.is_symlink(): alias.unlink()
+                else: os.rmdir(alias)
 
 
 class EvidenceTests(unittest.TestCase):

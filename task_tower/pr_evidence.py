@@ -26,7 +26,10 @@ def _git(root,*args):
     # hooks/fsmonitor and requires complete bounded capture with child cleanup.
     from .pr_source import _git as read_git
     with tempfile.TemporaryDirectory(prefix='pr-evidence-git-') as directory:
-        return read_git(Path(root),list(args),Path(directory))
+        # The OS may spell its temp root through an alias (macOS /var).
+        # Canonicalize only this exclusively host-created directory; caller
+        # paths and the downstream capture/reparse checks stay unchanged.
+        return read_git(Path(root),list(args),Path(directory).resolve(strict=True))
 
 
 def _retained_artifact(profile,attempt,key):
