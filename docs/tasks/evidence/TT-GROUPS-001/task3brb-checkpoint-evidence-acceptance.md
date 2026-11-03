@@ -1,0 +1,9 @@
+# Task3BRb checkpoint/evidence syntax
+
+Pure closed checkpoint return2 and named publication evidence manifest2 preserve the actual producer field sets, original product manifest1, nullable artifact/evidence digests, file modes and hash schemes. Product hash must match the unchanged manifest1 representation. Unknown/missing fields, Boolean versions/epochs, unsafe paths, case aliases and wrong modes/schemes/digests refuse. These helpers neither create checkpoints nor establish source/base epoch, resource, workspace or accepted-main authority. Existing legacy producers and registered-execution refusal remain unchanged.
+
+Root TDD: four missing-helper failures preserved in runtime/verification/groups18-checkpoint-wire-red. Exact green run runtime/verification/groups18-checkpoint-wire-green passed **19 tests** (0.025s unittest, 0.203s actual), exit0, complete EOF, cleanup confirmed and source unchanged; stderr SHA25642c99f439970517f2df8922b362fc404a7528bc170b4b0a2ab9672f1b7c57cdd. The review request incorrectly said20; reviewer independently checked retained output and corrected the count to19. No full-suite claim follows.
+
+Independent reviewer20896e04-be6f-42fa-a411-8f79272ed0ab approved the exact code/test hashes in task3brb-checkpoint-evidence-source.json. Actual45.890s, exit0, complete187093 stdout/9098 stderr, cleanup and unchanged source/executable. Full structured verdict is task3brb-checkpoint-evidence-native-review.json. Reviewer did not rerun tests.
+
+Actual group producers/consumers, invocation wrapper/verdict syntax, resources/workspace/current epochs, Task17 interoperability and original Windows hot recovery65 remain pending. This is bounded implementation acceptance, not whole Issue18, PR/main acceptance, automatic closure or night readiness. Fresh exact-head CI remains required.

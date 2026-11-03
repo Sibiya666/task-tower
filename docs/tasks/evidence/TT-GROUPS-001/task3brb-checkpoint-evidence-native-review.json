@@ -1,0 +1,41 @@
+{
+  "host_only_capture_limit_bytes": 1048576,
+  "qualified_current_review": true,
+  "source_unchanged": true,
+  "binary_unchanged": true,
+  "result": {
+    "status": "passed",
+    "exit_code": 0,
+    "started": true,
+    "cleanup_confirmed": true,
+    "pid": 190920,
+    "stdout_sha256": "7cf2252e1218b17040c7f63f7f8de2bccab39ce1ea710e087d0e7d5188e3c474",
+    "stdout_bytes": 187093,
+    "stdout_captured_bytes": 187093,
+    "stdout_tail_unknown": false,
+    "stdout_truncated": false,
+    "stderr_sha256": "19c71797c4d0554b96ab331f3ab2776590156d9bf1ee2256833bcb148116bbf2",
+    "stderr_bytes": 9098,
+    "stderr_captured_bytes": 9098,
+    "stderr_tail_unknown": false,
+    "stderr_truncated": false,
+    "duration_seconds": 45.89
+  },
+  "verdict": {
+    "run_id": "19cfe6d0-d713-4463-9a93-96eb6e4021c9",
+    "attempt_id": "2b30c4c0-f787-41bd-8d2e-277cf8e47d52",
+    "instance_id": "20896e04-be6f-42fa-a411-8f79272ed0ab",
+    "stage": "development",
+    "generation": 1,
+    "source_sha": "54a3432fea4a421570249c95e2e4a23368961ff6",
+    "checkpoint_sha": "54a3432fea4a421570249c95e2e4a23368961ff6",
+    "input_sha256": "7f79b290d12a1346473099f251f09eabac0b0b04aa6d96b3fa35a45b438a1808",
+    "version": 2,
+    "summary": "Approved bounded checkpoint2/evidence2 syntax: actual producer fields, product manifest1, nullable digests, modes, schemes and path rules preserved; no execution authority added. HEAD and all pinned instruction/candidate hashes verified. Inspected retained green receipt: 19 tests passed, despite request describing 20. Tests not rerun under read-only constraints. Deferred producers, durable consumers, epoch/workspace/resource authority and accepted-main readiness are outside this slice.",
+    "verdict": "approve",
+    "return_stage": null,
+    "findings": []
+  },
+  "validation_error": null,
+  "runner_sha256": "d2f5a791d75fbe55ae6cdd6278ba03f082c7a2543e459313ebf9931ec0aacfda"
+}

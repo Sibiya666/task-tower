@@ -151,3 +151,5 @@ Active-chat authorization continues to the next eligible backlog task after ever
 Task3BRb now has [bounded pure epoch/stage2/role3 shape acceptance](docs/tasks/evidence/TT-GROUPS-001/task3brb-stage-role-acceptance.md). These helpers do not choose a live run kind or grant epoch/resource/workspace authority. Legacy stage1/role2 file consumers remain exact; remaining group bodies and all durable consumers stay gated.
 
 Task3BRb pure request3/check-aggregate2 syntax and owned macOS temporary-path fixture correction have [bounded acceptance](docs/tasks/evidence/TT-GROUPS-001/task3brb-request-check-acceptance.md). Actual group producers, instructions/check membership/current-epoch proof and durable consumers remain gated; parser shape success is not execution authority.
+
+Pure group checkpoint2/evidence2 syntax has bounded independent acceptance; see docs/tasks/evidence/TT-GROUPS-001/task3brb-checkpoint-evidence-acceptance.md. Product manifest1 and legacy producers remain unchanged; syntax never grants group execution or epoch authority. Actual resource/workspace/epoch consumers and Windows hot recovery65 remain required.

@@ -1,0 +1,7 @@
+{
+  "base": "54a3432fea4a421570249c95e2e4a23368961ff6",
+  "files": {
+    "task_tower/group_wire.py": "b1613f80c3bdcfe50c5f9340bc2ecd9893fdd5e04dac7c54b998cffe74d851a7",
+    "tests/test_group_checkpoint_wire.py": "6bbf82f0ccb10f778a319383be0d69d81cc520e423f34288de66936ae5a1fbff"
+  }
+}

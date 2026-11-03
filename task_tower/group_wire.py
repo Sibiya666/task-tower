@@ -10,9 +10,68 @@ import math
 from .pipeline_inputs import STAGE_FIELDS, validate_stage_manifest, digest_manifest
 from .executor_harness import ROLE_BINDING, role_result_schema, _validate_role_result_value
 from .executor_queue import _uuid
+from .pipeline_inputs import _relative, canonical_json, MANIFEST_LIMIT
 
 EPOCH_FIELDS=frozenset({'base_epoch','base_epoch_sha256','scope_base_sha',
     'diff_base_sha','accepted_main_proof_sha256','task_delta_sha256'})
+
+
+def _wire_digest(value,size=64):
+    if not isinstance(value,str) or not re.fullmatch('[a-f0-9]{'+str(size)+'}',value):
+        raise ValueError('Invalid group wire digest')
+
+
+def _wire_files(files,*,product):
+    if not isinstance(files,list) or len(files)>100000:
+        raise ValueError('Invalid group wire files')
+    seen=set()
+    for entry in files:
+        if not isinstance(entry,dict) or set(entry)!=({'path','mode','scheme','sha256'} if product else {'path','scheme','sha256'}):
+            raise ValueError('Invalid group wire file entry')
+        path=_relative(entry['path'])
+        if path.endswith('/') or path.casefold() in seen:
+            raise ValueError('Invalid group wire file alias')
+        seen.add(path.casefold())
+        if product and entry['mode'] not in ('100644','100755'):
+            raise ValueError('Invalid group product mode')
+        schemes=('sha256-bytes-v1','sha256-utf8-lf-v2') if product else ('sha256-utf8-lf-v2',)
+        if entry['scheme'] not in schemes: raise ValueError('Invalid group file scheme')
+        _wire_digest(entry['sha256'])
+
+
+def validate_group_checkpoint_shape(value):
+    """Exact produced return syntax only; no checkpoint or epoch proof."""
+    fields={'version','source_sha','base_sha','checkpoint_sha','product_sha256','manifest',
+        'evidence_manifest_sha256','spec_sha256','plan_sha256'}|EPOCH_FIELDS
+    if (not isinstance(value,dict) or set(value)!=fields
+            or type(value['version']) is not int or value['version']!=2):
+        raise ValueError('Invalid group checkpoint shape')
+    validate_epoch_shape({key:value[key] for key in EPOCH_FIELDS})
+    for key in ('source_sha','base_sha','checkpoint_sha'): _wire_digest(value[key],40)
+    _wire_digest(value['product_sha256'])
+    for key in ('evidence_manifest_sha256','spec_sha256','plan_sha256'):
+        if value[key] is not None: _wire_digest(value[key])
+    manifest=value['manifest']
+    if (not isinstance(manifest,dict) or set(manifest)!={'version','files'}
+            or type(manifest['version']) is not int or manifest['version']!=1):
+        raise ValueError('Invalid group product manifest')
+    _wire_files(manifest['files'],product=True)
+    if len(canonical_json(manifest))>MANIFEST_LIMIT or digest_manifest(manifest)!=value['product_sha256']:
+        raise ValueError('Invalid group product manifest digest or size')
+    return value
+
+
+def validate_group_evidence_shape(value):
+    """Named publication evidence syntax only; no accepted product proof."""
+    if (not isinstance(value,dict) or set(value)!={'version','run_id','task_id','product_sha256','files'}|EPOCH_FIELDS
+            or type(value['version']) is not int or value['version']!=2):
+        raise ValueError('Invalid group evidence shape')
+    validate_epoch_shape({key:value[key] for key in EPOCH_FIELDS})
+    _uuid(value['run_id'])
+    if not isinstance(value['task_id'],str) or not re.fullmatch('TT-[A-Z0-9]+(?:-[A-Z0-9]+)*',value['task_id']):
+        raise ValueError('Invalid group evidence task')
+    _wire_digest(value['product_sha256']); _wire_files(value['files'],product=False)
+    return value
 
 
 def validate_epoch_shape(value):
