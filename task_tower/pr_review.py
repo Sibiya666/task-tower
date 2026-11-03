@@ -148,6 +148,9 @@ class PRReviewRunner:
                 '. Review the complete actual diff and binary manifest, accepted artifacts, criteria and CI. '
                 'Do not implement changes. Check authorization, workflows and policy have not been weakened. '
                 'Acknowledge binary/UI limitations in summary; use needs_input if criteria cannot be checked. '
+                'Read only this immutable request, its bound checkout and explicitly pinned instructions. '
+                'Private provenance paths are identifiers only: do not open installation configuration, '
+                'journals, account settings or credential files. '
                 'Return only the required PR review JSON.']
         process=run_command(command,checkout,timeout,env=child_environment(os.environ),
             cancel_requested=cancel_requested,capture=dict(directory=str(output),max_bytes_per_stream=limit))

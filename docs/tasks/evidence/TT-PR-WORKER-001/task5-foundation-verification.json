@@ -1,0 +1,192 @@
+{
+  "candidate": {
+    "base": "06b65e106e5ab77929ace4ae6a838b3d98098a5a",
+    "files": {
+      "task_tower/processes.py": "ac15afb4bbe73108f8777dcfb495337c2fd59b1a5bbb5ef0c6a8e17bc93948c2",
+      "task_tower/pr_persistence.py": "af5014d1b3a3dcb9f360d46734e8ec6eb7c13de3f1d5755c6fe5e5d883aa8cb8",
+      "task_tower/pr_worker.py": "a8c06f6591c3e69822cba200d90c0571602736eebec045677b7bb325c8ab2462",
+      "task_tower/pr_review.py": "f5d471a8deba6bccb16d4a840669ce90aaa31d5d36eb75b98c46bcd295f3a2a9",
+      "tests/test_process_lifecycle.py": "a50cec4930dd416f3d35a09f5b2fe816177376a3d6c495ac6b3f4eca50edcb35",
+      "tests/test_pr_persistence.py": "7d0800faeede743d9da5f8ccfae0807ea6745dcf3b1643bebfa6960e1387a387",
+      "docs/superpowers/specs/2026-11-04-pr-controller-lifecycle-contract.md": "39fe613af21dc2828987cc61428d3317eba604af5def323342eaa547d1118c5f",
+      "tests/test_pr_controller_tick.py": "23f842d6843e9f8ef6482ffa970fda40c7e33bfa220eb7aaae01106e7fbf0ebe",
+      "tests/test_process_no_launch.py": "4cacd3aaef7ce5157258e70be879087ee4298687e99488dfadeaddf45495dad5"
+    }
+  },
+  "checks": {
+    "pr17-controller-tick-uncertainty-red": {
+      "argv": [
+        "C:\\Users\\sibiya666\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.test_pr_controller_tick",
+        "-v"
+      ],
+      "runner_release": "7586df4ac2e59316521463b7526089c8314024e4",
+      "source_unchanged": true,
+      "verified_success": false,
+      "result": {
+        "status": "failed",
+        "exit_code": 1,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 213192,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 0,
+        "stdout_captured_bytes": 0,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "975a8dc89ab56dae68c1dc53bd7f8d7908694a5b8185eae468a7f37d528729a4",
+        "stderr_bytes": 1038,
+        "stderr_captured_bytes": 1038,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 0.343
+      },
+      "runner_sha256": "cf4f2e5732a7b089f69a0eb96b853056aaac8b9409f13a9c302ca0908243c488"
+    },
+    "pr17-controller-tick-uncertainty-green": {
+      "argv": [
+        "C:\\Users\\sibiya666\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.test_pr_controller_tick",
+        "tests.test_process_lifecycle",
+        "-v"
+      ],
+      "runner_release": "7586df4ac2e59316521463b7526089c8314024e4",
+      "source_unchanged": true,
+      "verified_success": true,
+      "result": {
+        "status": "passed",
+        "exit_code": 0,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 212056,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 0,
+        "stdout_captured_bytes": 0,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "122b2ac9afaef3e77cb703ec114c273ded43439f087618fbdcf5a829ba824de4",
+        "stderr_bytes": 791,
+        "stderr_captured_bytes": 791,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 2.094
+      },
+      "runner_sha256": "cf4f2e5732a7b089f69a0eb96b853056aaac8b9409f13a9c302ca0908243c488"
+    },
+    "pr17-controller-foundation-final-green": {
+      "argv": [
+        "C:\\Users\\sibiya666\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.test_pr_persistence",
+        "tests.test_pr_controller_tick",
+        "tests.test_process_lifecycle",
+        "tests.test_processes",
+        "tests.test_executor_processes",
+        "tests.test_process_pid_identity",
+        "tests.test_windows_job_launch",
+        "-v"
+      ],
+      "runner_release": "7586df4ac2e59316521463b7526089c8314024e4",
+      "source_unchanged": true,
+      "verified_success": false,
+      "result": {
+        "status": "failed",
+        "exit_code": 1,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 38144,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 0,
+        "stdout_captured_bytes": 0,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "2edfa44fc3e423fdfde96014c585a45aecab6c9f917984abbb7bf87d21dac5f2",
+        "stderr_bytes": 5952,
+        "stderr_captured_bytes": 5952,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 253.984
+      },
+      "runner_sha256": "cf4f2e5732a7b089f69a0eb96b853056aaac8b9409f13a9c302ca0908243c488"
+    },
+    "pr17-no-launch-complete-shape-red": {
+      "argv": [
+        "C:\\Users\\sibiya666\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.test_process_no_launch",
+        "-v"
+      ],
+      "runner_release": "7586df4ac2e59316521463b7526089c8314024e4",
+      "source_unchanged": true,
+      "verified_success": false,
+      "result": {
+        "status": "failed",
+        "exit_code": 1,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 211356,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 0,
+        "stdout_captured_bytes": 0,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "eaecb4d8e96d8122c28ad243cd3f4cd55c014bfc7a418618d359e4928e104dec",
+        "stderr_bytes": 1039,
+        "stderr_captured_bytes": 1039,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 0.172
+      },
+      "runner_sha256": "cf4f2e5732a7b089f69a0eb96b853056aaac8b9409f13a9c302ca0908243c488"
+    },
+    "pr17-no-launch-complete-shape-green": {
+      "argv": [
+        "C:\\Users\\sibiya666\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.test_process_no_launch",
+        "tests.test_process_lifecycle",
+        "tests.test_process_pid",
+        "tests.test_processes",
+        "tests.test_executor_processes",
+        "tests.test_windows_job_launch",
+        "tests.test_pr_controller_tick",
+        "-v"
+      ],
+      "runner_release": "7586df4ac2e59316521463b7526089c8314024e4",
+      "source_unchanged": true,
+      "verified_success": true,
+      "result": {
+        "status": "passed",
+        "exit_code": 0,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 214656,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 0,
+        "stdout_captured_bytes": 0,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "c4430a8229c64ed1deec6b52665eeffa74d20188e213779f82369e5faee92748",
+        "stderr_bytes": 5396,
+        "stderr_captured_bytes": 5396,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 8.578
+      },
+      "runner_sha256": "cf4f2e5732a7b089f69a0eb96b853056aaac8b9409f13a9c302ca0908243c488"
+    }
+  },
+  "full_suite": "running; unconfirmed; no full-regression claim"
+}

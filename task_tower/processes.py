@@ -162,6 +162,8 @@ def run_command(argv, cwd, timeout_seconds, env=None, *, cancel_requested=None, 
     tail_unknown set unless EOF was proved; .log files contain capped prefixes.
     The caller validates installation/checkouts exclusion of the directory.
     """
+    if timeout_seconds is None and (not callable(cancel_requested) or capture is None):
+        raise ValueError('Lifecycle process requires cancellation and bounded capture')
     if cancel_requested is None and capture is None:
         return _legacy_run_command(argv, cwd, timeout_seconds, env)
     started = time.monotonic()
@@ -199,7 +201,7 @@ def run_command(argv, cwd, timeout_seconds, env=None, *, cancel_requested=None, 
         result.update(started=True, pid=int(process.pid))
         for writer in writers:
             writer.close()
-        deadline = time.monotonic() + timeout_seconds
+        deadline = None if timeout_seconds is None else time.monotonic() + timeout_seconds
         while True:
             try:
                 if cancel_requested is not None and cancel_requested():
@@ -208,12 +210,12 @@ def run_command(argv, cwd, timeout_seconds, env=None, *, cancel_requested=None, 
             except Exception:
                 result['status'] = 'unknown'
                 break
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
+            remaining = None if deadline is None else deadline - time.monotonic()
+            if remaining is not None and remaining <= 0:
                 result['status'] = 'timeout'
                 break
             try:
-                code = process.wait(min(.25, remaining))
+                code = process.wait(.25 if remaining is None else min(.25, remaining))
                 result.update(status='passed' if code == 0 else 'failed', exit_code=code)
                 break
             except subprocess.TimeoutExpired:
@@ -259,5 +261,13 @@ def run_command(argv, cwd, timeout_seconds, env=None, *, cancel_requested=None, 
             for log in logs:
                 if log is not None:
                     log.close()
+            # Refusal before pipes/launch has no possible child output. The
+            # exclusively created capture files are empty; retain that fact
+            # without inventing a process or weakening unknown-tail checks.
+            if process is None:
+                for name in ('stdout','stderr'):
+                    result.update({name+'_sha256':hashlib.sha256(b'').hexdigest(),
+                        name+'_bytes':0,name+'_captured_bytes':0,
+                        name+'_tail_unknown':False,name+'_truncated':False})
         result['duration_seconds'] = round(time.monotonic() - started, 3)
     return result
