@@ -38,7 +38,7 @@ v={k:r[k] for k in ('version','repository','pr_number','task_id','head_sha','bas
 v.update(verdict='approve',summary='Controlled real process fixture.',findings=[],whole_diff_reviewed=True)
 pathlib.Path(a.result).write_text(json.dumps(v),encoding='utf-8')
 ''',encoding='utf-8')
-                profile=copy.deepcopy(f.profile); profile['argv']=[sys.executable,str(child)]
+                profile=copy.deepcopy(f.profile); profile['argv']=[str(Path(sys.executable).resolve()),str(child)]
                 profile['max_attempts']=1
                 profile['runs_dir']=str(f.root/'pr-reader-runs')
                 f.executor['profiles']['pr-reader']=profile
