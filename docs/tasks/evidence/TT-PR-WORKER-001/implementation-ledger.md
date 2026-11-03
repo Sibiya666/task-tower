@@ -23,3 +23,9 @@ Each saved publication and individual comment/close effect must share its full r
 ## Deferred provenance recovery seam
 
 Task1 deliberately refuses another PR's held barrier, even for the same task. Task5 will add the explicit provenance-bound recovery-followup interface required by the design, after current source and original-main baseline proofs exist. It must preserve original history, private mapping, fresh whole-followup acceptance and unresolved-write fencing. A Boolean original_verified or replacing the old barrier is not that interface. Task1 acceptance does not claim recovery or real-pilot completion.
+
+## Task3P preservation
+
+The bounded pipeline/private-projection/full-profile-bound-review/individual-publication subset received exact-file independent code acceptance and Root-owned full verification: 853 tests, OK with 7 platform/privilege skips, unchanged inputs and confirmed process cleanup. [Task3P acceptance and retained evidence](task3p-acceptance.md) binds the precise candidate and preserved default APIs. Only evidence and bounded README/AGENTS/ledger documentation were added after that run; product/test bytes were preserved.
+
+Task3L is still a CURRENT unmet required original-legacy-source resolver, with existing stage_authority_unverified refusal and no accepting parser. Task3P can feed pipeline-only Tasks4/5 after its own acceptance, but whole Task3/Issue17/Task6 and installed readiness remain unfulfilled. Actual all-writer authorization and nonbypass server-protection pilot gates have not been configured or attested.

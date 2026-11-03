@@ -2,12 +2,28 @@ import hashlib
 import json
 from pathlib import Path
 import sys
+import unittest
 from unittest.mock import patch
 
 from test_readiness import ProjectFixture
 from task_tower import tasks
 from task_tower.reviewer import ReviewRunner
 from task_tower.postmerge_worker import Worker
+
+
+def bound_review(fixture,worker):
+    import uuid
+    from task_tower.pr_evidence import PostmergeReviewBinding
+    from task_tower.pr_policy import policy_fingerprint
+    from task_tower.executor_profiles import profile_fingerprint
+    card=tasks.load_task(fixture.card)
+    values=dict(pr_binding=dict(repository='owner/repo',pr_number=1,issue=9,issue_id=900,
+        task_id=card['id'],head_sha='a'*40,base_sha='b'*40,input_sha256='c'*64,policy_sha256='d'*64),
+        merge_commit=fixture.sha,bundle_sha256=policy_fingerprint(fixture.bundle),snapshot_sha256=tasks.task_snapshot(card),
+        reviewer_instance_id=str(uuid.uuid4()),excluded_instances=(),profile_sha256=profile_fingerprint(worker.reviewer.config),
+        instructions_sha256=profile_fingerprint(worker.reviewer.config['superpowers']))
+    material=dict(values,excluded_instances=[])
+    return PostmergeReviewBinding(**values,request_sha256=policy_fingerprint(dict(binding=material,task=card,bundle=fixture.bundle)),effect_id=str(uuid.uuid4()))
 
 
 class Source:
@@ -150,3 +166,65 @@ class WorkerTests(ProjectFixture):
         self.worker().once()
         self.assertEqual(tasks.load_task(self.card)['status'], 'done')
         self.assertEqual(self.counter.read_text(), 'x')
+
+
+class BoundWorkerTests(unittest.TestCase):
+    def setUp(self):
+        self.f=WorkerTests(); self.f.setUp(); self.addCleanup(self.f.doCleanups)
+        import tempfile
+        from tests.test_reviewer import loaded_postmerge_profile
+        installation=tempfile.TemporaryDirectory();self.addCleanup(installation.cleanup)
+        profile,self.policy_task=loaded_postmerge_profile(Path(installation.name),self.f.root,'TT-WORKER-1',counter=self.f.counter)
+        self.f.reviewer=ReviewRunner(profile)
+
+    def test_review_one_launches_once_never_publishes(self):
+        worker=self.f.worker(); binding=bound_review(self.f,worker)
+        class NoPublish:
+            def publish(self,*args): raise AssertionError('Bound review attempted publication')
+        worker.publisher=NoPublish()
+        row=worker.review_one('TT-WORKER-1',self.f.bundle,review_binding=binding)
+        self.assertEqual(row['status'],'done')
+        self.assertEqual(row['host_review']['reviewer_instance_id'],binding.reviewer_instance_id)
+        self.assertGreater(row['host_review']['process']['pid'],0)
+        self.assertEqual(worker.review_one('TT-WORKER-1',self.f.bundle,review_binding=binding)['status'],'done')
+        self.assertEqual(self.f.counter.read_text(),'x')
+
+    def test_orphan_review_never_launches(self):
+        worker=self.f.worker(); binding=bound_review(self.f,worker)
+        worker.journal.claim('TT-WORKER-1',self.f.sha,tasks.task_snapshot(tasks.load_task(self.f.card)))
+        with self.assertRaises(ValueError): worker.review_one('TT-WORKER-1',self.f.bundle,review_binding=binding)
+        self.assertFalse(self.f.counter.exists())
+
+    def test_bad_bundle_is_rejected_before_provider_and_provider_has_no_fallback(self):
+        calls=[]
+        def provider(task_id,bundle): calls.append(task_id); raise ValueError('invalid private projection')
+        worker=Worker(self.f.config,self.f.worker().source,self.f.reviewer,refresh=lambda:None,task_provider=provider)
+        binding=bound_review(self.f,worker)
+        with self.assertRaises(ValueError): worker.review_one('TT-WORKER-1',dict(self.f.bundle,run_id='99'),review_binding=binding)
+        self.assertEqual(calls,[])
+        with self.assertRaises(ValueError): worker.review_one('TT-WORKER-1',self.f.bundle,review_binding=binding)
+        self.assertEqual(calls,['TT-WORKER-1'])
+        self.assertFalse(self.f.counter.exists())
+
+    def test_envelope_is_retained_before_apply_and_same_binding_can_apply_without_rerun(self):
+        worker=self.f.worker(); binding=bound_review(self.f,worker)
+        with patch.object(worker,'_apply',side_effect=KeyboardInterrupt),self.assertRaises(KeyboardInterrupt):
+            worker.review_one('TT-WORKER-1',self.f.bundle,review_binding=binding)
+        self.assertEqual(worker.journal.get('TT-WORKER-1',self.f.sha)['status'],'reviewed')
+        self.assertEqual(worker.review_one('TT-WORKER-1',self.f.bundle,review_binding=binding)['status'],'done')
+        self.assertEqual(self.f.counter.read_text(),'x')
+
+    def test_bound_custom_reviewer_cannot_approve_a_modified_checkout(self):
+        script=Path(self.f.reviewer.config['argv'][1])
+        script.write_text(script.read_text()+"\nPath('unaccepted.txt').write_text('mutated')\n")
+        worker=self.f.worker(); binding=bound_review(self.f,worker)
+        with self.assertRaises(ValueError): worker.review_one('TT-WORKER-1',self.f.bundle,review_binding=binding)
+        self.assertNotEqual(tasks.load_task(self.f.card)['status'],'done')
+
+    def test_advanced_main_cannot_launch_old_bundle_even_when_ancestor(self):
+        worker=self.f.worker(); binding=bound_review(self.f,worker)
+        tree=self.f.git('rev-parse','HEAD^{tree}')
+        later=self.f.git('-c','user.name=Fixture','-c','user.email=f@example.invalid','commit-tree',tree,'-p',self.f.sha,'-m','later main')
+        self.f.git('update-ref','refs/remotes/origin/main',later)
+        with self.assertRaises(ValueError): worker.review_one('TT-WORKER-1',self.f.bundle,review_binding=binding)
+        self.assertFalse(self.f.counter.exists())

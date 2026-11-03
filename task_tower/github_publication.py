@@ -22,7 +22,7 @@ def publication_id(receipt):
     return hashlib.sha256(canonical(receipt).encode()).hexdigest()
 
 class GitHubPublisher:
-    def __init__(self, repository, config, token=None, store=None, verify_source=None):
+    def __init__(self, repository, config, token=None, store=None, verify_source=None, *, publication_context=None):
         if not isinstance(config,dict) or not isinstance(repository,str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9_][A-Za-z0-9_.-]*',repository):
             raise ValueError('Invalid publication configuration')
         self.mapping=config.get('issue_tasks')
@@ -33,6 +33,7 @@ class GitHubPublisher:
             not isinstance(self.account,str) or not re.fullmatch(r'[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?(?:\[bot\])?',self.account) or '--' in self.account):
             raise ValueError('Publication requires explicit task mapping and publisher account')
         self.verify_source=verify_source
+        self.publication_context=publication_context
         self.repository=repository
         self.store=store or GitHubTasks(SimpleNamespace(repository=repository),token=token)
 
@@ -169,3 +170,137 @@ class GitHubPublisher:
                 category='unavailable'
             journal.finish_publication(identity,owner,'failed',phase+': '+category)
         return journal.publication(identity)
+
+    def publish_step(self,path,bundle,row,required,*,effect_store,owner_id):
+        """Opt-in single action with non-expiring PRJournal effect ownership.
+
+        A committed intent is never a retry ticket. Reconciliation is read-only
+        unless its exact original owner is still live, and never resends.
+        """
+        from .pr_evidence import PublicationContext, publication_completion_proof
+        from .pr_journal import PRJournal, BINDING
+        if type(self.publication_context) is not PublicationContext or type(effect_store) is not PRJournal:
+            raise PublicationError('Bound publication context and PR journal required')
+        context=self.publication_context; publication=None; identity=None; action='none'
+
+        def result(status=None):
+            phase=publication['phase'] if publication else 'needs_input'
+            return dict(publication_id=identity,status=status or ('published' if phase=='published' else 'unknown' if phase=='unknown' else 'needs_input' if phase=='needs_input' else 'pending'),
+                phase=phase,receipt_sha256=publication['receipt_sha256'] if publication else identity,
+                comment_id=publication['comment_id'] if publication else None,action=action)
+
+        def live_owner():
+            saved=effect_store.get(context.binding['repository'],context.binding['pr_number'])
+            with effect_store._db() as db: effect_store._owned(db,saved,owner_id)
+            if (saved['owner_id']!=owner_id or any(saved[k]!=context.binding[k] for k in BINDING) or
+                    saved['merge_commit']!=context.binding['merge_commit'] or saved['state']!='awaiting_closure' or saved['cancel_requested'] or
+                    saved['pr_receipt_sha256']!=context.pr_receipt['receipt_sha256'] or
+                    saved['postmerge_receipt_sha256']!=context.postmerge_review['receipt_sha256']):
+                raise PublicationError('Publication owner or barrier binding changed')
+            barrier=effect_store.barrier(context.binding['repository'])
+            if barrier is None or barrier['owner_id']!=owner_id or any(barrier[k]!=context.binding[k] for k in BINDING):
+                raise PublicationError('Publication barrier unavailable')
+
+        def refresh():
+            fresh=self.receipt(path,bundle,row,required); fresh['issue_id']=context.binding['issue_id']
+            if fresh!=publication['receipt']: raise PublicationError('Changed local accepted inputs')
+            context.validate(fresh); self._verify_current_source(fresh)
+            issue,comments=self._remote(fresh)
+            expected=dict(remote_attempt=dict(kind='local-postmerge',status='done',commit=fresh['commit'],publication_id=identity,receipt=fresh),status='done')
+            matching=[]
+            for comment,value in comments:
+                if (value==expected and comment.get('user',{}).get('login','').casefold()==self.account.casefold() and
+                        comment['body']==LIFECYCLE+canonical(expected)+'\n-->'):
+                    matching.append(comment)
+            if comments and (len(comments)!=1 or len(matching)!=1): raise PublicationError('Conflicting lifecycle')
+            return issue,matching
+
+        def confirmed_comment(matching):
+            if len(matching)!=1 or matching[0]['id']!=publication['comment_id']:
+                raise PublicationError('Exact receipt comment missing')
+
+        def acknowledge(kind,observation,phase,comment_id=None):
+            nonlocal publication
+            effect_id=publication['comment_effect_id' if kind=='comment_post' else 'close_effect_id']
+            effect=effect_store.effect(effect_id)
+            if effect['status']!='confirmed': effect_store.observe(effect_id,owner_id,dict(status='confirmed',**observation))
+            update=dict(phase=phase)
+            if comment_id is not None: update['comment_id']=comment_id
+            publication=effect_store.record_publication(identity,owner_id,publication['phase'],update)
+
+        try:
+            receipt=self.receipt(path,bundle,row,required)
+            issue=self.store.get(receipt['issue'])
+            if type(issue.get('id')) is not int or issue['id']!=context.binding['issue_id']:
+                raise PublicationError('Changed immutable Issue identity')
+            receipt['issue_id']=issue['id']; identity=publication_id(receipt)
+            publication=effect_store.publication(identity)
+            # Lost ownership permits GET inspection only, never owner-only CAS.
+            try: live_owner()
+            except ValueError: return result('unknown')
+            context.validate(receipt); self._verify_current_source(receipt)
+            if publication is None:
+                publication=effect_store.prepare_publication(context.binding['repository'],context.binding['pr_number'],owner_id,receipt)
+            if publication['receipt']!=receipt: raise PublicationError('Changed publication receipt')
+            if publication['phase']=='needs_input': return result()
+            issue,matching=refresh()
+            phase=publication['phase']
+            if phase=='published':
+                confirmed_comment(matching)
+                proof=publication_completion_proof(context,publication,issue,store=self.store)
+                if proof!=publication['completion_proof']: raise PublicationError('Changed completion proof')
+                return result()
+            if phase in ('comment_intent','unknown') and publication['close_effect_id'] is None:
+                if publication['comment_effect_id'] is None or len(matching)!=1:
+                    raise PublicationError('Unobserved comment intent')
+                live_owner()
+                comment=matching[0]
+                acknowledge('comment_post',dict(remote_id=comment['id'],body_sha256=publication['body_sha256'],author=comment['user']['login']),'comment_confirmed',comment['id'])
+                return result()
+            if phase in ('close_intent','unknown') and publication['close_effect_id'] is not None:
+                confirmed_comment(matching)
+                publication_completion_proof(context,publication,issue,store=self.store)
+                live_owner()
+                acknowledge('issue_close',dict(issue_id=receipt['issue_id'],state='closed',state_reason='completed'),'closure_observed')
+                return result()
+            if phase=='closure_observed':
+                confirmed_comment(matching)
+                proof=publication_completion_proof(context,publication,issue,store=self.store)
+                live_owner()
+                publication=effect_store.record_publication(identity,owner_id,phase,dict(phase='published',completion_proof=proof))
+                return result()
+            if phase=='prepared':
+                if matching: raise PublicationError('Receipt exists without owned comment intent')
+                context.validate(receipt); live_owner()
+                effect_store.begin_effect(context.binding['repository'],context.binding['pr_number'],owner_id,'comment_post',dict(publication_id=identity,body_sha256=publication['body_sha256']))
+                publication=effect_store.publication(identity)
+                expected=dict(remote_attempt=dict(kind='local-postmerge',status='done',commit=receipt['commit'],publication_id=identity,receipt=receipt),status='done')
+                body=LIFECYCLE+canonical(expected)+'\n-->'
+                action='comment_post'
+                comment=self.store.request('POST',f"/issues/{receipt['issue']}/comments",dict(body=body))
+                if (not isinstance(comment,dict) or type(comment.get('id')) is not int or comment['id']<1 or comment.get('body')!=body or
+                        comment.get('user',{}).get('login','').casefold()!=self.account.casefold()): raise PublicationError('Unconfirmed comment response')
+                live_owner()
+                acknowledge('comment_post',dict(remote_id=comment['id'],body_sha256=publication['body_sha256'],author=comment['user']['login']),'comment_confirmed',comment['id'])
+                return result()
+            if phase=='comment_confirmed':
+                confirmed_comment(matching); context.validate(receipt); live_owner()
+                effect_store.begin_effect(context.binding['repository'],context.binding['pr_number'],owner_id,'issue_close',dict(publication_id=identity,issue_id=receipt['issue_id'],state='closed',state_reason='completed'))
+                publication=effect_store.publication(identity); action='issue_close'
+                closed=self.store.request('PATCH',f"/issues/{receipt['issue']}",dict(state='closed',state_reason='completed'))
+                if (not isinstance(closed,dict) or closed.get('id')!=receipt['issue_id'] or closed.get('number')!=receipt['issue'] or
+                        closed.get('state')!='closed' or closed.get('state_reason')!='completed'): raise PublicationError('Unconfirmed close response')
+                live_owner()
+                acknowledge('issue_close',dict(issue_id=receipt['issue_id'],state='closed',state_reason='completed'),'closure_observed')
+                return result()
+            raise PublicationError('Unknown publication phase')
+        except Exception:
+            if publication is not None and publication['phase']!='published':
+                try:
+                    live_owner()
+                    phase=publication['phase']; uncertain=phase in ('comment_intent','close_intent','unknown')
+                    target='unknown' if uncertain else 'needs_input'
+                    if phase not in ('unknown','needs_input'):
+                        publication=effect_store.record_publication(identity,owner_id,phase,dict(phase=target))
+                except ValueError: pass
+            return result('unknown' if publication and publication['phase'] in ('comment_intent','close_intent','unknown','published') else 'needs_input')

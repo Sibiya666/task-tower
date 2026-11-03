@@ -1,0 +1,27 @@
+{
+  "accepted_source_raw_identical": {
+    "pipeline.py": true,
+    "pipeline_journal.py": true,
+    "pipeline_policy.py": true,
+    "pipeline_inputs.py": true,
+    "pipeline_roles.py": true,
+    "pipeline_publish.py": true,
+    "pipeline_worker.py": true,
+    "executor_profiles.py": true,
+    "executor_harness.py": true,
+    "executor_worker.py": true,
+    "processes.py": true,
+    "windows_job.py": true,
+    "executor_queue.py": true,
+    "dispatch_delivery.py": true,
+    "postmerge_journal.py": true,
+    "project_worker.py": true,
+    "tasks.py": true
+  },
+  "legacy_default_method_ast_identical": {
+    "reviewer.py": true,
+    "github_publication.py": true
+  },
+  "pipeline_schema_count": 6,
+  "pipeline_schemas_sha256": "5b37731384a2d5a8aa87f38f589bcced2b78db2205861e6aa5290d4b4ccdc9b6"
+}

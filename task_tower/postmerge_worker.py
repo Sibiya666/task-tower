@@ -25,7 +25,7 @@ def _write_json(path, value):
 
 
 class Worker:
-    def __init__(self, config, source, reviewer, refresh=None, publisher=None):
+    def __init__(self, config, source, reviewer, refresh=None, publisher=None, *, task_provider=None):
         self.project = Path(config['project']).resolve()
         self.repository = config['repository']
         if not re.fullmatch(r'[A-Za-z0-9-]+/[A-Za-z0-9_.-]+', self.repository):
@@ -43,6 +43,8 @@ class Worker:
         self.state.mkdir(exist_ok=True)
         self.journal = Journal(self.state / 'postmerge.sqlite')
         self.source, self.reviewer = source, reviewer
+        if task_provider is not None and not callable(task_provider): raise ValueError('Invalid trusted task provider')
+        self.task_provider=task_provider
         self.refresh = refresh or self._refresh
         self.publisher = publisher
         if self.publisher is None and config.get('github_publication') is not None:
@@ -61,6 +63,76 @@ class Worker:
     def _mark(self, path, state, bundle, detail):
         return tasks.update_postmerge_state(path, state, bundle['merge_commit'], detail,
                                              main_ref='refs/remotes/origin/main')
+
+    def _task_path(self,task_id,bundle):
+        path=(self.task_provider(task_id,bundle) if self.task_provider is not None else
+              self.project/'docs/tasks'/(task_id+'.json'))
+        path=tasks._safe_path(Path(path))
+        if path!=self.project/'docs/tasks'/(task_id+'.json'):
+            raise ValueError('Private card provider returned foreign path')
+        return path
+
+    def review_one(self,task_id,bundle,*,review_binding):
+        """One genuine bound review; no publication or implicit unknown retry."""
+        from .pr_evidence import PostmergeReviewBinding
+        from .pr_policy import policy_fingerprint, strict_json
+        from .pipeline_inputs import _ordinary
+        from .pr_evidence import _persist_envelope, _git as bound_git, _validate_bound_envelope
+        if type(review_binding) is not PostmergeReviewBinding: raise ValueError('Bound host review required')
+        if not re.fullmatch(r'TT-[A-Z0-9]+(?:-[A-Z0-9]+)*',task_id): raise ValueError('Invalid selected task')
+        self.refresh()
+        relevant=[b for b in self.source.poll() if task_id in b.get('task_ids',[])]
+        if not relevant: raise ValueError('Missing genuine selected bundle')
+        latest=max((int(b['run_id']),int(b['attempt'])) for b in relevant)
+        current=[b for b in relevant if (int(b['run_id']),int(b['attempt']))==latest]
+        if any(b!=bundle for b in current) or bundle.get('repository')!=self.repository:
+            raise ValueError('Superseded or foreign bundle')
+        sha=bundle.get('merge_commit','')
+        if not re.fullmatch('[0-9a-f]{40}',sha) or any(bundle.get('platforms',{}).get(p)!='passed' for p in self.required):
+            raise ValueError('Incomplete selected CI')
+        tasks._check_commit(self.project,sha,'refs/remotes/origin/main')
+        if bound_git(self.project,'rev-parse','refs/remotes/origin/main').decode().strip()!=sha:
+            raise ValueError('Selected bundle is not exact current main')
+        path=self._task_path(task_id,bundle); card=tasks.load_task(path)
+        if card['id']!=task_id or review_binding.merge_commit!=sha: raise ValueError('Selected card mismatch')
+        envelope_path=tasks._safe_path(self.state/'bound-reviews'/(review_binding.effect_id+'.json'))
+        row=self.journal.get(task_id,sha)
+        if row is not None:
+            if row['status'] not in ('reviewed','done') or not envelope_path.is_file():
+                raise ValueError('Orphan or unbound review fenced')
+            _ordinary(envelope_path); envelope=strict_json(envelope_path.read_bytes())
+            _validate_bound_envelope(envelope)
+            request=envelope['request']
+            if (request!=review_binding.request(request['task'],bundle,self.reviewer.config) or
+                    envelope['receipt_sha256']!=policy_fingerprint({k:v for k,v in envelope.items() if k!='receipt_sha256'}) or
+                    envelope['result_sha256']!=policy_fingerprint(envelope['result']) or row['result']!=envelope['result'] or
+                    row['snapshot']!=review_binding.snapshot_sha256): raise ValueError('Changed bound review')
+            prior=json.loads(json.dumps(card)); prior['stages']['postmerge']={'status':'pending'}
+            if snapshot(prior)!=row['snapshot']:
+                prior['stages'].pop('postmerge')
+                if snapshot(prior)!=row['snapshot']: raise ValueError('Changed bound review card')
+            if row['status']=='reviewed': self._apply(path,bundle,row)
+            return dict(self.journal.get(task_id,sha),host_review=envelope)
+        if card['status']=='done': raise ValueError('Unbound completed card')
+        review_binding.request(card,bundle,self.reviewer.config)
+        if envelope_path.exists(): raise ValueError('Orphan envelope fenced')
+        if not self.journal.claim(task_id,sha,snapshot(card)): raise ValueError('Review already claimed')
+        self._mark(path,'reviewing',bundle,'Independent bound reviewer running')
+        with tempfile.TemporaryDirectory(prefix='checkout-',dir=self.state) as directory:
+            checkout=Path(directory).resolve()
+            bound_git(self.project,'-c','protocol.file.allow=always','clone','--shared','--no-checkout',str(self.project),str(checkout))
+            bound_git(checkout,'-c','core.autocrlf=false','checkout','--detach',sha)
+            if bound_git(checkout,'rev-parse','HEAD').decode().strip()!=sha or bound_git(checkout,'status','--porcelain=v1','--untracked-files=all'):
+                raise ValueError('Reviewer checkout mismatch')
+            output=tasks._safe_path(self.state/'bound-output'/review_binding.effect_id)
+            envelope=self.reviewer.review_bound(checkout,card,bundle,output,binding=review_binding,executor_profile=self.reviewer.config)
+            _validate_bound_envelope(envelope)
+            if bound_git(checkout,'rev-parse','HEAD').decode().strip()!=sha or bound_git(checkout,'status','--porcelain=v1','--untracked-files=all'):
+                raise ValueError('Readonly reviewer changed checkout')
+        _persist_envelope(envelope_path,envelope)
+        self.journal.save_review(task_id,sha,envelope['result'])
+        self._apply(path,bundle,self.journal.get(task_id,sha))
+        return dict(self.journal.get(task_id,sha),host_review=envelope)
 
     def _apply(self, path, bundle, row):
         task_id, sha = row['task_id'], bundle['merge_commit']
@@ -119,6 +191,7 @@ class Worker:
                 continue
             path = self.project / 'docs/tasks' / (task_id + '.json')
             try:
+                path = self._task_path(task_id,bundle)
                 if not path.is_file():
                     if self.journal.claim(task_id, sha, ''):
                         self.journal.finish(task_id, sha, 'waiting', 'Task card not available locally yet')
@@ -178,9 +251,9 @@ class Worker:
                     continue
                 if row['status'] != 'done' or not row['active']:
                     continue
-                path = self.project / 'docs/tasks' / (row['task_id'] + '.json')
                 bundle = selected[row['task_id']][1]
                 try:
+                    path = self._task_path(row['task_id'],bundle)
                     if hasattr(self.publisher, 'verify_source'):
                         self.publisher.verify_source = self.source.poll
                     row['publication'] = self.publisher.publish(path, bundle, row, self.required, self.journal)

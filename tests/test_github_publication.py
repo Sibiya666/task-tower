@@ -4,6 +4,168 @@ from pathlib import Path
 from task_tower.postmerge_journal import Journal
 from task_tower.github_publication import GitHubPublisher, PublicationError
 
+
+class BoundedPublicationTests(unittest.TestCase):
+    def setUp(self):
+        import uuid
+        from types import SimpleNamespace
+        from tests import test_postmerge_worker as wf, test_pr_review as rf
+        from task_tower import tasks
+        from task_tower.pr_journal import PRJournal, BINDING
+        from task_tower.pr_policy import policy_fingerprint
+        from task_tower.pr_review import validate_pr_review
+        from task_tower.pr_evidence import PostmergeReviewBinding, PublicationContext
+        self.f=wf.WorkerTests(); self.f.setUp(); self.addCleanup(self.f.doCleanups)
+        head=self.f.sha; base=self.f.git('rev-parse','HEAD^')
+        tree=self.f.git('rev-parse','HEAD^{tree}')
+        merge=self.f.git('-c','user.name=Fixture','-c','user.email=f@example.invalid','commit-tree',tree,'-p',base,'-p',head,'-m','merge')
+        self.f.sha=merge; self.f.bundle['merge_commit']=merge
+        self.f.git('update-ref','refs/remotes/origin/main',merge)
+        self.r=rf.ReviewTests(); self.r.setUp(); self.addCleanup(self.r.doCleanups)
+        identities=dict(repository='owner/repo',pr_number=1,issue=9,issue_id=900,task_id='TT-WORKER-1',head_sha=head,base_sha=base)
+        self.r.req.update(identities); self.r.req['input'].update(identities)
+        self.r.req['input_sha256']=policy_fingerprint(self.r.req['input'])
+        self.r.child(); pr_envelope=self.r.run_review(); self.pr_receipt=validate_pr_review(pr_envelope,self.r.req,())
+        self.binding={k:self.r.req[k] for k in BINDING}
+        self.j=PRJournal(self.f.root.parent/(self.f.root.name+'-pr.sqlite'))
+        self.addCleanup(lambda:self.j.path.unlink(missing_ok=True))
+        self.owner=str(uuid.uuid4()); ownership=self.j.owner(self.owner); ownership.__enter__(); self.addCleanup(ownership.__exit__,None,None,None)
+        self.j.admit(self.binding)
+        self.advance('validating'); self.advance('reviewing')
+        role=self.j.begin_effect('owner/repo',1,self.owner,'pr_review',dict(reviewer_instance_id=self.r.req['reviewer_instance_id'],request_sha256=self.binding['input_sha256']))
+        self.j.observe(role['effect_id'],self.owner,dict(status='confirmed',result_sha256=pr_envelope['result_sha256'],receipt_sha256=self.pr_receipt['receipt_sha256'],reviewer_instance_id=self.r.req['reviewer_instance_id'],process={k:pr_envelope['process'][k] for k in ('pid','exit_code','started','cleanup_confirmed')}))
+        self.advance('reviewed',pr_receipt_sha256=self.pr_receipt['receipt_sha256'],reviewer_instance_id=self.r.req['reviewer_instance_id'])
+        self.advance('publishing_acceptance')
+        for kind,payload in [('acceptance_status',dict(state='success',context='task-tower/pr-acceptance',sha=head,target_url='https://github.com/owner/repo/pull/1',description='Accepted',receipt_sha256=self.pr_receipt['receipt_sha256'])),('acceptance_review',dict(commit_id=head,event='COMMENT',body='checked',receipt_sha256=self.pr_receipt['receipt_sha256']))]:
+            effect=self.j.begin_effect('owner/repo',1,self.owner,kind,payload)
+            self.j.observe(effect['effect_id'],self.owner,dict(status='confirmed',remote_id=42,body_sha256='7'*64,author='bot'))
+        self.advance('accepted'); self.j.acquire_barrier('owner/repo',1,self.owner,self.binding)
+        effect=self.j.begin_effect('owner/repo',1,self.owner,'merge',dict(sha=head,merge_method='merge',merge_action='direct_merge',bypass_rules=False))
+        self.j.observe(effect['effect_id'],self.owner,dict(status='confirmed',merge_commit=merge,main_sha=merge,parents=[base,head],result='merged'))
+        self.advance('awaiting_postmerge')
+        import tempfile
+        from tests.test_reviewer import loaded_postmerge_profile
+        from task_tower.executor_profiles import profile_fingerprint
+        from task_tower.reviewer import ReviewRunner
+        installation=tempfile.TemporaryDirectory();self.addCleanup(installation.cleanup)
+        profile,self.selected_policy_task=loaded_postmerge_profile(Path(installation.name),self.f.root,'TT-WORKER-1',counter=self.f.counter)
+        self.assertEqual(self.selected_policy_task['readiness_reason'],'writer_boundary_required')
+        self.worker=self.f.worker(reviewer=ReviewRunner(profile))
+        card=tasks.load_task(self.f.card)
+        values=dict(pr_binding=self.binding,merge_commit=merge,bundle_sha256=policy_fingerprint(self.f.bundle),snapshot_sha256=tasks.task_snapshot(card),reviewer_instance_id=str(uuid.uuid4()),excluded_instances=(self.r.req['reviewer_instance_id'],),profile_sha256=profile_fingerprint(self.worker.reviewer.config),instructions_sha256=profile_fingerprint(self.worker.reviewer.config['superpowers']))
+        material=dict(values,excluded_instances=list(values['excluded_instances']))
+        request_hash=policy_fingerprint(dict(binding=material,task=card,bundle=self.f.bundle))
+        effect=self.j.begin_effect('owner/repo',1,self.owner,'postmerge_review',dict(reviewer_instance_id=values['reviewer_instance_id'],request_sha256=request_hash,merge_commit=merge))
+        binding=PostmergeReviewBinding(**values,request_sha256=request_hash,effect_id=effect['effect_id'])
+        self.row=self.worker.review_one(card['id'],self.f.bundle,review_binding=binding)
+        post=self.row['host_review']; self.j.observe(effect['effect_id'],self.owner,dict(status='confirmed',result_sha256=post['result_sha256'],receipt_sha256=post['receipt_sha256'],reviewer_instance_id=post['reviewer_instance_id'],process=post['process']))
+        self.advance('awaiting_closure',postmerge_receipt_sha256=post['receipt_sha256'])
+        self.context=PublicationContext(connection=SimpleNamespace(repository='owner/repo',trusted_publishers=['bot']),source=self.worker.source,
+            binding=dict(self.binding,merge_commit=merge),main_reader=lambda:self.f.git('rev-parse','refs/remotes/origin/main'),pr_receipt=self.pr_receipt,postmerge_review=post)
+        self.store=WorkerPublicationTests.publisher_store(self.f)
+        from task_tower.github_tasks import parse_metadata
+        self.store.metadata=lambda issue:parse_metadata(issue.get('body'))
+        self.writes=[]; request=self.store.request
+        def transport(method,path,payload=None):
+            if method in ('POST','PATCH'):
+                self.writes.append(method)
+                pub=self.j.publication(self.identity())
+                self.assertEqual(pub['phase'],'comment_intent' if method=='POST' else 'close_intent')
+            return request(method,path,payload)
+        self.store.request=transport
+        self.publisher=GitHubPublisher('owner/repo',{'issue_tasks':{'TT-WORKER-1':9},'publisher_account':'bot'},store=self.store,verify_source=self.worker.source.poll,publication_context=self.context)
+
+    def advance(self,state,**extra):
+        row=self.j.get('owner/repo',1)
+        return self.j.transition('owner/repo',1,self.owner,dict(state=row['state'],input_sha256=row['input_sha256']),dict(state=state,**extra))
+
+    def identity(self):
+        from task_tower.github_publication import publication_id
+        receipt=self.publisher.receipt(self.f.card,self.f.bundle,self.row,self.worker.required); receipt['issue_id']=900
+        return publication_id(receipt)
+
+    def step(self):
+        return self.publisher.publish_step(self.f.card,self.f.bundle,self.row,self.worker.required,effect_store=self.j,owner_id=self.owner)
+
+    def test_comment_close_and_verified_published_are_distinct_ticks(self):
+        self.assertEqual(self.step()['phase'],'comment_confirmed'); self.assertEqual(self.writes,['POST'])
+        self.assertEqual(self.step()['phase'],'closure_observed'); self.assertEqual(self.writes,['POST','PATCH'])
+        self.assertEqual(self.step()['status'],'published'); self.assertEqual(self.writes,['POST','PATCH'])
+        self.assertIsNotNone(self.j.barrier('owner/repo'))
+
+    def test_lost_comment_and_close_response_never_repeat_write(self):
+        self.store.fail_post=True
+        self.assertEqual(self.step()['status'],'unknown')
+        self.assertEqual(self.step()['phase'],'comment_confirmed'); self.assertEqual(self.writes,['POST'])
+        self.store.fail_close=True
+        self.assertEqual(self.step()['status'],'unknown')
+        self.assertEqual(self.step()['phase'],'closure_observed'); self.assertEqual(self.writes,['POST','PATCH'])
+        self.assertEqual(self.step()['status'],'published')
+
+    def test_comment_intent_before_send_is_never_replayed(self):
+        original=self.store.request
+        def crash(method,path,payload=None):
+            if method=='POST': raise KeyboardInterrupt('before send')
+            return original(method,path,payload)
+        self.store.request=crash
+        with self.assertRaises(KeyboardInterrupt): self.step()
+        self.store.request=original
+        self.assertEqual(self.step()['status'],'unknown'); self.assertEqual(self.writes,[])
+
+    def test_changed_main_does_not_close(self):
+        self.step(); self.f.git('update-ref','refs/remotes/origin/main',self.binding['head_sha'])
+        self.assertNotEqual(self.step()['status'],'published'); self.assertEqual(self.writes,['POST'])
+
+    def test_live_closed_issue_alone_does_not_publish(self):
+        self.store.closed=True
+        self.assertNotEqual(self.step()['status'],'published')
+        self.assertEqual(self.writes,['POST'])
+
+    def test_comment_ack_crash_reconciles_once_without_reposting(self):
+        from unittest.mock import patch
+        observe=self.j.observe
+        def crash(effect_id,*args):
+            if self.j.effect(effect_id)['kind']=='comment_post': raise KeyboardInterrupt('before ack save')
+            return observe(effect_id,*args)
+        with patch.object(self.j,'observe',crash),self.assertRaises(KeyboardInterrupt): self.step()
+        self.assertEqual(self.j.publication(self.identity())['phase'],'comment_intent')
+        self.assertEqual(self.step()['phase'],'comment_confirmed'); self.assertEqual(self.writes,['POST'])
+
+    def test_close_intent_before_send_remains_unknown_without_second_patch(self):
+        self.step(); original=self.store.request
+        def crash(method,path,payload=None):
+            if method=='PATCH': raise KeyboardInterrupt('before send')
+            return original(method,path,payload)
+        self.store.request=crash
+        with self.assertRaises(KeyboardInterrupt): self.step()
+        self.store.request=original
+        self.assertEqual(self.step()['status'],'unknown'); self.assertEqual(self.writes,['POST'])
+        self.assertEqual(self.step()['status'],'unknown'); self.assertEqual(self.writes,['POST'])
+
+    def test_close_ack_crash_uses_positive_genuine_closure_without_repatch(self):
+        from unittest.mock import patch
+        self.step(); observe=self.j.observe
+        def crash(effect_id,*args):
+            if self.j.effect(effect_id)['kind']=='issue_close': raise KeyboardInterrupt('before ack save')
+            return observe(effect_id,*args)
+        with patch.object(self.j,'observe',crash),self.assertRaises(KeyboardInterrupt): self.step()
+        self.assertEqual(self.step()['phase'],'closure_observed'); self.assertEqual(self.writes,['POST','PATCH'])
+        self.assertEqual(self.step()['status'],'published'); self.assertEqual(self.writes,['POST','PATCH'])
+
+    def test_lost_owner_returns_readonly_without_owner_cas_or_next_write(self):
+        from unittest.mock import patch
+        self.step()
+        # A fresh journal instance cannot take over another watch's owner.
+        self.j=type(self.j)(self.j.path)
+        def forbidden(*args,**kwargs): raise AssertionError('Owner-only mutation after loss')
+        with patch.object(self.j,'observe',forbidden),patch.object(self.j,'record_publication',forbidden),patch.object(self.j,'begin_effect',forbidden):
+            self.assertEqual(self.step()['status'],'unknown')
+        self.assertEqual(self.writes,['POST']);self.assertFalse(self.store.closed)
+
+    def test_changed_lifecycle_author_never_closes(self):
+        self.step(); self.store.comments[0]['user']['login']='untrusted'
+        self.assertNotEqual(self.step()['status'],'published'); self.assertEqual(self.writes,['POST'])
+
 class PublicationTests(unittest.TestCase):
     def test_claim_has_owner_and_expiring_lease(self):
         with tempfile.TemporaryDirectory() as d:

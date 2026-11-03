@@ -1,0 +1,13 @@
+# Task3L — genuine legacy provenance remains required
+
+Status: current unmet Issue17 requirement. This is an evidence-gap record and proposed bounded-delivery clarification, not acceptance, a waiver, a future-version deferral or a qualified resolver.
+
+Read-only inspection of accepted main758 establishes that old tasks.py v1 stage cards retain organizational executor/reviewer labels and evidence hashes, but not original role instance/process/input/result/cleanup receipts. Legacy postmerge review rows retain a bare result and snapshot, not the spec/development/test chain. ExecutorQueue has execution attempts and process evidence, but execution_completed does not establish accepted stages or independent stage reviewers. Public review Markdown can bind source/document hashes but cannot provide missing host process authority. No live native or private original records were opened; absence from these code contracts is not proof that no genuine user-retained source exists.
+
+The coordinator's ruling is to continue independently testable pipeline authority/private projection/bound postmerge/publication work and preserve legacy admission refusal as existing `stage_authority_unverified`, with no effects. No accepting legacy stub/parser, newly invented UUIDs, organizational-label identity conversion, imported hash consistency, account trust or credential scope can fill missing original facts.
+
+The [source-grounded wire/resolver proposal](legacy-provenance-binding-proposal.md) is retained as unapproved research. Its suggested alternatives do not change scope: Task3L stays required until an actual retained original host producer/schema is established and a genuine resolver design receives fresh independent specification approval. The proposal's first-version discussion is not approval to drop legacy from Issue17.
+
+Required next evidence is an identified original producer/version and contemporaneously retained authoritative records for each accepted stage's actual executor and distinct reviewer, exact task/Issue/head/input/result bindings, positive process cleanup and accepted verdict. A closed import key/wire format may locate these records and bind original v1 evidence, but cannot manufacture them. All path/schema/source authority and malformed/ambiguous/refused cases must receive meaningful fixture tests before an accepting resolver can ship.
+
+Bounded pipeline implementation acceptance is distinct from whole Task3, legacy qualification, installed pilot and Issue17 completion. Genuine all-writer authorization and strict nonbypass GitHub protection proof remain separate external pilot gates. No live import, native/internal DB discovery, setup or scope change has been performed.
