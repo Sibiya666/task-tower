@@ -1,0 +1,25 @@
+# Independent affected-spec review: Issue18 actual wire binding
+
+Verdict: APPROVE for the exact documentation package below. No blocking findings.
+
+Reviewer: /root/groups18_wire_binding_review, a distinct instance which did not author these documents or implement the frozen Task3B-R candidate. Review is source-only specification acceptance, not implementation, DEV/TEST, PR, main, CI, pilot or Issue18 acceptance.
+
+Exact reviewed bytes (SHA256):
+- design docs/superpowers/specs/2026-11-02-agent-groups-design.md: 0e1070a4a24adb44c40222ce23d9cd5db3ecaf15f2d989080ffe3f49458ddd67
+- plan docs/superpowers/plans/2026-11-02-agent-groups.md: 21a59e4a617cda566a7c2a937e2ad96b16414728dbd299e7162a5a5b10651a13
+- runtime/groups18-wire-binding-handoff.md: 7fbc4c8ea8a2493ba2c628d4777c00b4fa4688d3a908f477f0f008b724e013c3
+- runtime/groups18-wire-binding.diff: dcd5db5ede5f2622a6c79ce00b2db0d3e5c70b6bd6f80f28341e898169d342e8
+
+The dated design section (lines3-53) and plan section (lines3-17) resolve the actual named producer/consumer and version contracts without authorizing an executable group path. I compared the mapping with actual stage_manifest/validate_stage_manifest, _freeze_checkpoint, role_result_schema/validate_role_result, run_role/run_checks/_host_checks, project_evidence/_final/validate_publication_current/publish_one, _receipt_body/save_verdict, _intent/begin_pr_effect/_begin_effect/_effect_observation. All five capture source raw hashes match runtime/groups18-wire-actual-map.json. These source reads establish current contracts only; frozen WIP is not approved here.
+
+The exact field sets match: stage1 to group2, role request/result2 to3 with extended ROLE_BINDING, aggregate host-check1 to2, unversioned verdict and actual eight-key checkpoint return to2, and actual publication evidence manifest1 to2. Both nullable spec/plan hashes are retained. Product manifest1 and nested file shapes, evidence file scheme and unchanged projection wrapper are distinguished from input bodies. The private check invocation retains its actual outer version1/keys while nesting stage2; this does not grant launch authority. Version replacements do not duplicate diff_base_sha in role requests.
+
+The first five E fields identify immutable current epoch/proof; the sixth binds the particular genuine input product/tree. This avoids requiring task development to remain forever equal to epoch.post_task_delta_sha256. Executor results echo their attempt input; later frozen checkpoints and prospective commit trees require genuine lineage and independently matching new delta. Publication projection and host evidence reconstruction can share one manifest hash because accepted task product delta excludes their host-only bytes. No circular digest dependency is introduced: the evidence manifest does not hash itself or become task product. All raw-delta production remains genuinely Task5-owned.
+
+The separate commit/rework_commit/push/pr_create field maps match _intent. Live _intent/_begin_effect acceptance remains closed pending genuine separately reviewed Task5/publication producers and current-epoch/owner/resource/CAS consumers. worktree_create is unchanged, not silently promoted to group clone authority. Remote commit/push/PR observations and v1 public marker are preserved. Current epoch.diff_base_sha binds group publication target without changing original run S/B or incorrectly replacing commit parent. Existing legacy comparisons remain exact.
+
+The Task17 gate is explicit and fail closed. The cited sibling hash is an explicitly qualified audit observation, not integration authority. During this review sibling pr_evidence.py had changed to raw SHA256 1e05348438b8d6f3a26491b25d159edf2222d17cd878656d5a5296d574b8e197; current read_pipeline_authority still requires user_version1 plus exact six SCHEMAS, and role/check/publication readers retain the legacy assumptions described. This movement does not invalidate the documentation's historical observation or waive the mandatory fresh accepted17/18 source re-audit, serialized reader/caller ownership and separate affected-spec/implementation acceptance before a native group publication pilot. No sibling implementation is approved.
+
+Cross-check against relevant R1/R2/R3 and Task3B-R/Task4R/Task5 contracts found no weakened six-original/17-additive-table/three-index, old row/metadata/sequence, typed legacy fence, registration/missing-J or unknown-effect invariant. Pure fixtures/shape helpers cannot mint epoch/proof authority or enable attempts/verdicts/effects. Registered execution stays closed until accepted resource/workspace consumers. Original Windows hot recovery65 remains mandatory; native POSIX61 stays deferred, with applicable portable three-platform CI unchanged.
+
+No code/docs/Git changes, database access, native/model/provider/auth/network effects or tests/full suite were performed. Only this runtime review report was written. Any changed reviewed document bytes require a fresh affected review. Coordinator must still decide resumption and retain independent implementation/full/CI/PR/main gates.
