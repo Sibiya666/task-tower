@@ -1,0 +1,15 @@
+{
+  "base": "2b499a99cf4e78054e8c1c682de471557e8d710c",
+  "files": {
+    "AGENTS.md": "8e9728b291616c25af9485b76f28ef4ad86463340082c0d843b270e123dcdfb7",
+    "README.md": "112d007b62bb4b6d3fceb1d09c76da7aedf18af9bcb0d172d03a8fcbfcd20abc",
+    "docs/superpowers/specs/2026-11-03-pipeline-only-v1-scope.md": "4f6aefaeb8dfd046d60ab1cdc741b4496fd63c8e7907c504e24e5fef6056d08e",
+    "docs/superpowers/specs/2026-11-02-pr-worker-design.md": "c064c6249ca323609015a09478ef001afa395f0045c3af9dc4ed408193002e89",
+    "docs/superpowers/plans/2026-11-02-pr-worker.md": "f94807aaed40a836c87d630eeafffeed52c00e29347743706529692ba8beffa0",
+    "docs/superpowers/specs/2026-11-03-pr-effects-contract.md": "bda1113f57db886187e2690a2ff5aab47caf13a6cdb46f8650f7fbcb3243d941",
+    "docs/superpowers/plans/2026-11-03-pr-retained-records.md": "d9aae26f81ce5cfc450121981064ed44900ef74da431d8b78995dc9f93655cd0",
+    "docs/tasks/evidence/TT-PR-WORKER-001/legacy-provenance-gate.md": "a51529b6ecf4a91be9cf1aa308359582c01ac6dc14d739fb7237eb26a3333854"
+  },
+  "user_decision_sha256": "a695447fed164e95d12ab741d0d8c8ee271caa9019a06dc00de4948f3f4410cd",
+  "backlog_result_sha256": "6a694d3d4a7f2357eb67f2a078775dab7254c6b8d2aaec18818b40e56a450ffc"
+}

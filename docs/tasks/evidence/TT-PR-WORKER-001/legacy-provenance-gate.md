@@ -1,3 +1,9 @@
+# Historical old-card provenance gap and next-version scope
+
+Current scope2026-11-03: the user explicitly selected pipeline-only v1 and deferred old-card Task3L to [Issue66](https://github.com/Sibiya666/task-tower/issues/66). See [scope decision](../../../superpowers/specs/2026-11-03-pipeline-only-v1-scope.md). Original history and refusal remain preserved; no legacy source is qualified. The following audit records the earlier scope and evidence gap; its former current-v1 blocking language is superseded by that explicit decision.
+
+## Historical audit before the user scope decision
+
 # Task3L — genuine legacy provenance remains required
 
 Status: current unmet Issue17 requirement. This is an evidence-gap record and proposed bounded-delivery clarification, not acceptance, a waiver, a future-version deferral or a qualified resolver.

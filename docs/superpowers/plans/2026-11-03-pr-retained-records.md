@@ -12,7 +12,7 @@
 
 ## Global constraints
 
-Preserve public v1 request/envelope/receipt and PRJournal schemas. Default Task2 preparation remains unchanged. No live private state migration, role launch, remote effects or legacy acceptance in the reader. Task3L, effects4c, CLI5 and operator/server gates remain required later.
+Preserve public v1 request/envelope/receipt and PRJournal schemas. Default Task2 preparation remains unchanged. No live private state migration, role launch, remote effects or legacy acceptance in the reader. Task3L is deferred to Issue66 in the next version. Effects4c, CLI5 and actual operator/server gates remain current requirements.
 
 ## Review focus
 
