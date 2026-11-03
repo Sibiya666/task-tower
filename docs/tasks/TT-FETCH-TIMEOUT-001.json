@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "TT-FETCH-TIMEOUT-001",
+  "title": "Use a bounded network budget for postmerge fetch",
+  "executor": "fetch-timeout-implementation",
+  "project_root": "../..",
+  "mode": "autonomous",
+  "status": "awaiting_merge",
+  "spec": "../superpowers/plans/2026-11-03-postmerge-fetch-budget.md",
+  "plan": "../superpowers/plans/2026-11-03-postmerge-fetch-budget.md",
+  "acceptance_criteria": [
+    "Only postmerge git fetch origin main receives a fixed 60-second network timeout; local Git checks retain the default ten seconds",
+    "Foreign origin, timeout and nonzero fetch fail before source polling, independent review or publication",
+    "Fresh origin/main validation, exact-commit ancestry, same-run/attempt three-platform proofs, independent reviewer and publisher remain unchanged",
+    "README, AGENTS and worker instructions describe the bound and preserve historical recovery evidence without claiming hard process-tree or night readiness",
+    "Independent stage and exact-head/base PR acceptance, green CI and independent exact-main review precede automatic verified Issue63 closure"
+  ],
+  "stages": {
+    "spec": {
+      "status": "accepted",
+      "reviewer": "fetch-timeout-independent-reviewer",
+      "evidence": "evidence/TT-FETCH-TIMEOUT-001/spec-review.md",
+      "sha256": "1bffa2f4cf29c7ac1c41177977cdc174041949343ddc008d620c8ef7891fac63",
+      "hash_scheme": "sha256-utf8-lf-v1"
+    },
+    "development": {
+      "status": "accepted",
+      "reviewer": "fetch-timeout-independent-reviewer",
+      "evidence": "evidence/TT-FETCH-TIMEOUT-001/development-review.md",
+      "sha256": "1e414a5c1ae74b6bceb761c72cdd14360b1fba5bd4436971c6786aab2fd36ca7",
+      "hash_scheme": "sha256-utf8-lf-v1"
+    },
+    "test": {
+      "status": "accepted",
+      "reviewer": "fetch-timeout-test-acceptor",
+      "evidence": "evidence/TT-FETCH-TIMEOUT-001/test-review.md",
+      "sha256": "2b379ee3d69b751af1f5e08c659ae38818a6ce87e1bbffed2683911c5c63d5d5",
+      "hash_scheme": "sha256-utf8-lf-v1"
+    },
+    "postmerge": {
+      "status": "pending"
+    }
+  }
+}
