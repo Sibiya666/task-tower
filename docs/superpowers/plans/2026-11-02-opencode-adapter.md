@@ -1,5 +1,13 @@
 # OpenCode Adapter Implementation Plan
 
+## Accepted-main binding — 2026-11-03
+
+Issue16's gate is satisfied for exact main `4875381be68282a7ad77ab7b1c5a3898cbc09304`: same-attempt three-platform CI41503463955, independent approve, automatic [Issue16 publication](https://github.com/Sibiya666/task-tower/issues/16#issuecomment-6595253516) and native Project Done. Earlier pending-gate text is historical. The concrete source/hash audit is [accepted-main487](../../tasks/evidence/TT-OPENCODE-ADAPTER-001/accepted-main-487-contract-audit.md); later main changes require affected-interface re-audit. Product fix #63/PR64 is not yet part of this base.
+
+Task1 uses actual `build_invocation(attempt,profile)` and `build_role_invocation(attempt,profile,*,role)`. Affected paths: executor_profiles.load_executor_config; executor_harness builders; executor_worker.execute_one; pipeline_policy.load_pipeline_config/admission_authorized/continuation_authorized; pipeline_worker.step/_prepare; pipeline_roles.run_role/run_checks/_process. The six actual pipeline roles are spec_executor/spec_reviewer/development_executor/development_reviewer/test_executor/test_reviewer. Close generic/role builders and independent pipeline validation to explicit codex/custom before expanding the common loader. Reject unsupported/missing/nonstring kinds before preparation/probe/child and preserve existing supported argv.
+
+Existing concrete test modules under tests/: test_executor_profiles, test_executor_harness, test_executor_worker, test_executor_processes, test_processes, test_pipeline_policy, test_pipeline_roles, test_pipeline_worker, test_pipeline_cli and test_pipeline_platform. New opencode_adapter/discovery tests are future TDD modules. Record focused command `python -m unittest discover -s tests -p test_executor_harness.py -v` and equivalent discover commands for these actual modules; add new modules only after creating their intended RED cases. The effective process API is `run_command(argv,cwd,timeout_seconds,env=None,*,cancel_requested=None,capture=None)`; WindowsJobProcess has no stdin argument. No accepted stdin_spec/scope exists: Task2 owns that future transport. Full60 means60 instruction files. This binding changes no R3/R4 startup/qualification, version2.2.5, foreground-only, Windows or no-install/auth/model requirements. Obtain fresh independent affected-document review before Task1 code.
+
 ## Release scope amendment — user decision 2026-11-02
 
 The user explicitly deferred work not covered by Windows to the next project version. This dated amendment supersedes earlier native three-platform promises in this document; it does not change unrelated established portable interfaces or turn failed historical evidence into success.
