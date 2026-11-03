@@ -6,6 +6,7 @@ import math
 import msvcrt
 import os
 import subprocess
+from contextlib import nullcontext
 
 
 class _BasicLimit(C.Structure):
@@ -64,7 +65,7 @@ def _kernel():
 
 
 class WindowsJobProcess:
-    def __init__(self, argv, cwd, stdout, stderr, env=None):
+    def __init__(self, argv, cwd, stdout, stderr, env=None, stdin=None):
         self.kernel = kernel = _kernel()
         self.info = _ProcessInfo()
         self.job = kernel.CreateJobObjectW(None, None)
@@ -75,8 +76,8 @@ class WindowsJobProcess:
             limits.basic.flags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
             if not kernel.SetInformationJobObject(self.job, 9, C.byref(limits), C.sizeof(limits)):
                 raise C.WinError(C.get_last_error())
-            with open(os.devnull, "rb") as stdin:
-                files = [stdin, stdout, stderr]
+            with open(os.devnull, "rb") if stdin is None else nullcontext(stdin) as input_file:
+                files = [input_file, stdout, stderr]
                 handles = [msvcrt.get_osfhandle(file.fileno()) for file in files]
                 old_inheritance = [os.get_handle_inheritable(handle) for handle in handles]
                 startup = _StartupInfo()

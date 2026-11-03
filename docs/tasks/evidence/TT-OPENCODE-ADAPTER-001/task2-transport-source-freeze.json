@@ -1,0 +1,19 @@
+{
+  "previous_freeze_sha256": "c35518813d4d8fc5754a95813f3fa9733e186ad4e69e5643c3f2ccd95f0ab3ef",
+  "fix_round": 1,
+  "head": "64b9702f6ddadad89c76bfba5bed2ff75d87fb05",
+  "files": [
+    {
+      "path": "task_tower/processes.py",
+      "sha256": "01f9f1b81f6277168af74037c36010564f6a551e9a27723fe8e837ce8dcf3198"
+    },
+    {
+      "path": "task_tower/windows_job.py",
+      "sha256": "fa1982c1032e20e57dcee00c27fc07bba11ef7d77000c530f46be80d13f9ad09"
+    },
+    {
+      "path": "tests/test_opencode_transport.py",
+      "sha256": "20163b65178b2491c2ed8caba8cb0d2be5c39ab9b3c3ff189a5ebe083ac6b242"
+    }
+  ]
+}

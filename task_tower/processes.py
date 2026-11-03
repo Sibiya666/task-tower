@@ -155,19 +155,170 @@ def _capture_files(capture):
 _legacy_run_command = run_command
 
 
-def run_command(argv, cwd, timeout_seconds, env=None, *, cancel_requested=None, capture=None):
+def _stdin_storage():
+    """Private anonymous storage with a separately read-only transport handle."""
+    import tempfile
+    def cleanup(error, callbacks):
+        """Attempt every owner; never replace the construction failure."""
+        confirmed = getattr(error, 'stdin_cleanup_confirmed', True)
+        for callback in callbacks:
+            try:
+                callback()
+            except BaseException:
+                confirmed = False
+        if not confirmed:
+            error.stdin_cleanup_confirmed = False
+    def stream(fd, mode):
+        try:
+            return os.fdopen(fd, mode, buffering=0)
+        except BaseException as error:
+            cleanup(error, [lambda: os.close(fd)])
+            raise
+    if os.name != 'nt':
+        fd, name = tempfile.mkstemp(prefix='task-tower-stdin-')
+        read_fd = writer = reader = None
+        try:
+            read_fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, 'O_CLOEXEC', 0))
+            os.unlink(name)
+            owned, fd = fd, None
+            writer = stream(owned, 'w+b')
+            owned, read_fd = read_fd, None
+            reader = stream(owned, 'rb')
+            return writer, reader
+        except BaseException as error:
+            callbacks = [lambda raw=raw: os.close(raw) for raw in (fd, read_fd) if raw is not None]
+            callbacks.extend(opened.close for opened in (writer, reader) if opened is not None)
+            def unlink():
+                try:
+                    os.unlink(name)
+                except FileNotFoundError:
+                    pass
+            callbacks.append(unlink)
+            cleanup(error, callbacks)
+            raise
+    import ctypes as C
+    from ctypes import wintypes as W
+    import msvcrt
+    import secrets
+    kernel = C.WinDLL('kernel32', use_last_error=True)
+    kernel.CreateFileW.argtypes = [W.LPCWSTR, W.DWORD, W.DWORD, C.c_void_p, W.DWORD, W.DWORD, W.HANDLE]
+    kernel.CreateFileW.restype = W.HANDLE
+    kernel.GetCurrentProcess.restype = W.HANDLE
+    kernel.DuplicateHandle.argtypes = [W.HANDLE, W.HANDLE, W.HANDLE, C.POINTER(W.HANDLE), W.DWORD, W.BOOL, W.DWORD]
+    kernel.DuplicateHandle.restype = W.BOOL
+    kernel.CloseHandle.argtypes = [W.HANDLE]
+    kernel.CloseHandle.restype = W.BOOL
+    name = str(Path(tempfile.gettempdir()) / ('task-tower-stdin-' + secrets.token_hex(24)))
+    # CREATE_NEW, share-read only, temporary + delete-on-last-close.
+    handle = kernel.CreateFileW(name, 0xc0010000, 1, None, 1, 0x04000100, None)
+    if handle == C.c_void_p(-1).value:
+        raise C.WinError(C.get_last_error())
+    read_handle = W.HANDLE()
+    writer = reader = None
+    try:
+        owner = kernel.GetCurrentProcess()
+        if not kernel.DuplicateHandle(owner, handle, owner, C.byref(read_handle), 0x00120089, False, 0):
+            raise C.WinError(C.get_last_error())
+        fd = msvcrt.open_osfhandle(handle, os.O_RDWR | os.O_BINARY)
+        handle = None
+        writer = stream(fd, 'w+b')
+        fd = msvcrt.open_osfhandle(read_handle.value, os.O_RDONLY | os.O_BINARY)
+        read_handle = W.HANDLE()
+        reader = stream(fd, 'rb')
+        os.set_inheritable(writer.fileno(), False)
+        os.set_inheritable(reader.fileno(), False)
+        return writer, reader
+    except BaseException as error:
+        callbacks = [opened.close for opened in (writer, reader) if opened is not None]
+        def close_handle(raw):
+            if not kernel.CloseHandle(raw):
+                raise C.WinError(C.get_last_error())
+        if handle:
+            callbacks.append(lambda: close_handle(handle))
+        if read_handle.value:
+            callbacks.append(lambda: close_handle(read_handle))
+        cleanup(error, callbacks)
+        raise
+
+
+def _stage_stdin(spec):
+    """Verify mutable source bytes before exposing an anonymous read-only copy."""
+    import re
+    from .opencode_files import safe_path, identity, validate_identity, _open_readonly
+    source = writer = reader = None
+    try:
+        if (not isinstance(spec, dict) or set(spec) != {'path', 'expected_sha256', 'expected_bytes', 'expected_identity'}
+                or type(spec['expected_bytes']) is not int or not 0 <= spec['expected_bytes'] <= 4194304
+                or not isinstance(spec['expected_sha256'], str)
+                or not re.fullmatch('[0-9a-f]{64}', spec['expected_sha256'])):
+            raise ValueError('stdin_binding_mismatch')
+        expected = validate_identity(spec['expected_identity'], kind='file')
+        path = safe_path(spec['path'])
+        before = path.lstat()
+        if identity(before) != expected or before.st_nlink != 1 or before.st_size != spec['expected_bytes']:
+            raise ValueError('stdin_binding_mismatch')
+        source = _open_readonly(path)
+        opened = os.fstat(source)
+        if identity(opened) != expected or opened.st_nlink != 1 or opened.st_size != spec['expected_bytes']:
+            raise ValueError('stdin_binding_mismatch')
+        writer, reader = _stdin_storage()
+        digest, size = hashlib.sha256(), 0
+        while size <= spec['expected_bytes']:
+            chunk = os.read(source, min(65536, spec['expected_bytes'] + 1 - size))
+            if not chunk:
+                break
+            size += len(chunk)
+            digest.update(chunk)
+            if writer.write(chunk) != len(chunk):
+                raise ValueError('stdin_binding_mismatch')
+        after, current = os.fstat(source), safe_path(spec['path']).lstat()
+        if (size != spec['expected_bytes'] or digest.hexdigest() != spec['expected_sha256']
+                or any(identity(info) != expected or info.st_nlink != 1 or info.st_size != size
+                       or info.st_mtime_ns != opened.st_mtime_ns for info in (after, current))):
+            raise ValueError('stdin_binding_mismatch')
+        writer.close()
+        writer = None
+        os.close(source)
+        source = None
+        reader.seek(0)
+        result, reader = reader, None
+        return result
+    except (OSError, ValueError, TypeError, KeyError, OverflowError) as error:
+        failure = ValueError('stdin_binding_mismatch')
+        failure.stdin_cleanup_confirmed = getattr(error, 'stdin_cleanup_confirmed', True)
+        raise failure from None
+    finally:
+        cleanup_error = False
+        if source is not None:
+            try:
+                os.close(source)
+            except OSError:
+                cleanup_error = True
+        for stream in (writer, reader):
+            if stream is not None:
+                try:
+                    stream.close()
+                except OSError:
+                    cleanup_error = True
+        if cleanup_error:
+            failure = ValueError('stdin_binding_mismatch')
+            failure.stdin_cleanup_confirmed = False
+            raise failure from None
+
+
+def run_command(argv, cwd, timeout_seconds, env=None, *, cancel_requested=None, capture=None, stdin_spec=None):
     """Capture schema: {directory: private existing dir, max_bytes_per_stream: int}.
 
     Optional mode omits argv. Stream hashes/counts cover observed bytes, with
     tail_unknown set unless EOF was proved; .log files contain capped prefixes.
     The caller validates installation/checkouts exclusion of the directory.
     """
-    if cancel_requested is None and capture is None:
+    if cancel_requested is None and capture is None and stdin_spec is None:
         return _legacy_run_command(argv, cwd, timeout_seconds, env)
     started = time.monotonic()
     result = dict(status='unavailable', exit_code=None, started=False, cleanup_confirmed=True, pid=None)
     logs, cap = _capture_files(capture)
-    drains, writers, process = [], [], None
+    drains, writers, process, staged = [], [], None, None
     try:
         try:
             cancelled = cancel_requested is not None and cancel_requested()
@@ -177,6 +328,14 @@ def run_command(argv, cwd, timeout_seconds, env=None, *, cancel_requested=None, 
         if cancelled:
             result['status'] = 'cancelled'
             return result
+        if stdin_spec is not None:
+            try:
+                staged = _stage_stdin(stdin_spec)
+            except (OSError, ValueError) as error:
+                result['reason'] = 'stdin_binding_mismatch'
+                if not getattr(error, 'stdin_cleanup_confirmed', True):
+                    result.update(status='cleanup_failed', cleanup_confirmed=False)
+                return result
         executable = shutil.which(argv[0], path=env.get('PATH') if env is not None else None)
         if not executable:
             return result
@@ -191,12 +350,19 @@ def run_command(argv, cwd, timeout_seconds, env=None, *, cancel_requested=None, 
         actual = [executable, *argv[1:]]
         if os.name == 'nt':
             from .windows_job import WindowsJobProcess
-            process = WindowsJobProcess(actual, cwd, *writers, env=env)
+            process = WindowsJobProcess(actual, cwd, *writers, env=env, stdin=staged) if staged is not None else WindowsJobProcess(actual, cwd, *writers, env=env)
         else:
-            process = subprocess.Popen(actual, cwd=cwd, stdin=subprocess.DEVNULL,
+            process = subprocess.Popen(actual, cwd=cwd, stdin=staged if staged is not None else subprocess.DEVNULL,
                                        stdout=writers[0], stderr=writers[1],
                                        start_new_session=True, env=env)
         result.update(started=True, pid=int(process.pid))
+        if staged is not None:
+            transport, staged = staged, None
+            try:
+                transport.close()
+            except OSError:
+                result.update(status='cleanup_failed', cleanup_confirmed=False)
+                return result
         for writer in writers:
             writer.close()
         deadline = time.monotonic() + timeout_seconds
@@ -221,6 +387,11 @@ def run_command(argv, cwd, timeout_seconds, env=None, *, cancel_requested=None, 
     except OSError:
         result['status'] = 'unavailable' if process is None else 'unknown'
     finally:
+        if staged is not None:
+            try:
+                staged.close()
+            except OSError:
+                result.update(status='cleanup_failed', cleanup_confirmed=False)
         cleanup_deadline = time.monotonic() + 5
         if process is not None:
             try:

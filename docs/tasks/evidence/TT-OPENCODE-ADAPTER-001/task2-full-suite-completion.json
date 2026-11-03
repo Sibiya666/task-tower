@@ -1,0 +1,25 @@
+{
+  "repository": "task-tower-opencode",
+  "source_unchanged": true,
+  "verified_success": true,
+  "runner_release": "7586df4ac2e59316521463b7526089c8314024e4",
+  "runner_sha256": "b6431c2737f223f0bf7dbfa66602d2ffe0ba2289559c8f00d483755db79a49db",
+  "result": {
+    "status": "passed",
+    "exit_code": 0,
+    "started": true,
+    "cleanup_confirmed": true,
+    "pid": 197940,
+    "stdout_sha256": "fd546d01c6d2880b01d3bce9a7b1f43d0c4125bcc137c4ce97d019d3e8643e08",
+    "stdout_bytes": 85,
+    "stdout_captured_bytes": 85,
+    "stdout_tail_unknown": false,
+    "stdout_truncated": false,
+    "stderr_sha256": "62354994b0e405b239be19c2eb8797b0dd2bdce321e5518cee9f87b6f67be660",
+    "stderr_bytes": 129263,
+    "stderr_captured_bytes": 129263,
+    "stderr_tail_unknown": false,
+    "stderr_truncated": false,
+    "duration_seconds": 1607.031
+  }
+}

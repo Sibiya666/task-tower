@@ -1,0 +1,26 @@
+{
+  "child": {
+    "cleanup_confirmed": true,
+    "duration_seconds": 0.078,
+    "exit_code": 0,
+    "pid": 191460,
+    "started": true,
+    "status": "passed",
+    "stderr_bytes": 0,
+    "stderr_captured_bytes": 0,
+    "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stderr_tail_unknown": false,
+    "stderr_truncated": false,
+    "stdout_bytes": 74,
+    "stdout_captured_bytes": 74,
+    "stdout_sha256": "0a27f9ad675053282fce8dc5ed76b7716c197f06ee2057f5db8408ff13a59d9a",
+    "stdout_tail_unknown": false,
+    "stdout_truncated": false
+  },
+  "claim": "controlled Python full60 transport only; no native OpenCode qualification",
+  "file_count": 60,
+  "framed_bytes": 362380,
+  "manifest_sha256": "d200509aeccb6cf244ddd107f7328d57d1103007344b93088c5e68f4ebf00ee0",
+  "raw_instruction_bytes": 357576,
+  "stdin_sha256": "5eb4bb68ab11ff66690d644306f36d5e8029a4075cb937240ceb7c82fa3b6262"
+}
