@@ -1,0 +1,12 @@
+{
+  "base": "0ed695ee010126a2a7e966f90472e18273cfa38e",
+  "files": {
+    "task_tower/pr_context.py": "ac5cd6efcf8df2562ed164888596b405b836abb839a3d6a2b3e29eba9a3158cb",
+    "task_tower/pr_records.py": "f7d2f2ec8be1ec90b4b56434e7c4d92ad6c2429fdda77cafb6d4eacc56a0c7c3",
+    "task_tower/pr_source.py": "8e004be6b2658bea9640b0528486a5d7445323d3639e69f776ee36af5b3bd706",
+    "tests/test_pr_retained_records.py": "6751075c40830c4fb477413447c8c43bfcdeae6d97dd2b6082bd7496621d7a2b",
+    "tests/test_pr_preparation_context.py": "9e2a50ee25d545432fdf1d18e37614f5991980e4a0d097e2ad6eda811a5336a9",
+    "docs/superpowers/specs/2026-11-03-pr-retained-records-contract.md": "1584c2c00f61ba92febe9747c14148481046dfae6f457475526dbc1f1f6e8c53",
+    "docs/superpowers/plans/2026-11-03-pr-retained-records.md": "f426ac5d66a316bea35bbfaa098895e4cfb40d073d52b3912e88fa5e34178330"
+  }
+}

@@ -19,7 +19,7 @@ import uuid
 from .github_source import resolve_token
 from .executor_profiles import _pins, profile_fingerprint
 from .pr_policy import (LIMITS, SHA, HASH, REPOSITORY, canonical, exact, identifier,
-                        integer, policy_fingerprint, private_paths, strict_json, text)
+                        integer, policy_fingerprint, private_paths, strict_json, text, authorized_task)
 from .processes import run_command
 from .project_connections import safe_config_path
 
@@ -480,9 +480,18 @@ def prepare_review(connection,task,snapshot,authority,private_dir,*,private_cont
             if type(private_context) is not PRHostContext: _fail('private_review_context_unverified')
             loaded=private_context._fresh_inputs()
             provenance=private_context.private_input_provenance
+            if not isinstance(snapshot,dict) or not isinstance(task,dict):
+                _fail('private_review_context_unverified')
             if provenance['pr_journal'] is None or connection not in loaded['connections']:
                 _fail('private_review_context_unverified')
             if snapshot.get('policy_sha256')!=policy_fingerprint(loaded['policy']):
+                _fail('private_review_context_unverified')
+            configured=authorized_task(loaded['policy'],snapshot.get('repository'),task.get('pr_number'))
+            for key in ('issue','issue_id','task_id','source','pipeline_run_id','reviewer_profile'):
+                if type(task.get(key)) is not type(configured[key]) or task[key]!=configured[key]:
+                    _fail('private_review_context_unverified')
+            actual_profile=loaded['executor']['profiles'][configured['reviewer_profile']]
+            if profile_fingerprint(task.get('_review_profile'))!=profile_fingerprint(actual_profile):
                 _fail('private_review_context_unverified')
             namespace=Path(provenance['artifact_namespace'])
             root=safe_config_path(private_dir)

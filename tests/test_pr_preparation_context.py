@@ -1,5 +1,6 @@
 """Actual retained stage producer -> opt-in provenance-bound preparation."""
 from pathlib import Path
+import copy
 import unittest
 import uuid
 from unittest.mock import patch
@@ -76,3 +77,12 @@ class PreparationContextTests(unittest.TestCase):
                 location,private_context=context)
         self.assertFalse((location/'request.json').exists())
         self.assertFalse((location/'input.json').exists())
+
+    def test_mutated_in_memory_reviewer_profile_is_refused_before_git(self):
+        with PRJournal(self.journal)._db(True): pass
+        context=self.context(); fresh=self.current(context,self.source(context))
+        connection=context._fresh_inputs()['connections'][0]
+        task=copy.deepcopy(fresh['task']); task['_review_profile']['timeout_seconds']+=1
+        location=Path(str(self.journal)+'.private')/'preparations'/str(uuid.uuid4())
+        with patch('task_tower.pr_source._git',side_effect=AssertionError('Forged profile reached Git')),self.assertRaises(PRSourceError):
+            prepare_review(connection,task,fresh['snapshot'],fresh['authority'],location,private_context=context)

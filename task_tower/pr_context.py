@@ -4,7 +4,7 @@ Retained PR process readers and every publication/effect API remain separate
 gates. A current stage result alone cannot authorize a PR action.
 """
 import copy
-from contextlib import closing
+from contextlib import closing, contextmanager
 from dataclasses import dataclass
 import hashlib
 import os
@@ -207,6 +207,15 @@ class PRHostContext:
         if path not in self._pins:
             if path.exists(): raise ValueError('PR journal appeared after context creation')
             return None
+        with self._pr_snapshot(): pass
+        return dict(path=str(path),**self._pins[path][1],application_id=PR_APP_ID,
+            user_version=1,schema_sha256=profile_fingerprint(PR_SCHEMAS))
+
+    @contextmanager
+    def _pr_snapshot(self):
+        """One physically pinned existing transaction for validation and readers."""
+        path=self._inputs.journal_path
+        if path not in self._pins: raise ValueError('No pinned existing PR journal')
         self._check_pins()
         journal=PRJournal(path)
         try:
@@ -226,13 +235,21 @@ class PRHostContext:
                     raise ValueError('Unrecognized private PR journal')
                 journal._validate(db)
                 self._check_pins()
+                yield db
+                self._check_pins()
             if any(Path(str(path)+s).exists() for s in ('-journal','-wal','-shm')):
                 raise ValueError('PR journal changed during validation')
             self._check_pins()
-            return dict(path=str(path),**self._pins[path][1],application_id=PR_APP_ID,
-                user_version=1,schema_sha256=profile_fingerprint(PR_SCHEMAS))
         except sqlite3.Error:
             raise ValueError('Private PR journal unavailable') from None
+
+    def prepared_record(self,input_sha256):
+        from .pr_records import read_prepared_record
+        return read_prepared_record(self,input_sha256)
+
+    def review_record(self,input_sha256):
+        from .pr_records import read_review_record
+        return read_review_record(self,input_sha256)
 
     def _fresh_inputs(self):
         """Internal factory gate; not a stage-authority or effect authorization."""

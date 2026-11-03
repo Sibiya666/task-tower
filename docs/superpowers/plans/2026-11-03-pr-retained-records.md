@@ -30,9 +30,9 @@ Preserve public v1 request/envelope/receipt and PRJournal schemas. Default Task2
 
 - [x] Obtain independent affected-contract approval before implementation.
 - [x] Write and run failing own-journal identity/schema/appearance regressions against actual factories.
-- [ ] Pin/validate present own journal, including one read-only transaction, physical identity and schema; keep absent journal explicit null.
-- [ ] Run journal/context regressions, including actual writes and corrupt existing rows. Close all test SQLite connections explicitly.
-- [ ] Add failing preparation/provenance/limit regressions, then implement opt-in provenance and bounded canonical record utilities.
-- [ ] Add genuine producer/runner/journal positive fixtures and adversarial record tests, then implement strict readers.
-- [ ] Run focused tests and independent implementation acceptance; resolve findings before integration.
+- [x] Pin/validate present own journal, including one read-only transaction, physical identity and schema; keep absent journal explicit null.
+- [x] Run journal/context regressions, including actual writes and corrupt existing rows. Close all test SQLite connections explicitly.
+- [x] Add failing preparation/provenance/limit regressions, then implement opt-in provenance and bounded canonical record utilities.
+- [x] Add genuine producer/runner/journal positive fixtures and adversarial record tests, then implement strict readers.
+- [x] Run focused tests and independent implementation acceptance; resolve findings before integration.
 - [ ] Run required full checks and preserve exact-source evidence. No whole Issue completion claim from this bounded task.
