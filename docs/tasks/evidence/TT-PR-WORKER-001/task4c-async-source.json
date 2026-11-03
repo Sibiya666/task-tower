@@ -1,0 +1,13 @@
+{
+  "base": "12418e205312dd63bdd9198f3d4b27a9f6585cc6",
+  "files": {
+    "task_tower/pr_effects.py": "ccc702a013424a17a4be7a3a5ff42fcedbcb9c6998c2cc3d23378454c66d95e4",
+    "task_tower/pr_source.py": "38a7c22fdf6ce75d7605cef47a8c708813c9b608e3559d055e92ed3e96be8fb5",
+    "task_tower/pr_journal.py": "5b3e95794b53eb8be40ffa520bc30ed6331b0b44c747297d113326412d7c937c",
+    "tests/test_pr_source.py": "94b5c21771c2b3d2ccea613ba64378bcb50bc9148ddd1d54130514f5898d75e4",
+    "tests/test_pr_merge_effects.py": "903dc4a668fa4167ba73a7ed7f3b2c6ea6b52581d361d86169c60a5f064832f8",
+    "tests/test_pr_merge_response.py": "d05b4fdef4f49135062261ccb5bb28898ff9abdf3f940c70e92449a605f9c05f",
+    "tests/test_pr_merge_transaction.py": "699dd9003a964fd5b13ec1c945cfa9f4ffe588594c1619bac019962228a47f3f",
+    "docs/superpowers/specs/2026-11-03-pr-async-merge-contract.md": "45b7fd136225ee2d313fa1aae3e7fc3f38e03dce6e6e44458edfa9ffd4587c8f"
+  }
+}

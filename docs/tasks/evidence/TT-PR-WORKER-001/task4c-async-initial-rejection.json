@@ -1,0 +1,47 @@
+{
+  "host_only_capture_limit_bytes": 1048576,
+  "qualified_current_review": true,
+  "source_unchanged": true,
+  "binary_unchanged": true,
+  "result": {
+    "status": "passed",
+    "exit_code": 0,
+    "started": true,
+    "cleanup_confirmed": true,
+    "pid": 207892,
+    "stdout_sha256": "91a03699a80f8280885d2ecf8da8115d2d38e4b86f02b8608d3dd42f6c3b37e5",
+    "stdout_bytes": 308382,
+    "stdout_captured_bytes": 308382,
+    "stdout_tail_unknown": false,
+    "stdout_truncated": false,
+    "stderr_sha256": "e3faa468c23ee56a56c5fba063a9d049375d3ed3cc180662f4ec40d668651b27",
+    "stderr_bytes": 7974,
+    "stderr_captured_bytes": 7974,
+    "stderr_tail_unknown": false,
+    "stderr_truncated": false,
+    "duration_seconds": 72.36
+  },
+  "verdict": {
+    "run_id": "7105b0c0-1562-4e4e-a23f-869c09504a8c",
+    "attempt_id": "15ab628a-4c73-4a72-b5b2-247c2e3402c2",
+    "instance_id": "652b7458-aa38-466d-86f7-0d3c63a4090c",
+    "stage": "development",
+    "generation": 1,
+    "source_sha": "12418e205312dd63bdd9198f3d4b27a9f6585cc6",
+    "checkpoint_sha": "12418e205312dd63bdd9198f3d4b27a9f6585cc6",
+    "input_sha256": "abf7ad9fef446b1cbbf05221d8161237ac3b1aa310c440f1e628bc86a5874eae",
+    "version": 2,
+    "summary": "Reject: observe_merge releases its live-gate transaction before journal.observe acquires a separate write transaction. That transaction can wait five seconds and never rechecks deadline, cancellation, or barrier. Expiration or cancellation in this interval can therefore still record confirmed/awaiting_main. Validate these gates inside the transaction recording confirmation and add a regression covering delayed acquisition/cancellation. Candidate and pinned instruction hashes match; 11 independent pure tests passed; inspected Root's 26-test successful capture. Controller/CLI/postmerge completion excluded as explicitly outside scope.",
+    "verdict": "reject",
+    "return_stage": "development",
+    "findings": [
+      {
+        "code": "product_defect",
+        "path": "task_tower/pr_effects.py",
+        "line": 523
+      }
+    ]
+  },
+  "validation_error": null,
+  "runner_sha256": "8dc6d194be603f9fdb28aa9a8f109a1327174bc715d61757378552ba14bd6634"
+}

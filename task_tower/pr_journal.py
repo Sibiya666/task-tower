@@ -556,6 +556,16 @@ class PRJournal:
                 for key,value in effect['observation'].items():
                     if key!='status' and observation.get(key)!=value: raise ValueError('Conflicting PR observation')
             if effect['kind']=='merge' and observation['status']=='confirmed':
+                # Recheck after BEGIN IMMEDIATE, in the transaction that
+                # records completion. A prior host check may precede a lock wait.
+                self._tick(row)
+                barrier=self._load(db,'barriers','repository',row['repository'])
+                if (row['cancel_requested'] or row['state'] not in ('merge_intent','merge_pending')
+                        or row['owner_pid']!=os.getpid() or effect['owner_pid']!=os.getpid()
+                        or barrier is None or barrier['completed'] is not False or barrier['proof'] is not None
+                        or barrier['owner_id']!=owner_id or barrier['owner_pid']!=os.getpid()
+                        or any(type(barrier[k]) is not type(row[k]) or barrier[k]!=row[k] for k in BINDING)):
+                    raise ValueError('Merge confirmation transaction fenced')
                 if observation['parents']!=[row['base_sha'],row['head_sha']]: raise ValueError('Unexpected merge parents')
                 row['merge_commit']=observation['merge_commit']; row['state']='awaiting_main'
             elif effect['kind']=='merge' and observation.get('request_uuid'):

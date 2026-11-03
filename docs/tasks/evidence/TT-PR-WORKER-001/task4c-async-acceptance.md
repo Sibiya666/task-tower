@@ -1,0 +1,11 @@
+# Bounded async merge request and retained fact observation
+
+Actual typed retained review and fresh private merge/writer authorization gate a single durable merge-async PUT with explicit bypass_rules:false. Pending acknowledgements remain unknown plus original UUID; repeated calls inspect the retained effect and never retry. Queue/conflict/lost response is not completion. Optional response bypass_rules defaults false per official API; raw responses remain unchanged and any present nonfalse value refuses.
+
+Completion requires original immutable PR identity, actor, exact ordered B,H merge parents, current main, original live owner/PID/deadline/cancellation and repository barrier. A merged raw PR is observed as merged, without fabricating open-ready state. Confirmation advances only to awaiting_main, retaining the barrier; no postmerge approval or Issue closure is claimed.
+
+Spec reviewer b2e2d145 approved the concrete contract. First development reviewer652b7458 rejected a real final transaction race: deadline/cancellation were checked before a separate write lock. Two fresh journal fault tests reproduced both failures. PRJournal.observe now rechecks deadline/cancel/state/PID/exact barrier inside its confirmation transaction. Fresh reviewer64b72253 approved the bounded implementation and independently ran10 pure tests; its full verdict and initial rejection are retained beside this document.
+
+Final exact-source Root regression passed50 tests in351.320s unittest/351.671s actual, complete EOF, cleanup and unchanged source. It includes genuine stage/review child fixtures, actual private loaders and journals with HTTP-only remote fixtures, pending-to-merged proof, repeat-no-PUT, disabled private policy, wrong parent/actor/main/marker/title/head, foreign journal and final private-read deadline, plus original journal and strict source/response cases. Detailed receipt is task4c-async-verification.json. Original publication regression22 and earlier negative captures retain their own exact source limits.
+
+Controller/persistence/CLI, pending/failure publication, installed pilot, operator/server setup and whole Issue17 acceptance remain pending. No main merge, automatic Issue closure or night-readiness is claimed.

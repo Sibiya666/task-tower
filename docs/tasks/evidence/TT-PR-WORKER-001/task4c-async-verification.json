@@ -1,0 +1,37 @@
+{
+  "argv": [
+    "C:\\Users\\sibiya666\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+    "-B",
+    "-m",
+    "unittest",
+    "tests.test_pr_merge_effects",
+    "tests.test_pr_merge_response",
+    "tests.test_pr_merge_transaction",
+    "tests.test_pr_journal",
+    "tests.test_pr_publication_response",
+    "tests.test_pr_source",
+    "-v"
+  ],
+  "runner_release": "7586df4ac2e59316521463b7526089c8314024e4",
+  "source_unchanged": true,
+  "verified_success": true,
+  "result": {
+    "status": "passed",
+    "exit_code": 0,
+    "started": true,
+    "cleanup_confirmed": true,
+    "pid": 12512,
+    "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "stdout_bytes": 0,
+    "stdout_captured_bytes": 0,
+    "stdout_tail_unknown": false,
+    "stdout_truncated": false,
+    "stderr_sha256": "188f8384c123b3c16516fd37cab2107d7b50612922546cf170142dafa93d4f43",
+    "stderr_bytes": 8738,
+    "stderr_captured_bytes": 8738,
+    "stderr_tail_unknown": false,
+    "stderr_truncated": false,
+    "duration_seconds": 351.671
+  },
+  "runner_sha256": "cf4f2e5732a7b089f69a0eb96b853056aaac8b9409f13a9c302ca0908243c488"
+}

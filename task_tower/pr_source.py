@@ -387,8 +387,8 @@ class PRSource:
             if not isinstance(details,dict): _fail('merge_result_unknown')
             state=result['status']
             if state=='pending':
-                exact(details,{'message','uuid','merge_method','merge_action','expected_head_sha','bypass_rules'})
-                if details['uuid']!=request_uuid or details['merge_method']!='merge' or details['merge_action']!='direct_merge' or details['bypass_rules'] is not False: _fail('merge_result_unknown')
+                exact(details,{'message','uuid','merge_method','merge_action','expected_head_sha'},{'bypass_rules'})
+                if details['uuid']!=request_uuid or details['merge_method']!='merge' or details['merge_action']!='direct_merge' or details.get('bypass_rules',False) is not False: _fail('merge_result_unknown')
                 text(details['expected_head_sha'],SHA)
             elif state=='merged': text(details['sha'],SHA)
             elif state not in ('failed','enqueued'): _fail('merge_result_unknown')

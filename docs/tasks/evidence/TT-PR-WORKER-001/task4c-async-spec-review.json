@@ -1,0 +1,41 @@
+{
+  "host_only_capture_limit_bytes": 1048576,
+  "qualified_current_review": true,
+  "source_unchanged": true,
+  "binary_unchanged": true,
+  "result": {
+    "status": "passed",
+    "exit_code": 0,
+    "started": true,
+    "cleanup_confirmed": true,
+    "pid": 207988,
+    "stdout_sha256": "ac5b3e2d1e8d4d394c8d0051232b483ccc19d61f9a5bbc639e10fc800e176366",
+    "stdout_bytes": 287755,
+    "stdout_captured_bytes": 287755,
+    "stdout_tail_unknown": false,
+    "stdout_truncated": false,
+    "stderr_sha256": "bbc6a52a8be8f5fdeed5119b0e0394fc30debae41fa94f6c29c184cfd1293634",
+    "stderr_bytes": 7252,
+    "stderr_captured_bytes": 7252,
+    "stderr_tail_unknown": false,
+    "stderr_truncated": false,
+    "duration_seconds": 57.125
+  },
+  "verdict": {
+    "run_id": "14f32c66-70e4-4eb5-a6fe-b836c27ed529",
+    "attempt_id": "89a7f09d-7a16-441b-b2e5-0bb97fcb6854",
+    "instance_id": "b2e2d145-328f-496e-9635-a3561466dabc",
+    "stage": "spec",
+    "generation": 1,
+    "source_sha": "12418e205312dd63bdd9198f3d4b27a9f6585cc6",
+    "checkpoint_sha": "12418e205312dd63bdd9198f3d4b27a9f6585cc6",
+    "input_sha256": "7fc24b55b16160a9729efee012015f314fcc1603f76f09d8896dc85a50a3f0bf",
+    "version": 2,
+    "summary": "Approve specification only. Verified pinned instruction and candidate file hashes and inspected existing source, journal, retained-reader and publication seams against the supplied official OpenAPI extract. Optional bypass_rules handling preserves explicit-false durable authority; pending observations remain compatible with immutable journal fields. Completion requires genuine retained evidence, original ownership/deadline/barrier and exact PR/actor/parents/current-main proof without fabricating premerge readiness. Implementation, server/writer attestation, Task5 closure and pilot readiness remain outside this acceptance. No writes, network, subagents or tests performed.",
+    "verdict": "approve",
+    "return_stage": null,
+    "findings": []
+  },
+  "validation_error": null,
+  "runner_sha256": "bfd7d2148a7f9e32aa655dd7d63677bfd932d0c45430fce3621e709ff88bd832"
+}

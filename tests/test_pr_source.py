@@ -157,6 +157,18 @@ class SourceTests(unittest.TestCase):
             with self.subTest(field=field), self.assertRaises(PRSourceError): self.source([bad]).merge_result(1,request_uuid)
         with self.assertRaises(PRSourceError): self.source([{'status':'merged','details':{}}]).merge_result(1,request_uuid)
 
+    def test_async_pending_documented_default_false_can_be_omitted_without_normalizing_raw_body(self):
+        pending=self.fixture()['async_pending']; request_uuid=pending['details']['uuid']
+        pending['details'].pop('bypass_rules'); before=copy.deepcopy(pending)
+        actual=self.source([pending]).merge_result(1,request_uuid)
+        self.assertEqual(actual,before); self.assertNotIn('bypass_rules',actual['details'])
+        for value in (True,0,None,'false'):
+            bad=copy.deepcopy(pending); bad['details']['bypass_rules']=value
+            with self.subTest(value=value),self.assertRaises(PRSourceError): self.source([bad]).merge_result(1,request_uuid)
+        for field in ('message','uuid','merge_method','merge_action','expected_head_sha'):
+            bad=copy.deepcopy(pending); bad['details'].pop(field)
+            with self.subTest(missing=field),self.assertRaises(PRSourceError): self.source([bad]).merge_result(1,request_uuid)
+
     def test_merge_observation_exact_pr_main_and_two_parents(self):
         pr=dict(number=1,merged=True,state='closed',merge_commit_sha='c'*40,merged_by={'login':'trusted'},
                 head={'sha':'a'*40,'repo':{'full_name':'owner/repo'}},base={'ref':'main','repo':{'full_name':'owner/repo'}})

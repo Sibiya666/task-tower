@@ -4,14 +4,17 @@ This helper cannot authenticate imported receipts or authorize any write.
 The future PREffects caller must reconstruct actual typed current context,
 retained records and semantic input equality before and after durable intent.
 """
-from .pr_journal import BINDING, _binding
-from .pr_policy import exact, identifier, integer, policy_fingerprint, text, HASH
+from .pr_journal import BINDING, _binding, _ClockFence
+from .pr_policy import exact, identifier, integer, policy_fingerprint, text, HASH, SHA
 from .pr_review import RESULT_KEYS, _result
 from .pr_source import _authority, PRSourceError
 from .pr_policy import canonical, strict_json
+from .pr_policy import authorized_task
 import copy
 import hashlib
 import time
+import os
+import re
 from datetime import datetime, timezone
 
 
@@ -152,23 +155,29 @@ def _status_body(payload):
     return {key:payload[key] for key in ('state','context','description','target_url')}
 
 
+def _response_json(response,allowed_statuses,max_bytes):
+    """Bounded unambiguous HTTP syntax; never effect or approval authority."""
+    exact(response,{'status','headers','body'})
+    if type(response['status']) is not int or response['status'] not in allowed_statuses or not isinstance(response['headers'],dict):
+        raise ValueError('Uncertain response')
+    raw=response['body']
+    if not isinstance(raw,bytes) or len(raw)>max_bytes: raise ValueError('Uncertain response size')
+    if any(not isinstance(key,str) or not isinstance(value,str) for key,value in response['headers'].items()):
+        raise ValueError('Invalid response headers')
+    lengths=[v for k,v in response['headers'].items() if k.lower()=='content-length']
+    if len(lengths)>1 or lengths and int(lengths[0])!=len(raw): raise ValueError('Incomplete response')
+    result=strict_json(raw.decode('utf-8'))
+    if not isinstance(result,dict): raise ValueError('Invalid response shape')
+    return response['status'],result
+
+
 def _publication_observation(effect,response,publisher,max_bytes):
     """Pure response consistency; durable owner/current proof is separate."""
     try:
         kind=effect['kind']; payload=effect['payload']
         if kind not in ('acceptance_review','acceptance_status'): raise ValueError('Unsupported observation')
         expected=200 if kind=='acceptance_review' else 201
-        exact(response,{'status','headers','body'})
-        if type(response['status']) is not int or response['status']!=expected or not isinstance(response['headers'],dict):
-            raise ValueError('Uncertain publication response')
-        raw=response['body']
-        if not isinstance(raw,bytes) or len(raw)>max_bytes: raise ValueError('Uncertain response size')
-        if any(not isinstance(key,str) or not isinstance(value,str) for key,value in response['headers'].items()):
-            raise ValueError('Invalid response headers')
-        lengths=[v for k,v in response['headers'].items() if k.lower()=='content-length']
-        if len(lengths)>1 or lengths and int(lengths[0])!=len(raw): raise ValueError('Incomplete response')
-        result=strict_json(raw.decode('utf-8'))
-        if not isinstance(result,dict): raise ValueError('Invalid response shape')
+        _,result=_response_json(response,(expected,),max_bytes)
         integer(result['id'])
         if kind=='acceptance_review':
             if (payload['event']!='COMMENT' or result['commit_id']!=payload['commit_id']
@@ -183,6 +192,38 @@ def _publication_observation(effect,response,publisher,max_bytes):
         return dict(status='confirmed',remote_id=result['id'],body_sha256=digest,author=author)
     except (ValueError,TypeError,KeyError,AttributeError,UnicodeError,OverflowError,RecursionError):
         raise ValueError('pr_publication_response_unverified') from None
+
+
+def _merge_response(effect,response,max_bytes):
+    """A response acknowledges delivery only, never a completed merge."""
+    try:
+        payload=effect['payload']; binding=effect['binding']
+        exact(payload,{'sha','merge_method','merge_action','bypass_rules'})
+        if (effect['kind']!='merge' or payload['sha']!=binding['head_sha'] or payload['merge_method']!='merge'
+                or payload['merge_action']!='direct_merge' or payload['bypass_rules'] is not False):
+            raise ValueError('Unsupported merge intent')
+        text(payload['sha'],SHA)
+        code,result=_response_json(response,(200,202),max_bytes)
+        exact(result,{'status','details'}); details=result['details']
+        if code==202:
+            exact(details,{'message','uuid','merge_method','merge_action','expected_head_sha'},{'bypass_rules'})
+            if (result['status']!='pending' or details['merge_method']!=payload['merge_method']
+                    or details['merge_action']!=payload['merge_action'] or details['expected_head_sha']!=payload['sha']
+                    or details.get('bypass_rules',False) is not False):
+                raise ValueError('Foreign or uncertain async request')
+            identifier(details['uuid']); observation=dict(status='unknown',request_uuid=details['uuid'])
+        elif result['status']=='merged':
+            exact(details,{'message','sha'}); text(details['sha'],SHA)
+            observation=dict(status='unknown',merge_commit=details['sha'])
+        elif result['status']=='enqueued':
+            exact(details,{'message'}); observation=dict(status='unknown',result='enqueued')
+        else: raise ValueError('Uncertain merge response')
+        message=details['message']
+        if not isinstance(message,str) or not message or len(message.encode('utf-8'))>8192:
+            raise ValueError('Invalid merge message')
+        return observation
+    except (ValueError,TypeError,KeyError,AttributeError,UnicodeError,OverflowError,RecursionError):
+        raise ValueError('pr_merge_response_unverified') from None
 
 
 def _remaining_feedback(snapshot,effects,binding,publisher):
@@ -249,10 +290,14 @@ class PREffects:
             row=self.journal._get(db,binding['repository'],binding['pr_number'])
             self.journal._owned(db,row,self.owner_id); self.journal._tick(row)
             saved=self.journal._load(db,'effects','effect_id',effect['effect_id'])
+            expected_state='merge_intent' if effect['kind']=='merge' else 'publishing_acceptance'
             if (saved!=effect or effect['status']!='intent' or effect['owner_id']!=self.owner_id
-                    or row['cancel_requested'] or row['state']!='publishing_acceptance'
+                    or effect['owner_pid']!=os.getpid() or row['owner_pid']!=os.getpid()
+                    or row['cancel_requested'] or row['state']!=expected_state
                     or any(type(row[k]) is not type(binding[k]) or row[k]!=binding[k] for k in BINDING)):
                 raise ValueError('PR publication intent fenced')
+            if effect['kind']=='merge':
+                self._check_barrier(self.journal._load(db,'barriers','repository',binding['repository']),binding)
             remaining=min((datetime.fromisoformat(row['deadline_utc'].replace('Z','+00:00'))-
                 datetime.now(timezone.utc)).total_seconds(),
                 self.journal._clock_limits[(row['repository'],row['pr_number'])]-time.monotonic())
@@ -268,7 +313,7 @@ class PREffects:
             with self.journal._db(True) as db:
                 current=self.journal._get(db,binding['repository'],binding['pr_number'])
                 self.journal._owned(db,current,self.owner_id); self.journal._tick(current)
-            raise ValueError('PR publication deadline exhausted')
+                raise _ClockFence(current,'clock_uncertain')
         return remaining
 
     def _write(self,effect,*,publisher):
@@ -321,3 +366,160 @@ class PREffects:
             if not isinstance(error,Exception): raise
             raise ValueError('pr_publication_uncertain') from None
         return self.journal.observe(effect['effect_id'],self.owner_id,observation)
+
+    def _merge_effect(self):
+        row=self.journal.get(self.task['repository'],self.task['pr_number'])
+        if row is None: raise ValueError('PR admission unavailable')
+        matches=[effect for effect in self.journal.effects(row['repository'],row['pr_number'])
+            if effect['kind']=='merge' and all(type(effect['binding'][key]) is type(row[key])
+                and effect['binding'][key]==row[key] for key in BINDING)]
+        if len(matches)>1: raise ValueError('Ambiguous merge history')
+        return row,matches[0] if matches else None
+
+    def _check_barrier(self,barrier,binding):
+        if (barrier is None or barrier['completed'] is not False or barrier['proof'] is not None
+                or barrier['owner_id']!=self.owner_id or barrier['owner_pid']!=os.getpid()
+                or any(type(barrier[key]) is not type(binding[key]) or barrier[key]!=binding[key] for key in BINDING)):
+            raise ValueError('Original repository barrier unavailable')
+        return barrier
+
+    def _merge_write(self,effect):
+        headers=dict(self.source.headers)
+        if headers.get('X-GitHub-Api-Version')!='2026-03-10': raise ValueError('Unexpected API version')
+        headers['Content-Type']='application/json'
+        url='https://api.github.com/repos/'+effect['binding']['repository']+'/pulls/'+str(effect['binding']['pr_number'])+'/merge-async'
+        timeout=min(self.source.limits['request_timeout_seconds'],self._live(effect))
+        response=self.source.transport('PUT',url,headers,canonical(effect['payload']).encode('utf-8'),
+            timeout,self.source.limits['max_response_bytes'])
+        observation=_merge_response(effect,response,self.source.limits['max_response_bytes'])
+        self._live(effect)
+        return observation
+
+    def request_merge(self,receipt):
+        binding=_positive_receipt(receipt); row,previous=self._merge_effect()
+        if (any(type(row[key]) is not type(binding[key]) or row[key]!=binding[key] for key in BINDING)
+                or row['pr_receipt_sha256']!=receipt['receipt_sha256']):
+            raise ValueError('Foreign merge receipt')
+        if previous is not None: return previous  # Inspection only: never another PUT.
+        fresh=self._proof(receipt)['current']
+        premerge_gate(fresh['task'],receipt,fresh['snapshot'],fresh['authority'],None)
+        if row['state']!='accepted': raise ValueError('PR acceptance not durably published')
+        barrier=self.journal.acquire_barrier(binding['repository'],binding['pr_number'],self.owner_id,binding)
+        self._check_barrier(barrier,binding)
+        effect=self.journal.begin_effect(binding['repository'],binding['pr_number'],self.owner_id,'merge',
+            dict(sha=binding['head_sha'],merge_method='merge',merge_action='direct_merge',bypass_rules=False))
+        try:
+            fresh=self._proof(receipt)['current']
+            barrier=self._check_barrier(self.journal.barrier(binding['repository']),binding)
+            premerge_gate(fresh['task'],receipt,fresh['snapshot'],fresh['authority'],barrier)
+            observation=self._merge_write(effect)
+        except BaseException as error:
+            try: self.journal.observe(effect['effect_id'],self.owner_id,dict(status='unknown'))
+            except ValueError: pass
+            if not isinstance(error,Exception): raise
+            raise ValueError('pr_merge_uncertain') from None
+        return self.journal.observe(effect['effect_id'],self.owner_id,observation)
+
+    def _fact_scope(self,effect):
+        """Authenticate original authority for fact reads, never open-ready proof."""
+        loaded=self.context._fresh_inputs(); provenance=self.context.private_input_provenance
+        binding=effect['binding']
+        if provenance['pr_journal'] is None or provenance['pr_journal']['path']!=str(self.journal.path):
+            raise ValueError('Foreign fact journal')
+        task=authorized_task(loaded['policy'],binding['repository'],binding['pr_number'])
+        connections=[connection for connection in loaded['connections'] if connection.repository.casefold()==binding['repository']]
+        if (len(connections)!=1 or self.source.connection!=connections[0]
+                or self.source.repository!=binding['repository'] or canonical(self.source.policy)!=canonical(loaded['policy'])):
+            raise ValueError('Foreign configured fact source')
+        if (self.task.get('repository','').casefold()!=binding['repository'] or task['source']!='pipeline'
+                or any(type(self.task.get(key)) is not type(task[key]) or self.task[key]!=task[key]
+                    or type(task[key]) is not type(binding[key]) or task[key]!=binding[key]
+                    for key in ('pr_number','issue','issue_id','task_id'))):
+            raise ValueError('Foreign configured fact task')
+        retained=self.context.review_record(binding['input_sha256']); request=retained['request']
+        if (any(type(request[key]) is not type(binding[key]) or request[key]!=binding[key] for key in BINDING)
+                or request['input']['authority']['run_id']!=task['pipeline_run_id']
+                or request['policy_sha256']!=policy_fingerprint(loaded['policy'])):
+            raise ValueError('Original retained merge authority changed')
+        _positive_receipt(retained['receipt'])
+        return task,retained
+
+    def _observe_live(self,effect):
+        """Only the original live owner may advance an existing merge fact."""
+        self.context._fresh_inputs(); binding=effect['binding']
+        provenance=self.context.private_input_provenance
+        if provenance['pr_journal'] is None or provenance['pr_journal']['path']!=str(self.journal.path):
+            raise ValueError('Original merge fact journal changed')
+        with self.journal._db(True) as db:
+            row=self.journal._get(db,binding['repository'],binding['pr_number'])
+            self.journal._owned(db,row,self.owner_id); self.journal._tick(row)
+            saved=self.journal._load(db,'effects','effect_id',effect['effect_id'])
+            if (saved!=effect or effect['owner_id']!=self.owner_id or effect['owner_pid']!=os.getpid()
+                    or row['owner_pid']!=os.getpid() or row['cancel_requested']
+                    or row['state'] not in ('merge_intent','merge_pending')
+                    or any(type(row[key]) is not type(binding[key]) or row[key]!=binding[key] for key in BINDING)):
+                raise ValueError('Merge fact ownership/deadline fenced')
+            self._check_barrier(self.journal._load(db,'barriers','repository',binding['repository']),binding)
+            self.journal._save(db,row)
+        self.context._fresh_inputs()
+        remaining=min((datetime.fromisoformat(row['deadline_utc'].replace('Z','+00:00'))-
+            datetime.now(timezone.utc)).total_seconds(),
+            self.journal._clock_limits[(row['repository'],row['pr_number'])]-time.monotonic())
+        if remaining<=0:
+            with self.journal._db(True) as db:
+                current=self.journal._get(db,binding['repository'],binding['pr_number'])
+                self.journal._owned(db,current,self.owner_id); self.journal._tick(current)
+                raise _ClockFence(current,'clock_uncertain')
+
+    def _match_merged_pr(self,pr,proof,task,request):
+        original=request['input']['source']['pr']; binding={key:request[key] for key in BINDING}
+        if (type(pr['number']) is not int or pr['number']!=binding['pr_number'] or pr['merged'] is not True
+                or pr['state']!='closed' or pr['draft'] is not False or pr['merge_commit_sha']!=proof['merge_commit']
+                or pr['merged_by']['login'].casefold()!=task['publisher_account'].casefold()
+                or pr.get('title')!=original.get('title') or pr.get('body')!=original.get('body')
+                or pr['head']['sha']!=binding['head_sha'] or pr['base']['ref']!='main'
+                or any(pr[side]['repo']['full_name'].casefold()!=binding['repository'] for side in ('head','base'))):
+            raise ValueError('Merged PR identity changed')
+        markers=re.findall(r'^Task-Tower: (TT-[A-Z0-9]+(?:-[A-Z0-9]+)*)\s*$',pr['body'],re.M)
+        if markers!=[binding['task_id']]: raise ValueError('Merged PR marker changed')
+
+    def observe_merge(self):
+        row,effect=self._merge_effect()
+        if effect is None: raise ValueError('No original merge intent')
+        if effect['status']=='confirmed' or (effect['observation'] or {}).get('result') in ('failed','enqueued'):
+            return effect  # Retained inspection; no new effect or budget.
+        try:
+            task,retained=self._fact_scope(effect); self._observe_live(effect)
+            observation=effect['observation'] or {}; request_uuid=observation.get('request_uuid')
+            candidate=observation.get('merge_commit')
+            if request_uuid is not None:
+                result=self.source.merge_result(row['pr_number'],request_uuid)
+                if result['status']=='pending':
+                    if result['details']['expected_head_sha']!=row['head_sha']: raise ValueError('Foreign pending head')
+                    self._fact_scope(effect); self._observe_live(effect)
+                    return effect
+                if result['status'] in ('failed','enqueued'):
+                    self._fact_scope(effect); self._observe_live(effect)
+                    return self.journal.observe(effect['effect_id'],self.owner_id,
+                        dict(status='unknown',request_uuid=request_uuid,result=result['status']))
+                candidate=result['details']['sha']
+            proof=self.source.merge_observation(row['pr_number'])
+            if proof['status']!='confirmed':
+                self._fact_scope(effect); self._observe_live(effect)
+                return effect
+            if (proof['repository']!=row['repository'] or proof['pr_number']!=row['pr_number']
+                    or proof['head_sha']!=row['head_sha'] or proof['parents']!=[row['base_sha'],row['head_sha']]
+                    or proof['actor'].casefold()!=task['publisher_account'].casefold()
+                    or candidate is not None and candidate!=proof['merge_commit']):
+                raise ValueError('Original merge fact mismatch')
+            pr=self.source._get('/pulls/'+str(row['pr_number']))
+            self._match_merged_pr(pr,proof,task,retained['request'])
+            self.source._issue(task)
+            if self.source.main_sha()!=proof['merge_commit']: raise ValueError('Current main changed')
+            self._fact_scope(effect); self._observe_live(effect)
+            confirmed=dict(status='confirmed',merge_commit=proof['merge_commit'],main_sha=proof['merge_commit'],
+                parents=proof['parents'],result='merged')
+            if request_uuid is not None: confirmed['request_uuid']=request_uuid
+            return self.journal.observe(effect['effect_id'],self.owner_id,confirmed)
+        except (ValueError,TypeError,KeyError,AttributeError,OSError,PRSourceError,OverflowError,RecursionError):
+            raise ValueError('pr_merge_fact_unverified') from None
