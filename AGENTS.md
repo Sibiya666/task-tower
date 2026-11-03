@@ -67,3 +67,5 @@ Use docs/executor.md for private profiles, allowlists, pinned Superpowers instru
 Inspect UTF-8 source through ASCII-escaped JSON or verified code points when terminal encodings can substitute Unicode. On Windows, UTF-8 input decoding alone does not set stdout encoding; use an ASCII-safe reader or process-local UTF-8 output. Never base a Unicode source defect solely on lossy terminal rendering. Preserve source bytes and sandbox/authority boundaries.
 
 Task3BRb now has [bounded pure epoch/stage2/role3 shape acceptance](docs/tasks/evidence/TT-GROUPS-001/task3brb-stage-role-acceptance.md). These helpers do not choose a live run kind or grant epoch/resource/workspace authority. Legacy stage1/role2 file consumers remain exact; remaining group bodies and all durable consumers stay gated.
+
+Task3BRb pure request3/check-aggregate2 syntax and owned macOS temporary-path fixture correction have [bounded acceptance](docs/tasks/evidence/TT-GROUPS-001/task3brb-request-check-acceptance.md). Actual group producers, instructions/check membership/current-epoch proof and durable consumers remain gated; parser shape success is not execution authority.

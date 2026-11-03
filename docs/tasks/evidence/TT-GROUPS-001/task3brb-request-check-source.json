@@ -1,0 +1,7 @@
+{
+  "base": "47b2e9d2eb501440cab0fc681b62f38c7f75cbb6",
+  "files": {
+    "task_tower/group_wire.py": "798e3f4e0c52ff15cc1456af42b92b2f3544291bf0bba7214b7ac1d135d3a0d4",
+    "tests/test_group_wire.py": "f17fe6a8eb6282b43e9c1e8d0365304bbc0c4407619c188c6860ad0fb6308c7e"
+  }
+}

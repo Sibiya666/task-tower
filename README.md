@@ -149,3 +149,5 @@ Active-chat authorization continues to the next eligible backlog task after ever
 [Capture, idea promotion and legacy migration](docs/session-capture.md) use explicit input and the selected project. Original text/session provenance and native parent/milestone links are retained. Ideas do not execute implicitly; migration keeps the original card/evidence bytes and exposes drift while GitHub remains canonical. No all-chat scraping or Codex database writes are involved.
 
 Task3BRb now has [bounded pure epoch/stage2/role3 shape acceptance](docs/tasks/evidence/TT-GROUPS-001/task3brb-stage-role-acceptance.md). These helpers do not choose a live run kind or grant epoch/resource/workspace authority. Legacy stage1/role2 file consumers remain exact; remaining group bodies and all durable consumers stay gated.
+
+Task3BRb pure request3/check-aggregate2 syntax and owned macOS temporary-path fixture correction have [bounded acceptance](docs/tasks/evidence/TT-GROUPS-001/task3brb-request-check-acceptance.md). Actual group producers, instructions/check membership/current-epoch proof and durable consumers remain gated; parser shape success is not execution authority.

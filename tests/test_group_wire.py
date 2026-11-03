@@ -14,6 +14,10 @@ try:
     from task_tower.group_wire import group_role_result_schema, validate_group_role_result_shape
 except ImportError:
     group_role_result_schema=validate_group_role_result_shape=None
+try:
+    from task_tower.group_wire import validate_group_role_request_shape, validate_group_checks_shape
+except ImportError:
+    validate_group_role_request_shape=validate_group_checks_shape=None
 
 
 class GroupStageShapeTests(unittest.TestCase):
@@ -108,7 +112,7 @@ class GroupRoleShapeTests(unittest.TestCase):
         binding={key:self.binding[key] for key in ROLE_BINDING}
         legacy=dict(binding,version=2,status='completed',summary='Shape fixture only.')
         with tempfile.TemporaryDirectory() as directory:
-            path=Path(directory)/'result.json'; path.write_text(json.dumps(legacy),encoding='utf-8')
+            path=Path(directory).resolve()/'result.json'; path.write_text(json.dumps(legacy),encoding='utf-8')
             self.assertEqual(validate_role_result(path,binding,reviewer=False),legacy)
             path.write_text(json.dumps(self.executor),encoding='utf-8')
             with self.assertRaises(ValueError): validate_role_result(path,binding,reviewer=False)
@@ -138,3 +142,90 @@ class GroupRoleShapeTests(unittest.TestCase):
         with self.assertRaises(ValueError): group_role_result_schema(bad,reviewer=False)
         bad=copy.deepcopy(self.executor); bad.pop('task_delta_sha256')
         with self.assertRaises(ValueError): validate_group_role_result_shape(bad,self.binding,reviewer=False)
+
+
+class GroupRequestShapeTests(unittest.TestCase):
+    def setUp(self):
+        GroupRoleShapeTests.setUp(self)
+        from task_tower.pipeline_inputs import digest_manifest
+        self.manifest=group_stage_shape(dict(self.stage,stage='development'),self.epoch)
+        self.binding.update(checkpoint_sha=self.manifest['checkpoint_sha'],input_sha256=digest_manifest(self.manifest))
+        self.request=dict(version=3,role='development_executor',binding=self.binding,manifest=self.manifest,
+            worktree=str(Path(tempfile.gettempdir()).resolve()/'shape-worktree'),instructions={},
+            host_task_policy=dict(spec_path='docs/spec.md',plan_path='docs/plan.md',allowed_paths=['src/','docs/'],evidence_dir='docs/evidence/'),
+            task_data={},task_data_trust='untrusted',checks=[],host_checks=None,
+            ci_substitution=dict(policy=dict(enabled=False,required_platforms=[]),evidence=None,unavailable_reason=None),
+            obligations=['Shape fixture only; no launch authority.'],**self.epoch)
+
+    def available(self): self.assertIsNotNone(validate_group_role_request_shape,'Missing pure group request3 shape')
+
+    def test_group_request3_closes_outer_fields_and_nested_epoch_input(self):
+        self.available()
+        self.assertEqual(validate_group_role_request_shape(self.request),self.request)
+        for change in ('outer','binding','manifest','input','role','extra','version'):
+            value=copy.deepcopy(self.request)
+            if change=='outer': value['task_delta_sha256']='0'*64
+            elif change=='binding': value['binding']['scope_base_sha']='0'*40
+            elif change=='manifest': value['manifest']['base_epoch_sha256']='0'*64
+            elif change=='input': value['binding']['input_sha256']='0'*64
+            elif change=='role': value['role']='test_reviewer'
+            elif change=='extra': value['is_group']=True
+            else: value['version']=2
+            with self.subTest(change=change),self.assertRaises(ValueError): validate_group_role_request_shape(value)
+
+    def test_host_check_aggregate2_preserves_individual_row_without_epoch_fields(self):
+        self.available(); self.assertIsNotNone(validate_group_checks_shape)
+        aggregate=dict(version=2,checkpoint_sha=self.manifest['checkpoint_sha'],product_sha256=self.manifest['product_sha256'],
+            policy_sha256=self.manifest['policy_sha256'],execution_local=True,checks=[],**self.epoch)
+        self.assertEqual(validate_group_checks_shape(aggregate),aggregate)
+        for change in ('version','epoch','extra','execution'):
+            value=copy.deepcopy(aggregate)
+            if change=='version': value['version']=True
+            elif change=='epoch': value['base_epoch']=True
+            elif change=='extra': value['unknown']=True
+            else: value['execution_local']=1
+            with self.subTest(change=change),self.assertRaises(ValueError): validate_group_checks_shape(value)
+
+    def test_request_host_checks_must_match_its_exact_stage_hash_and_epoch(self):
+        self.available()
+        from task_tower.pipeline_inputs import digest_manifest
+        value=copy.deepcopy(self.request);value['role']='test_reviewer'
+        value['binding']['stage']='test';value['manifest']['stage']='test'
+        checks=dict(version=2,checkpoint_sha=value['manifest']['checkpoint_sha'],product_sha256=value['manifest']['product_sha256'],
+            policy_sha256=value['manifest']['policy_sha256'],execution_local=True,checks=[],**self.epoch)
+        value['host_checks']=checks;value['manifest']['checks_sha256']=digest_manifest(checks)
+        value['binding']['input_sha256']=digest_manifest(value['manifest'])
+        self.assertEqual(validate_group_role_request_shape(value),value)
+        value['host_checks']['task_delta_sha256']='0'*64
+        with self.assertRaises(ValueError): validate_group_role_request_shape(value)
+
+    def test_individual_check_rows_keep_actual_unversioned_fields(self):
+        self.available()
+        row=dict(id='unit',check_sha256='1'*64,status='passed',exit_code=0,started=True,
+            cleanup_confirmed=True,source_unchanged=True,duration_seconds=0.5)
+        for stream in ('stdout','stderr'):
+            row.update({stream+'_sha256':'2'*64,stream+'_bytes':0,stream+'_captured_bytes':0,
+                stream+'_truncated':False,stream+'_tail_unknown':False})
+        aggregate=dict(version=2,checkpoint_sha=self.manifest['checkpoint_sha'],product_sha256=self.manifest['product_sha256'],
+            policy_sha256=self.manifest['policy_sha256'],execution_local=True,checks=[row],**self.epoch)
+        before=copy.deepcopy(row)
+        self.assertEqual(validate_group_checks_shape(aggregate),aggregate)
+        self.assertEqual(row,before)
+        for change in ('version','extra','epoch','duration','duration_overflow','integer_bool','capture'):
+            value=copy.deepcopy(aggregate); check=value['checks'][0]
+            if change=='version': check['version']=2
+            elif change=='extra': check['unknown']=True
+            elif change=='epoch': check['base_epoch']=0
+            elif change=='duration': check['duration_seconds']=-1
+            elif change=='duration_overflow': check['duration_seconds']=10**400
+            elif change=='integer_bool': check['exit_code']=False
+            else: check['stdout_captured_bytes']=1
+            with self.subTest(change=change),self.assertRaises(ValueError): validate_group_checks_shape(value)
+
+    def test_ci_policy_keeps_actual_closed_config_types_and_platform_rules(self):
+        self.available()
+        for policy in ({'enabled':'false','required_platforms':[]},{'enabled':False,'required_platforms':[],'extra':True},
+                {'enabled':True,'required_platforms':[]},{'enabled':False,'required_platforms':['windows']},
+                {'enabled':True,'required_platforms':['windows','windows']},{'enabled':True,'required_platforms':['unknown']}):
+            value=copy.deepcopy(self.request); value['ci_substitution']['policy']=policy
+            with self.subTest(policy=policy),self.assertRaises(ValueError): validate_group_role_request_shape(value)
