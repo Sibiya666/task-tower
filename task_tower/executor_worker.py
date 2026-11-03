@@ -75,7 +75,12 @@ def execute_one(config,queue,*,owner_id=None):
             return dict(run_id=run,status=state)
         try:
             profile=config['profiles'].get(job['profile_id'])
-            if profile is None or not _authorized(config,job,profile): return record('needs_input',dict(no_child_created=True))
+            if profile is None: return record('needs_input',dict(no_child_created=True))
+            # OpenCode remains prelaunch-only until its qualified foreground path
+            # is implemented; common registration never grants generic launch.
+            if not isinstance(profile,dict) or profile.get('kind') not in ('codex','custom'):
+                return record('needs_input',dict(no_child_created=True,reason='unsupported_kind'))
+            if not _authorized(config,job,profile): return record('needs_input',dict(no_child_created=True))
             if queue.status(run)['cancel_requested']: return record('cancelled',dict(no_child_created=True))
             attempt=prepare_attempt(job,profile)
             manifest_hash=_write(Path(attempt['directory'])/'manifest.json',attempt)

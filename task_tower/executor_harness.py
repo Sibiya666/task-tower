@@ -4,6 +4,8 @@ from pathlib import Path
 from .project_connections import safe_config_path
 
 def build_invocation(attempt, profile):
+    if not isinstance(profile,dict) or profile.get('kind') not in ('codex','custom'):
+        raise ValueError('Unsupported executor kind for generic launch')
     if profile['kind']=='custom':
         if not profile.get('trusted'): raise ValueError('Untrusted custom executor')
         return [*profile['argv'],'--request',str(attempt['request_path']),'--result',str(attempt['result_path'])]
@@ -44,6 +46,8 @@ FINDING_CODES=('criteria_unmet','plan_incomplete','product_defect','test_failure
 
 def build_role_invocation(attempt:dict, profile:dict, *, role:str) -> list[str]:
     if role not in ROLE_NAMES: raise ValueError('Unknown pipeline role')
+    if not isinstance(profile,dict) or profile.get('kind') not in ('codex','custom'):
+        raise ValueError('Unsupported executor kind for pipeline launch')
     if profile['kind']=='custom': return build_invocation(attempt,profile)
     argv=build_invocation(attempt,profile)
     argv[argv.index('--sandbox')+1]='workspace-write' if role in ('spec_executor','development_executor') else 'read-only'

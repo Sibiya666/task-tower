@@ -45,6 +45,7 @@ def load_pipeline_config(path,connections,executor_config):
             if len(matches)!=1: raise ValueError()
             connection=matches[0]; row['repository']=connection.repository
             profile=executor_config['profiles'].get(row['executor_profile'])
+            if not isinstance(profile,dict) or profile.get('kind') not in ('codex','custom'): raise ValueError('unsupported_kind')
             auth=[r for r in executor_config['allowlist'] if r['repository'].casefold()==row['repository'].casefold() and all(r[k]==row[k] for k in ('issue','task_id','runner_label')) and r['profile']==row['executor_profile']]
             if len(auth)!=1 or profile is None or profile['repository'].casefold()!=row['repository'].casefold() or profile['runner_label']!=row['runner_label'] or Path(profile['checkout'])!=connection.checkout or connection.runner_label!=row['runner_label']: raise ValueError()
             _pins(profile['superpowers'])

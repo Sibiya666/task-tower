@@ -164,6 +164,7 @@ def _prepare(config,run,journal,owner):
     from .dispatch_selection import collect_snapshot
     from .pipeline_policy import admission_authorized
     task=_task(config,run);profile=config['profiles'][run['profile_id']]
+    if not isinstance(profile,dict) or profile.get('kind') not in ('codex','custom'): raise ValueError('unsupported_kind')
     if run['admission'] is None:
         admission=admission_authorized(config,task,collect_snapshot(config['_connections']))
         if admission is None:raise ValueError('policy_revoked')

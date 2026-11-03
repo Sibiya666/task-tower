@@ -84,15 +84,23 @@ def load_executor_config(path, connections):
             raise ValueError('Invalid executor configuration')
         normalized = {}
         directories = []
+        opencode_evidence = []
+        # Reject every declared output root before opening OpenCode evidence,
+        # including profiles later in the document. Legacy-only policy is unchanged.
+        all_run_roots=[]
+        if any(isinstance(raw,dict) and raw.get('kind')=='opencode' for raw in value['profiles'].values()):
+            for raw in value['profiles'].values():
+                if not isinstance(raw,dict):raise ValueError('Invalid executor profile')
+                all_run_roots.append(_path(raw['runs_dir'],directory=True))
         required = {'kind','repository','checkout','runner_label','argv','source_ref','timeout_seconds',
                     'log_max_bytes','max_attempts','runs_dir','superpowers'}
         for name, raw in value['profiles'].items():
             if not isinstance(name,str) or not re.fullmatch('[A-Za-z0-9][A-Za-z0-9_.-]{0,99}',name):
                 raise ValueError('Invalid executor profile identity')
-            if not isinstance(raw,dict) or not required <= set(raw) or set(raw) - required - {'trusted','approve_for_me'}:
+            if not isinstance(raw,dict) or not required <= set(raw) or set(raw) - required - {'trusted','approve_for_me'} - ({'opencode'} if raw.get('kind')=='opencode' else set()):
                 raise ValueError('Invalid executor profile')
             profile = dict(raw, trusted=raw.get('trusted',False), approve_for_me=raw.get('approve_for_me',False))
-            if profile['kind'] not in ('codex','custom') or type(profile['trusted']) is not bool or type(profile['approve_for_me']) is not bool:
+            if profile['kind'] not in ('codex','custom','opencode') or type(profile['trusted']) is not bool or type(profile['approve_for_me']) is not bool:
                 raise ValueError('Invalid executor trust policy')
             if profile['kind']=='custom' and (not profile['trusted'] or profile['approve_for_me']):
                 raise ValueError('Custom executor requires explicit trust')
@@ -106,7 +114,7 @@ def load_executor_config(path, connections):
             if not isinstance(argv,list) or not argv or any(not isinstance(a,str) or not a or '\x00' in a for a in argv):
                 raise ValueError('Invalid executor argv')
             executable=_path(argv[0])
-            if not executable.is_file() or (profile['kind'] == 'codex' and len(argv) != 1):
+            if not executable.is_file() or (profile['kind'] in ('codex','opencode') and len(argv) != 1):
                 raise ValueError('Invalid executor executable policy')
             profile['argv']=[str(executable),*argv[1:]]
             ref=profile['source_ref']
@@ -123,7 +131,21 @@ def load_executor_config(path, connections):
             profile['superpowers']=_pins(profile['superpowers'])
             if runs.is_relative_to(Path(profile['superpowers']['root'])) or Path(profile['superpowers']['root']).is_relative_to(runs):
                 raise ValueError('Executor instruction/output collision')
+            if profile['kind']=='opencode':
+                from .opencode_adapter import _load_policy
+                from .opencode_files import digest_executable
+                if profile['approve_for_me'] or profile['log_max_bytes']!=67108864: raise ValueError('Invalid OpenCode limits')
+                policy=profile.get('opencode'); evidence=_load_policy(policy,checkouts,run_roots=all_run_roots)
+                if Path(evidence['scope']['runs_root'])!=runs: raise ValueError('OpenCode run root mismatch')
+                artifacts=[Path(policy['policy_evidence_path']),*(Path(evidence['qualification'][key]['path']) for key in ('source_audit','fixture_report','tool_policy'))]
+                if executable in artifacts: raise ValueError('OpenCode artifact alias')
+                _private(executable,all_run_roots)
+                digest_executable(str(executable),policy['executable_sha256'])
+                profile['opencode']=dict(policy)
+                opencode_evidence.extend(artifacts)
             normalized[name]=profile
+        for artifact in opencode_evidence:
+            _private(artifact,directories)
         seen=set()
         for row in value['allowlist']:
             if not isinstance(row,dict) or set(row)!={'repository','issue','task_id','runner_label','profile'}:

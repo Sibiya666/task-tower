@@ -15,7 +15,7 @@ class PipelinePolicyTests(unittest.TestCase):
         pins=self.root/'pins'; pins.mkdir(); (pins/'SKILL.md').write_text('rules',encoding='utf-8')
         import hashlib
         manifest={'SKILL.md':hashlib.sha256(b'rules').hexdigest()}
-        self.profile=dict(repository='Owner/Repo',checkout=str(checkout),runner_label='local',superpowers=dict(root=str(pins),revision='a'*40,manifest=manifest,manifest_sha256=profile_fingerprint(manifest)),timeout_seconds=60,log_max_bytes=4096)
+        self.profile=dict(kind='codex',repository='Owner/Repo',checkout=str(checkout),runner_label='local',superpowers=dict(root=str(pins),revision='a'*40,manifest=manifest,manifest_sha256=profile_fingerprint(manifest)),timeout_seconds=60,log_max_bytes=4096)
         self.connections=[SimpleNamespace(repository='Owner/Repo',checkout=checkout,runner_label='local',trusted_publishers=['owner'])]
         self.executor=dict(profiles={'local':self.profile},allowlist=[dict(repository='Owner/Repo',issue=16,task_id='TT-PIPELINE-001',runner_label='local',profile='local')])
         self.row=dict(repository='Owner/Repo',issue=16,task_id='TT-PIPELINE-001',runner_label='local',executor_profile='local',components=['core'],allowed_paths=['src/','docs/'],spec_path='docs/spec.md',plan_path='docs/plan.md',evidence_dir='docs/evidence/',checks=[dict(id='unit',argv=[str(Path(sys.executable).resolve()),'-m','unittest'],timeout_seconds=60)],ci_substitution=dict(enabled=False,required_platforms=[]),publish=dict(enabled=False,remote='origin',base_ref='refs/heads/main',publisher_account='owner'))

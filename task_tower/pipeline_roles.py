@@ -186,6 +186,8 @@ def _role_obligations(role,task,source_sha):
 
 def run_role(config:dict,run:dict,binding:dict,role:str,journal,owner_id:str)->dict:
     if role not in ROLE_NAMES or set(binding)!={'role','manifest','artifact_names'} or binding['role']!=role or binding['manifest']!=run['manifest']: raise ValueError('Invalid role binding')
+    profile=config['profiles'].get(run['profile_id'])
+    if not isinstance(profile,dict) or profile.get('kind') not in ('codex','custom'): raise ValueError('unsupported_kind')
     task,profile=_authority(config,run,journal,owner_id)
     host_checks=_host_checks(run,task,profile,journal) if role=='test_reviewer' else None
     before=_snapshot(run,task)
@@ -275,6 +277,8 @@ def run_role(config:dict,run:dict,binding:dict,role:str,journal,owner_id:str)->d
 
 
 def run_checks(config:dict,run:dict,checkpoint:dict,journal,owner_id:str)->dict:
+    profile=config['profiles'].get(run['profile_id'])
+    if not isinstance(profile,dict) or profile.get('kind') not in ('codex','custom'): raise ValueError('unsupported_kind')
     task,profile=_authority(config,run,journal,owner_id)
     manifest=run['manifest']
     if run['stage']!='test' or run['state']!='checking' or any(checkpoint[key]!=manifest[key] for key in ('checkpoint_sha','product_sha256')): raise ValueError('Wrong host test checkpoint')
