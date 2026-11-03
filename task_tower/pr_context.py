@@ -1,13 +1,13 @@
-"""Private PR host factory foundation; this module grants no effect authority.
+"""Private installed inputs and genuine current stage/Git authority.
 
-Task4a only: actual installed loaders, private path provenance and lifetime file
-identity. Fresh stage/Git authority and retained role readers are separate gates;
-there is deliberately no current()/publisher/controller API in this foundation.
+Retained PR process readers and every publication/effect API remain separate
+gates. A current stage result alone cannot authorize a PR action.
 """
 import copy
 from dataclasses import dataclass
 import hashlib
 import os
+import uuid
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -15,7 +15,13 @@ from .executor_profiles import load_executor_config, profile_fingerprint
 from .pipeline import _runtime
 from .pipeline_journal import APP_ID, SCHEMAS, _open_database_pin, _pin_identity
 from .pipeline_policy import _current
-from .pr_policy import load_pr_policy, policy_fingerprint, private_paths, strict_json
+from .github_tasks import parse_metadata
+from .pipeline_policy import criteria_snapshot
+from .pr_evidence import StageAuthorityContext, load_stage_authority
+from .pr_policy import (load_pr_policy, policy_fingerprint, private_paths, strict_json,
+    authorized_task, canonical, text, SHA)
+from .pr_review import _private_directory
+from .pr_source import PRSource, PRSourceError, _git, _fetch
 from .project_connections import load_connections, safe_config_path
 
 
@@ -110,7 +116,7 @@ def _load(inputs):
 
 
 class PRHostContext:
-    """Factory-owned pinned private inputs, with no positive acceptance surface."""
+    """Factory-owned pinned inputs; current stage proof is not PR acceptance."""
 
     def __init__(self):
         raise TypeError('Use PRHostContext.from_inputs')
@@ -201,6 +207,93 @@ class PRHostContext:
         except (OSError,ValueError,TypeError,KeyError,AttributeError,UnicodeError):
             raise ValueError('Private PR inputs unavailable or changed') from None
 
+    def _authority_mirror(self, loaded, connection, snapshot):
+        """Fresh host-created object-only mirror, never an original worktree.
+
+        No existing directory/object cache is reused as evidence. Task5 owns
+        retention/cleanup of these private host artifacts; this gate never
+        recursively removes a path or changes any source checkout/ref.
+        """
+        base=text(snapshot['base_sha'],SHA); head=text(snapshot['head_sha'],SHA)
+        namespace=loaded['namespace']
+        safe_config_path(namespace/'.pr-private-path-check')
+        directory=_private_directory(namespace/('authority-'+str(uuid.uuid4())),connection.checkout)
+        logs=directory/'logs'; logs.mkdir()
+        mirror=directory/'objects'; mirror.mkdir()
+        origin=_git(connection.checkout,['config','--no-includes','--local','--get','remote.origin.url'],logs,16384).decode('utf-8').strip()
+        url='https://github.com/'+connection.repository.casefold()+'.git'
+        if origin.casefold() not in (url,url.removesuffix('.git'),'git@github.com:'+connection.repository.casefold()+'.git'):
+            raise ValueError('Repository remote does not match configured identity')
+        _git(mirror,['init','--bare','--template='],logs)
+        _fetch(mirror,url,base,head,logs)
+        for sha in (base,head):
+            actual=_git(mirror,['rev-parse','--verify',sha+'^{commit}'],logs,1024).decode('ascii').strip()
+            if actual!=sha: raise ValueError('Immutable PR object mismatch')
+        _git(mirror,['merge-base','--is-ancestor',base,head],logs,1024)
+        safe_config_path(directory/'.pr-private-path-check')
+        return mirror
+
+    def current(self, source: PRSource, task_identity: dict) -> dict:
+        """Reconstruct actual current stage proof, with a fixed refusal channel.
+
+        This does not verify an admitted PR review record or permit effects.
+        Configuration/identity/source uncertainty raises rather than producing
+        a negative-status authorization. Recognized stage refusals are data
+        only; consumers must independently enforce every PR effect gate.
+        """
+        loaded=self._fresh_inputs()
+        if type(source) is not PRSource or not isinstance(task_identity,dict):
+            raise ValueError('Genuine configured PR source and task identity required')
+        task=authorized_task(loaded['policy'],task_identity.get('repository'),task_identity.get('pr_number'))
+        for key in ('issue','issue_id','task_id','pr_number'):
+            if type(task_identity.get(key)) is not type(task[key]) or task_identity[key]!=task[key]:
+                raise ValueError('Foreign current PR identity')
+        for key in ('source','pipeline_run_id'):
+            if key in task_identity and task_identity[key]!=task[key]: raise ValueError('Foreign PR authority identity')
+        matches=[c for c in loaded['connections'] if c.repository.casefold()==task['repository'].casefold()]
+        if len(matches)!=1 or source.connection!=matches[0] or canonical(source.policy)!=canonical(loaded['policy']):
+            raise ValueError('PR source disagrees with current private inputs')
+        connection=matches[0]
+        if source.repository!=connection.repository.casefold(): raise ValueError('Foreign current PR source')
+        # Source/journal identities are canonical lower-case repository names;
+        # connection/profile spelling remains unchanged in their fingerprints.
+        task['repository']=source.repository
+        task['_review_profile']=copy.deepcopy(loaded['executor']['profiles'][task['reviewer_profile']])
+        snapshot=source.snapshot(task)
+        if snapshot['policy_sha256']!=policy_fingerprint(loaded['policy']): raise ValueError('Current source policy mismatch')
+        authority=None; authority_error='stage_authority_unverified'
+        if task['source']=='pipeline':
+            config=loaded['pipeline_config']
+            rows=[r for r in config['tasks'] if r['repository'].casefold()==task['repository'] and
+                  r['issue']==task['issue'] and r['task_id']==task['task_id']]
+            if len(rows)!=1: raise ValueError('Current task outside configured pipeline')
+            profile=config['profiles'][rows[0]['executor_profile']]
+            try:
+                issue=snapshot['issue_payload']; metadata=parse_metadata(issue['body'])
+                criteria=criteria_snapshot(issue,metadata,task['repository'])
+            except ValueError:
+                criteria=None
+            if criteria is not None:
+                # Unknown/foreign Git identity is a hard refusal, never the
+                # recognized stage-negative diagnostic channel.
+                mirror=self._authority_mirror(loaded,connection,snapshot)
+                context=StageAuthorityContext(pipeline_journal=loaded['pipeline_journal'],pipeline_config=config,
+                    git_mirror=mirror,criteria_sha256=profile_fingerprint(criteria),
+                    superpowers_sha256=profile['superpowers']['manifest_sha256'],
+                    profile_sha256=profile_fingerprint(profile))
+                try:
+                    authority=load_stage_authority(task,snapshot,context=context)
+                    authority_error=None
+                except ValueError:
+                    authority=None
+        # A fetch/retained-process audit may take time. Recheck actual private
+        # inputs and the complete coherent live source before returning proof.
+        self._fresh_inputs()
+        if canonical(source.snapshot(task))!=canonical(snapshot):
+            raise ValueError('Current PR source changed during authority audit')
+        return dict(task=task,snapshot=snapshot,authority=authority,authority_error=authority_error,
+            policy_sha256=policy_fingerprint(loaded['policy']),private_inputs_sha256=self.private_inputs_sha256)
+
     @property
     def private_input_provenance(self):
         self._check_pins()
@@ -213,11 +306,22 @@ class PRHostContext:
     def close(self):
         if self._closed: return
         self._closed=True
-        for descriptor,_ in self._pins.values(): os.close(descriptor)
+        failure=None
+        for descriptor,_ in self._pins.values():
+            try: os.close(descriptor)
+            except BaseException as error:
+                if failure is None: failure=error
         self._pins.clear()
+        if failure is not None: raise failure
 
     def __enter__(self):
-        self._check_pins(); return self
+        try:
+            self._check_pins()
+            return self
+        except BaseException as error:
+            try: self.close()
+            except BaseException as cleanup_error: raise error from cleanup_error
+            raise
 
     def __exit__(self,*args):
         self.close()

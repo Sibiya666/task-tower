@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from task_tower.executor_profiles import profile_fingerprint
 from task_tower.pipeline_journal import PipelineJournal
@@ -68,6 +69,53 @@ class ContextFactoryTests(unittest.TestCase):
 
     def inventory(self):
         return {p.name:p.read_bytes() for p in self.root.iterdir() if p.is_file()}
+
+    def test_failed_context_entry_closes_retained_source_descriptors(self):
+        context=self.make(); descriptors=[row[0] for row in context._pins.values()]
+        original=self.policy.read_bytes()
+        self.policy.rename(self.root/'retained-policy.json')
+        self.policy.write_bytes(original)
+        with self.assertRaises(ValueError):
+            with context:
+                self.fail('Replaced policy entered context')
+        self.assertTrue(context._closed)
+        for descriptor in descriptors:
+            with self.assertRaises(OSError): os.fstat(descriptor)
+
+    def test_close_failure_still_attempts_every_retained_descriptor(self):
+        context=self.make(); descriptors=[row[0] for row in context._pins.values()]
+        real_close=os.close; calls=[]
+        def close(descriptor):
+            calls.append(descriptor); real_close(descriptor)
+            if descriptor==descriptors[0]: raise OSError('injected post-close failure')
+        try:
+            with patch('task_tower.pr_context.os.close',side_effect=close):
+                with self.assertRaisesRegex(OSError,'injected post-close failure'): context.close()
+            self.assertEqual(calls,descriptors)
+            for descriptor in descriptors:
+                with self.assertRaises(OSError): os.fstat(descriptor)
+        finally:
+            for descriptor in descriptors:
+                try: real_close(descriptor)
+                except OSError: pass
+
+    def test_failed_entry_keeps_primary_error_when_cleanup_also_fails(self):
+        context=self.make(); descriptors=[row[0] for row in context._pins.values()]
+        original=self.policy.read_bytes()
+        self.policy.rename(self.root/'retained-policy.json'); self.policy.write_bytes(original)
+        real_close=os.close
+        def close(descriptor):
+            real_close(descriptor)
+            if descriptor==descriptors[0]: raise OSError('injected entry cleanup failure')
+        try:
+            with patch('task_tower.pr_context.os.close',side_effect=close):
+                with self.assertRaises(ValueError) as failure:
+                    with context: self.fail('Replaced policy entered context')
+            self.assertIsInstance(failure.exception.__cause__,OSError)
+            for descriptor in descriptors:
+                with self.assertRaises(OSError): os.fstat(descriptor)
+        finally:
+            context.close()
 
     def test_real_factory_and_reload_do_not_write_or_initialize_journals(self):
         before=self.inventory(); context=self.make(); fresh=context._fresh_inputs()
