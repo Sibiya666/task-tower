@@ -4,9 +4,11 @@ Retained PR process readers and every publication/effect API remain separate
 gates. A current stage result alone cannot authorize a PR action.
 """
 import copy
+from contextlib import closing
 from dataclasses import dataclass
 import hashlib
 import os
+import sqlite3
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
@@ -18,6 +20,7 @@ from .pipeline_policy import _current
 from .github_tasks import parse_metadata
 from .pipeline_policy import criteria_snapshot
 from .pr_evidence import StageAuthorityContext, load_stage_authority
+from .pr_journal import PRJournal, APP_ID as PR_APP_ID, SCHEMAS as PR_SCHEMAS
 from .pr_policy import (load_pr_policy, policy_fingerprint, private_paths, strict_json,
     authorized_task, canonical, text, SHA)
 from .pr_review import _private_directory
@@ -135,6 +138,7 @@ class PRHostContext:
             loaded=_load(context._inputs)
             for path in loaded['paths']:
                 if path!=context._inputs.journal_path: context._pin(path)
+            if context._inputs.journal_path.exists(): context._pin(context._inputs.journal_path)
             # Pin every actual instruction file as well as validating full pins
             # through load_executor_config on every fresh use.
             for profile in loaded['executor']['profiles'].values():
@@ -182,7 +186,7 @@ class PRHostContext:
                         user_version=1,schema_sha256=profile_fingerprint(SCHEMAS))
         files=[]
         for path,(descriptor,identity) in sorted(self._pins.items(),key=lambda item:str(item[0])):
-            if source is not None and path==source.path: continue
+            if path==self._inputs.journal_path or (source is not None and path==source.path): continue
             files.append(dict(path=str(path),raw_sha256=_sha(path.read_bytes()),**identity))
         connections=[dict(vars(c),checkout=str(c.checkout)) for c in loaded['connections']]
         config=loaded['pipeline_config']
@@ -190,11 +194,45 @@ class PRHostContext:
             policy_path=str(self._inputs.policy_path),journal_path=str(self._inputs.journal_path),
             pipeline_config_path=None if self._inputs.pipeline_config_path is None else str(self._inputs.pipeline_config_path),
             artifact_namespace=str(loaded['namespace']),files=files,source_journal=source_identity,
+            pr_journal=self._pr_journal_provenance(),
             connections_sha256=profile_fingerprint(connections),executor_sha256=profile_fingerprint(loaded['executor']),
             policy_sha256=policy_fingerprint(loaded['policy']),
             pipeline_policy_sha256=None if config is None else config['policy_sha256'])
         self._check_pins()
         return result
+
+    def _pr_journal_provenance(self):
+        """Validate existing host state in one RO snapshot; never initialize it."""
+        path=self._inputs.journal_path
+        if path not in self._pins:
+            if path.exists(): raise ValueError('PR journal appeared after context creation')
+            return None
+        self._check_pins()
+        journal=PRJournal(path)
+        try:
+            with path.open('rb') as stream: header=stream.read(100)
+            if (header[:16]!=b'SQLite format 3\x00' or header[18:20]!=b'\x01\x01'
+                    or any(Path(str(path)+s).exists() for s in ('-journal','-wal','-shm'))):
+                raise ValueError('Unsupported PR journal state')
+            with closing(sqlite3.connect(path.as_uri()+'?mode=ro',uri=True,timeout=5)) as db:
+                db.row_factory=sqlite3.Row
+                db.execute('PRAGMA query_only=ON'); db.execute('BEGIN')
+                app=db.execute('PRAGMA application_id').fetchone()[0]
+                version=db.execute('PRAGMA user_version').fetchone()[0]
+                objects={(r['type'],r['name'],r['sql']) for r in db.execute(
+                    "SELECT type,name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'")}
+                if (app!=PR_APP_ID or version!=1 or
+                        objects!={('table',name,sql) for name,sql in PR_SCHEMAS.items()}):
+                    raise ValueError('Unrecognized private PR journal')
+                journal._validate(db)
+                self._check_pins()
+            if any(Path(str(path)+s).exists() for s in ('-journal','-wal','-shm')):
+                raise ValueError('PR journal changed during validation')
+            self._check_pins()
+            return dict(path=str(path),**self._pins[path][1],application_id=PR_APP_ID,
+                user_version=1,schema_sha256=profile_fingerprint(PR_SCHEMAS))
+        except sqlite3.Error:
+            raise ValueError('Private PR journal unavailable') from None
 
     def _fresh_inputs(self):
         """Internal factory gate; not a stage-authority or effect authorization."""

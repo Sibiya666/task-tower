@@ -23,6 +23,15 @@ Read and approve the requested permissions yourself in GitHub. Organization poli
 
 ## Connect the repository before importing Issues
 
+If an installed CLI works by its absolute path but Task Tower cannot see the Project, check discovery from the **same interpreter and launch environment** used by the harness:
+
+```sh
+python -c "import shutil; print(shutil.which('gh'))"
+gh project view NUMBER --owner OWNER --format json
+```
+
+`None` means that process cannot find `gh`. Restart the parent harness/desktop app after installing the CLI, or supply the CLI directory in that launcher's process-local PATH. A new terminal opened by an older app can inherit the app's stale PATH too. Do not copy tokens or change global credentials as a workaround. A Project `NOT_FOUND` response can mean the fallback credential cannot see the private board; it does not establish that the board was deleted. Verify the existing board with the already authorized CLI before recreating resources or requesting more scopes.
+
 Clone Task Tower and the repository you want to manage. Run these commands from the Task Tower clone; replace `OWNER/REPOSITORY`, checkout path and runner label with your own values. The private config belongs to this installation **outside both source checkouts**. The runner label records a routing identity; it does not install a runner.
 
 ```powershell

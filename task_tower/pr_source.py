@@ -21,6 +21,7 @@ from .executor_profiles import _pins, profile_fingerprint
 from .pr_policy import (LIMITS, SHA, HASH, REPOSITORY, canonical, exact, identifier,
                         integer, policy_fingerprint, private_paths, strict_json, text)
 from .processes import run_command
+from .project_connections import safe_config_path
 
 
 class PRSourceError(RuntimeError):
@@ -462,7 +463,7 @@ def _authority(value,head,base):
     except (TypeError,ValueError,KeyError): _fail('stage_authority_unverified')
 
 
-def prepare_review(connection,task,snapshot,authority,private_dir):
+def prepare_review(connection,task,snapshot,authority,private_dir,*,private_context=None):
     """Prepare immutable material; caller supplies genuine Task3 authority.
 
     This validates binding/digests, not provenance authentication. Only the
@@ -471,6 +472,25 @@ def prepare_review(connection,task,snapshot,authority,private_dir):
     Instructions hash is host injected from the validated reviewer profile.
     """
     try:
+        provenance=location=None
+        if private_context is not None:
+            # Lazy import avoids the context -> source factory dependency cycle.
+            from .pr_context import PRHostContext
+            from .pr_records import check_review_record_budget
+            if type(private_context) is not PRHostContext: _fail('private_review_context_unverified')
+            loaded=private_context._fresh_inputs()
+            provenance=private_context.private_input_provenance
+            if provenance['pr_journal'] is None or connection not in loaded['connections']:
+                _fail('private_review_context_unverified')
+            if snapshot.get('policy_sha256')!=policy_fingerprint(loaded['policy']):
+                _fail('private_review_context_unverified')
+            namespace=Path(provenance['artifact_namespace'])
+            root=safe_config_path(private_dir)
+            relative=root.relative_to(namespace)
+            if len(relative.parts)!=2 or relative.parts[0]!='preparations':
+                _fail('private_review_location_unverified')
+            identifier(relative.parts[1])
+            location=relative.as_posix()+'/request.json'
         exact(snapshot,{'repository','pr_number','issue','issue_id','task_id','head_sha','base_sha','policy_sha256',
                         'pr','commits','files','reviews','threads','ci','protection','issue_payload','issue_sha256',
                         'acceptance_statuses','ready','reasons'})
@@ -549,11 +569,17 @@ def prepare_review(connection,task,snapshot,authority,private_dir):
                       diff=dict(sha256=hashlib.sha256(diff).hexdigest(),content_base64=base64.b64encode(diff).decode('ascii'),
                                 manifest=manifest,manifest_sha256=policy_fingerprint(manifest),blobs=blobs),
                       reviewer_instance_id=instance,attempt=1)
+        if private_context is not None:
+            private_context._fresh_inputs()
+            material.update(private_input_provenance=provenance,
+                private_inputs_sha256=policy_fingerprint(provenance),private_artifact_location=location)
         request=dict(version=1,**binding,input_sha256=policy_fingerprint(material),reviewer_instance_id=instance,attempt=1,input=material)
+        if private_context is not None: check_review_record_budget(request,provenance)
         files={'diff.patch':diff,'manifest.json':canonical(manifest).encode('utf-8'),
                'input.json':canonical(material).encode('utf-8'),'request.json':canonical(request).encode('utf-8')}
         for name,content in files.items():
             with (root/name).open('xb') as stream: stream.write(content)
+        if private_context is not None: private_context._fresh_inputs()
         return dict(checkout=str(checkout),request=request,diff_path=str(root/'diff.patch'),
                     manifest_path=str(root/'manifest.json'),input_path=str(root/'input.json'))
     except PRSourceError: raise

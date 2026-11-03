@@ -1,0 +1,15 @@
+{
+  "run_id": "f8e52827-008e-4fa4-bce9-75133f0f9d3a",
+  "attempt_id": "e79963fb-3a1d-4abe-bf22-7642f03f4231",
+  "instance_id": "97e46afd-3f72-432d-a764-6302073e7a9e",
+  "stage": "development",
+  "generation": 1,
+  "source_sha": "1dbb8eb46ae5c1c595ac7451eba9dabe7d3cecac",
+  "checkpoint_sha": "1dbb8eb46ae5c1c595ac7451eba9dabe7d3cecac",
+  "input_sha256": "407db91d3b47cb0b04ebddcee073b7b096e275d4e9c2d03c1ed17495f5e2a087",
+  "version": 2,
+  "summary": "Approve affected specification/API preflight only. Frozen source and pinned instruction hashes match. The proposal closes producer lifecycle, provenance binding, immutable record shapes, transactional readers, replacement guards, reviewer exclusions and canonical UTF-8 size reserves while preserving existing v1 contracts. Sufficiently defined for TDD implementation; no implementation or test acceptance claimed. Task3L remains unmet; effects4c, CLI5, operator/server gates and PR/main acceptance remain outside this verdict.",
+  "verdict": "approve",
+  "return_stage": null,
+  "findings": []
+}

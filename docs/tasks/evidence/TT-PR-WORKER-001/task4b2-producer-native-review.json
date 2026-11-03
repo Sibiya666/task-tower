@@ -1,0 +1,15 @@
+{
+  "run_id": "60fddc7f-0941-42da-9915-e78aa6734bfc",
+  "attempt_id": "ed56444c-a4cb-426c-acaf-8aa2c2436182",
+  "instance_id": "70b32225-0f4b-4d5f-89a6-e2925d4edf19",
+  "stage": "development",
+  "generation": 1,
+  "source_sha": "1dbb8eb46ae5c1c595ac7451eba9dabe7d3cecac",
+  "checkpoint_sha": "1dbb8eb46ae5c1c595ac7451eba9dabe7d3cecac",
+  "input_sha256": "b2beb3674d57f770ff3eb1ce7eee9ce324e31dc3d19051dce4baf7c17a7bada9",
+  "version": 2,
+  "summary": "Approve bounded producer prerequisites: candidate and pinned instruction hashes match; source inspection found no substantive blocker. Inspected retained 36-test and 15-test successful receipts, including EOF, cleanup and unchanged source evidence; tests were not rerun. Readers, controller lifecycle, effects4c and CLI5 remain outside scope. No whole Task4b2, Issue17, full-suite or readiness approval; legacy, operator, server, PR and main gates remain mandatory.",
+  "verdict": "approve",
+  "return_stage": null,
+  "findings": []
+}
