@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 import re
 import sqlite3
+import stat
 import uuid
 from .project_connections import safe_config_path, REPOSITORY
 
@@ -43,18 +44,47 @@ def _dead(pid):
     except PermissionError: pass
     return False
 
+
+def _private_stat(path,*,transient=False):
+    """Only a caller-typed SQLite sidecar may be an unlinked regular inode."""
+    if type(transient) is not bool:raise ValueError('Invalid private path role')
+    path=safe_config_path(path)
+    try:info=path.stat()
+    except FileNotFoundError:
+        if transient:return None
+        raise
+    if not stat.S_ISREG(info.st_mode) or getattr(info,'st_file_attributes',0)&0x400:raise ValueError('Unsafe private SQLite path')
+    if info.st_nlink==1:return info
+    if info.st_nlink!=0 or not transient:raise ValueError('Unsafe private SQLite path')
+    safe_config_path(path)
+    try:current=path.lstat()
+    except FileNotFoundError:return None
+    if not stat.S_ISREG(current.st_mode) or getattr(current,'st_file_attributes',0)&0x400 or current.st_nlink not in (0,1):raise ValueError('Unsafe private SQLite path')
+    return current if current.st_nlink==1 else None
+
+
 class ExecutionQueue:
     def __init__(self,path,*,checkouts=(),forbidden_paths=()):
         self.path=safe_config_path(path); self.checkouts=tuple(Path(p).resolve() for p in checkouts); self.forbidden_paths=tuple(Path(p) for p in forbidden_paths); self._owners=set(); self._safe()
     def _safe(self):
         for path in [self.path,*(Path(str(self.path)+s) for s in ('-journal','-wal','-shm'))]:
             safe_config_path(path)
-            if path.exists() and path.stat().st_nlink!=1: raise ValueError('Unsafe executor queue')
+            if path.exists():
+                _private_stat(path,transient=path!=self.path)
             if any(path.resolve().is_relative_to(c) for c in self.checkouts): raise ValueError('Private queue inside checkout')
             for other in self.forbidden_paths:
                 safe_config_path(other)
-                if other.exists() and other.stat().st_nlink!=1: raise ValueError('Unsafe executor input')
-                if str(path.resolve()).casefold()==str(other.resolve()).casefold() or (path.exists() and other.exists() and os.path.samefile(path,other)): raise ValueError('Executor path collision')
+                if other.exists():_private_stat(other)
+                if str(path.resolve()).casefold()==str(other.resolve()).casefold():raise ValueError('Executor path collision')
+                try:same=path.exists() and other.exists() and os.path.samefile(path,other)
+                except FileNotFoundError:
+                    if path==self.path:raise
+                    # Only our own sidecar may disappear. A previously observed
+                    # forbidden input must still be an ordinary single-link file.
+                    other_info=_private_stat(other)
+                    current=_private_stat(path,transient=True)
+                    same=current is not None and os.path.samestat(current,other_info)
+                if same:raise ValueError('Executor path collision')
     @contextmanager
     def _db(self,write=False):
         self._safe()

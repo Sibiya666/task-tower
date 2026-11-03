@@ -107,6 +107,10 @@ class WindowsJobProcess:
             self.close()
             raise
 
+    @property
+    def pid(self):
+        return int(self.info.pid)
+
     def wait(self, timeout):
         outcome = self.kernel.WaitForSingleObject(self.info.process, min(
             math.ceil(timeout * 1000), 0xFFFFFFFE))
