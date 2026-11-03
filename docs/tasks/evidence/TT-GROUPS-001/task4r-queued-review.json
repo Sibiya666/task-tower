@@ -1,0 +1,41 @@
+{
+  "host_only_capture_limit_bytes": 1048576,
+  "qualified_current_review": true,
+  "source_unchanged": true,
+  "binary_unchanged": true,
+  "result": {
+    "status": "passed",
+    "exit_code": 0,
+    "started": true,
+    "cleanup_confirmed": true,
+    "pid": 204080,
+    "stdout_sha256": "93d8fc32868683ef7bd76d18b79680051f920ef1b64d6ad1ede6ba9d6c5721c2",
+    "stdout_bytes": 212309,
+    "stdout_captured_bytes": 212309,
+    "stdout_tail_unknown": false,
+    "stdout_truncated": false,
+    "stderr_sha256": "bc620b13c15874bb0f92d976b57ecfceae2f09df41204d782a757d2b29f7dfc0",
+    "stderr_bytes": 9290,
+    "stderr_captured_bytes": 9290,
+    "stderr_tail_unknown": false,
+    "stderr_truncated": false,
+    "duration_seconds": 75.469
+  },
+  "verdict": {
+    "run_id": "e279b4ff-778e-43b2-900a-ddf966f6f515",
+    "attempt_id": "61594085-d147-41a4-b6f8-7a26aa021a17",
+    "instance_id": "dab0cff7-88eb-479d-b7de-71b46d85f7a3",
+    "stage": "development",
+    "generation": 1,
+    "source_sha": "da0587782fd75c13a69fdf18f8f6d1d28deb907e",
+    "checkpoint_sha": "da0587782fd75c13a69fdf18f8f6d1d28deb907e",
+    "input_sha256": "0c86fa82222af1847fc165e01bd458895ade9b9c6e16ebd481304708a093cdde",
+    "version": 2,
+    "summary": "Approve the bounded queue-only slice. Candidate and pinned instruction hashes match. Reviewed genuine context revalidation, private routing, atomic insertion and rollback, saved binding validation, event domains, offline cancellation and preserved execution gates. The policy digest now derives from the freshly revalidated retained loader result. Inspected the captured 101-test successful receipt, complete EOF, log hash, cleanup confirmation and identical before/after input hashes; tests were not rerun in this read-only review. Resource/workspace execution, hot recovery and whole-Issue readiness remain outside this acceptance.",
+    "verdict": "approve",
+    "return_stage": null,
+    "findings": []
+  },
+  "validation_error": null,
+  "runner_sha256": "01b6e429a2096c4aac9591c37a07be13c931aa8cd5efccb2078581c45faaf204"
+}

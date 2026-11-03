@@ -1,0 +1,41 @@
+{
+  "host_only_capture_limit_bytes": 1048576,
+  "qualified_current_review": true,
+  "source_unchanged": true,
+  "binary_unchanged": true,
+  "result": {
+    "status": "passed",
+    "exit_code": 0,
+    "started": true,
+    "cleanup_confirmed": true,
+    "pid": 199316,
+    "stdout_sha256": "e213594b6a153af43ecdba451177f705f1833ac3022702233312d2aa9512faf6",
+    "stdout_bytes": 275526,
+    "stdout_captured_bytes": 275526,
+    "stdout_tail_unknown": false,
+    "stdout_truncated": false,
+    "stderr_sha256": "ab1e3c193eb58765cae9506ee2741907b2d46c723a97b98e42e5c5e8209e2ad2",
+    "stderr_bytes": 10254,
+    "stderr_captured_bytes": 10254,
+    "stderr_tail_unknown": false,
+    "stderr_truncated": false,
+    "duration_seconds": 80.797
+  },
+  "verdict": {
+    "run_id": "687dd796-dbe8-478e-a0bb-f06a476aaade",
+    "attempt_id": "4065c026-8b80-4c03-8658-28fadebc1f49",
+    "instance_id": "45a25583-124e-4a88-ab3a-171496a0ec6f",
+    "stage": "spec",
+    "generation": 1,
+    "source_sha": "da0587782fd75c13a69fdf18f8f6d1d28deb907e",
+    "checkpoint_sha": "da0587782fd75c13a69fdf18f8f6d1d28deb907e",
+    "input_sha256": "3a21b275a3bb01e7e74ac34ecd4989e18b2df45f582bed6360de42a91868cb03",
+    "version": 2,
+    "summary": "Approve bounded queue-only specification. Reviewed actual submission, storage, registration and binding contracts against the implementation plan; no blocking incompatibility found. Separate event domains and exhaustive group validation preserve legacy history and offline metadata access while execution remains closed. HEAD and all 347 candidate and 60 pinned instruction hashes verified. Implementation, runtime acceptance and future resource/workspace consumers remain outside this verdict.",
+    "verdict": "approve",
+    "return_stage": null,
+    "findings": []
+  },
+  "validation_error": null,
+  "runner_sha256": "5edf64c4952134a6cbbb1a85cde249d05b547b90870ddd14dd548c282bc453b0"
+}

@@ -400,6 +400,9 @@ class PipelineJournal:
             db.execute('INSERT INTO runs('+','.join(values)+') VALUES('+','.join('?' for _ in values)+')',tuple(values.values()))
             self._validate_db(db); self._event(db,run_id,'submitted',None,'queued')
             return self._receipt(values)
+    def submit_group(self,request:dict,*,context)->dict:
+        from .group_queue import submit
+        return submit(self,request,context=context)
     def lookup(self,delivery_id:str)->dict|None:
         _uuid(delivery_id)
         with self._db() as db:

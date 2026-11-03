@@ -384,7 +384,7 @@ def validate_stored(db,journal):
     from .group_storage import _utc
     rows=[dict(r) for r in db.execute('SELECT * FROM group_installation')]
     epochs=[dict(r) for r in db.execute('SELECT * FROM group_capacity_epochs ORDER BY epoch')]
-    events=[dict(r) for r in db.execute("SELECT * FROM group_events WHERE kind IN('binding','capacity_epoch') ORDER BY sequence")]
+    events=[dict(r) for r in db.execute("SELECT * FROM group_events WHERE kind IN('binding','capacity_epoch') AND run_id IS NULL ORDER BY sequence")]
     if not rows:
         if epochs or events:raise ValueError('Unbound registration history')
         return None

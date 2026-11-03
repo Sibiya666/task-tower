@@ -542,7 +542,17 @@ def validate_v2(db,journal,*,objects=None):
     runs={r['run_id']:dict(r) for r in db.execute('SELECT * FROM runs')}
     bindings={r['run_id']:dict(r) for r in db.execute('SELECT * FROM group_runs')}
     if set(bindings)!=set(runs):raise ValueError('Missing legacy group binding')
+    for event,body in events:
+        if event['kind']=='capacity_epoch' and event['run_id'] is not None:
+            raise ValueError('Foreign capacity event domain')
+        if event['kind']=='binding' and event['run_id'] is not None:
+            target=bindings.get(event['run_id'])
+            if target is None or target['run_kind']!='group':raise ValueError('Foreign queued binding event')
     for run_id,row in bindings.items():
+        if row['run_kind']=='group':
+            from .group_queue import validate_queued
+            validate_queued(db,journal,runs[run_id],row,events,registration)
+            continue
         binding=_json(row['binding_json'])
         if canonical_json(binding)!=canonical_json(_binding(runs[run_id])) or digest_manifest(binding)!=row['binding_sha256'] or row['run_kind']!='legacy' or any(row[k] is not None for k in ('group_id','authorization_sha256','first_eligible_sequence','current_base_epoch')):
             raise ValueError('Invalid legacy group binding')

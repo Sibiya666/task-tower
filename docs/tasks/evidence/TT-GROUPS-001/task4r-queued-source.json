@@ -1,0 +1,11 @@
+{
+  "base": "da0587782fd75c13a69fdf18f8f6d1d28deb907e",
+  "files": {
+    "task_tower/group_queue.py": "66a5c539ef4a5da2786cd0b5c3a0b5f47553f3206a6ee537198eba85487f3068",
+    "task_tower/group_storage.py": "adeef91c45df2e0d2eead754e14cdd0959d6640a5f9c73287e53852f0ec3c2f3",
+    "task_tower/group_registration.py": "1c72f883fed0ae3c8968c6c8c11f579382f18e419351f739d5b7658173d8a651",
+    "task_tower/pipeline_journal.py": "ae15c57b10a3bac41dad53ede9c3f10d1d5789cb2bb70168c42a4f0563287382",
+    "tests/test_group_queued_admission.py": "8f751071b57ab452d808ffdf2a87cdcf08ea98f46ca9ee92fb453fa22eaa576d",
+    "docs/superpowers/specs/2026-11-03-group-queued-admission-contract.md": "30b254a5dc64cdfcb1f7bdf440f6df598a63d1e25510e4bf3a088b2d2f3e4c8f"
+  }
+}

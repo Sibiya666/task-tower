@@ -1,0 +1,11 @@
+# Genuine queue-only group admission
+
+PipelineJournal.submit_group accepts an actual same-journal RegistrationContext, freshly revalidates held private loaders/current installation and routing, and atomically saves the original queued run, immutable group binding and closed per-run binding event. Original deliveries preserve identity; no existing row converts kind. No schema change, runtime adapter activation, resource claim/action/epoch/workspace or role is enabled. Raw registered legacy submit/claim continue refusing execution.
+
+Registration validates only its global null-run event domain; every per-run binding is separately validated against saved registration/task/route/profile/resource/limits relations. Orphan or foreign capacity domains refuse. Legacy migration/adoption/history/fence checks remain intact. Offline lookup/status/cancel do not need executable/pin files. Stored hashes and reduced profile budgets remain metadata; future execution must freshly recompute genuine current private binding.
+
+Spec reviewer45a25583 approved. Initial implementation reviewer e8dc42b8 rejected reliance on mutable context.pipeline policy digest. Actual mutation RED1 reproduced a forged digest; producer now derives from the complete freshly revalidated policy[_pipeline_config]. Repeat reviewer dab0cff7 approved exact source hashes and inspected Root evidence.
+
+Final focused regression101 tests59.788s unittest/60.093s actual, full EOF, cleanup and unchanged source: six real queue tests,32 registration and63 migration. Includes exact repeat/lookup, preserved old rows, disabled execution/no resource rows, bad actual context/private identity, offline cancellation, rollback after real final reload, self-consistent scope tampering and mutable pipeline copy. Earlier missingproducer, cancellation mismatch, mutablecopy RED and mistaken nonexistent test_group_storage module run remain preserved; failed runs are not counted green.
+
+This is queue metadata acceptance only. Actual graph/source/resource claims, fair scheduling, standalone workspace/base consumers, Windows hot recovery65 and installed concurrent pilot remain pending. No full Issue18/PR/main/automatic closure/night readiness is claimed.

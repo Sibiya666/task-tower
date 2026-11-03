@@ -1,0 +1,47 @@
+{
+  "host_only_capture_limit_bytes": 1048576,
+  "qualified_current_review": true,
+  "source_unchanged": true,
+  "binary_unchanged": true,
+  "result": {
+    "status": "passed",
+    "exit_code": 0,
+    "started": true,
+    "cleanup_confirmed": true,
+    "pid": 205204,
+    "stdout_sha256": "3b666946b745ed038e253a4d9231c521ae3a32ac399ba6518cfd6783ac36a498",
+    "stdout_bytes": 168495,
+    "stdout_captured_bytes": 168495,
+    "stdout_tail_unknown": false,
+    "stdout_truncated": false,
+    "stderr_sha256": "d45b5a2acdb8d13efcf2661f69c2cc4f9ca236ac59c5c57367ae36200402d4fb",
+    "stderr_bytes": 8449,
+    "stderr_captured_bytes": 8449,
+    "stderr_tail_unknown": false,
+    "stderr_truncated": false,
+    "duration_seconds": 61.516
+  },
+  "verdict": {
+    "run_id": "afa943c9-7085-4a5e-bc0a-a17683859022",
+    "attempt_id": "983e245e-c3eb-4bef-ad97-e7fd25e71d48",
+    "instance_id": "e8dc42b8-92da-485a-8525-78f032d25e02",
+    "stage": "development",
+    "generation": 1,
+    "source_sha": "da0587782fd75c13a69fdf18f8f6d1d28deb907e",
+    "checkpoint_sha": "da0587782fd75c13a69fdf18f8f6d1d28deb907e",
+    "input_sha256": "9f5fb1002494ef9b5da8120f3059a6a34c658ea6cd1a5d8437c68497287f81ad",
+    "version": 2,
+    "summary": "Candidate and pinned instruction hashes match; inspected captured 100-test success. Queue transactions and execution gates are preserved. However, submit trusts mutable context.pipeline['policy_sha256']; RegistrationContext.revalidate compares freshly loaded policy against context.policy, not context.pipeline. Changing only context.pipeline['policy_sha256'] to another valid digest therefore admits a run with a false private pipeline policy binding, and validate_queued never checks that field against trusted saved metadata. Derive configuration from revalidated policy['_pipeline_config'] or explicitly compare context.pipeline with the fresh loader result, and add a mutation regression. Execution/resource/workspace activation remains outside this bounded review.",
+    "verdict": "reject",
+    "return_stage": "development",
+    "findings": [
+      {
+        "code": "product_defect",
+        "path": "task_tower/group_queue.py",
+        "line": 25
+      }
+    ]
+  },
+  "validation_error": null,
+  "runner_sha256": "14d4cf994ae480139fc87140fe96fedc7533a525e5651df8413cc0ed66720339"
+}
