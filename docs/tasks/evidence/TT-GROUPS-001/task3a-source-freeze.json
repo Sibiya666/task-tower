@@ -1,0 +1,32 @@
+{
+  "base": "4875381be68282a7ad77ab7b1c5a3898cbc09304",
+  "scope": "Corrected Task3A OptionA bounded cold migration/hot refusal + anchored legacy audit provenance; requires fresh independent review and Root-owned full suite",
+  "source_schema_sha256": "5b37731384a2d5a8aa87f38f589bcced2b78db2205861e6aa5290d4b4ccdc9b6",
+  "target_catalog_sha256": "1e1e250b953b7166b481f9b52d9fa9a4ed1c6fa9454cd279600f51502315c96a",
+  "prior_rejection_sha256": "f1a41b43b226e3eeab96bdb93f72c8a5bb88685c83bbadd2d415920ee28acdf1",
+  "files": {
+    "task_tower/pipeline_journal.py": "149a892251990e26d7ca18abdcf7cf4cea4b2f1561cf9afe29b16e9a6fe5cf88",
+    "task_tower/pipeline.py": "2c431e5bfa7d090fd0b373539965227da938f785c1942b3ff9e33f57b83d8f82",
+    "task_tower/group_storage.py": "7efc29660c1ea723f1c2472b152cf4230c17dfaa274e36c92d92c7525078a0e5",
+    "tests/test_group_migration.py": "f80edde0be88ff036a071e3643595df51e8d23cac4cf38bae63a7370f0276c32"
+  },
+  "targeted": {
+    "tests": 224,
+    "seconds": 56.198,
+    "result": "OK",
+    "skipped": 1,
+    "log": "runtime/groups18-task3a-provenance-final-verified.log",
+    "log_sha256": "a11a73375129e2906d89c72febc1408c12d954f5279593f612fe44b065413706"
+  },
+  "reviewer_counterexamples": {
+    "log": "runtime/groups18-task3a-reviewer-counterexamples-final.log",
+    "all_four": "REFUSED",
+    "log_sha256": "cab7cf5a49be03dae1ff954a6e05835edb1fa4cbc570fc79ddf4eb4fe3c1553f"
+  },
+  "previous_full_suite": {
+    "status": "INCOMPLETE_NOT_PASSED",
+    "record": "runtime/groups18-task3a-option-a-full-suite-incomplete.json",
+    "log_sha256": "ed6824832c2adac9f755f1a344f909bc2a3d525c9bdf415a9db98eaa9f0fab90"
+  },
+  "new_full_suite": "Not started by this agent; Root will own it after accepted758 integration/ABI audit."
+}

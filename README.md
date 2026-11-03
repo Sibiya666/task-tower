@@ -1,5 +1,7 @@
 # Task Tower — Башня агентов
 
+Issue18 Task3A adds explicit cold pipeline-journal migration: `python -m task_tower.pipeline migrate --connections C --journal J --inspect|--apply` (choose one mode). An actual SQLite rollback-required error776 during the first existing-only read-only inspection returns exactly `{"status":"recovery_required","version":null}` with exit1 and leaves the original journal and sidecars untouched. Original automatic hot recovery remains mandatory current Windows [Issue65](https://github.com/Sibiya666/task-tower/issues/65). This storage slice does not enable G registration, resource scheduling or group execution, or complete Issue18. [Review and verification evidence](docs/tasks/evidence/TT-GROUPS-001/task3a-storage-acceptance.md).
+
 Postmerge worker получает свежий `main` с отдельным сетевым лимитом fetch 60 секунд; локальные проверки Git ограничены 10 секундами. Ошибка fetch не разрешает приёмку или закрытие Issue. [Запуск и диагностика worker](docs/postmerge-worker.md).
 
 Границы текущего релиза: новые нативные pipeline, группы и OpenCode квалифицируются для Windows. Нативные Linux/macOS вынесены в [следующую версию #58](https://github.com/Sibiya666/task-tower/issues/58); переносимый CLI и применимый трёхплатформенный CI сохраняются. [Матрица поддержки и задачи](docs/platform-support.md).

@@ -175,6 +175,12 @@ class PipelineJournal:
                     try:same=path.exists() and alias.exists() and os.path.samefile(path,alias)
                     except FileNotFoundError:same=False  # SQLite removed its transient sidecar.
                     if same:raise ValueError('Pipeline private path collision')
+    def inspect_group_migration(self):
+        from .group_storage import inspect
+        return inspect(self)
+    def migrate_groups(self):
+        from .group_storage import migrate
+        return migrate(self)
     @contextmanager
     def _db(self,write=False,*,initialize=True):
         self._wait_seconds()
@@ -199,6 +205,7 @@ class PipelineJournal:
             with closing(sqlite3.connect(target,uri=uri,timeout=self._wait_seconds())) as db:
                 db.row_factory=sqlite3.Row; db.execute('PRAGMA busy_timeout='+str(max(0,int(self._wait_seconds()*1000)))); db.execute('PRAGMA synchronous=FULL')
                 db.execute('PRAGMA busy_timeout='+str(max(0,int(self._wait_seconds()*1000))))
+                db.execute('PRAGMA foreign_keys=ON')
                 if write: db.execute('BEGIN IMMEDIATE')
                 else:
                     db.execute('PRAGMA query_only=ON')
@@ -208,12 +215,21 @@ class PipelineJournal:
                 if write and initialize and app==0 and version==0 and not objects:
                     db.execute('PRAGMA application_id='+str(APP_ID)); db.execute('PRAGMA user_version=1')
                     for schema in SCHEMAS.values(): db.execute(schema)
-                elif app!=APP_ID or version!=1 or objects!={('table',n,s) for n,s in SCHEMAS.items()}: raise ValueError('Unrecognized pipeline schema')
+                elif app!=APP_ID or version not in (1,2): raise ValueError('Unrecognized pipeline schema')
+                elif version==1 and objects!={('table',n,s) for n,s in SCHEMAS.items()}: raise ValueError('Unrecognized pipeline schema')
+                elif version==2:
+                    from .group_storage import validate_v2
+                    validate_v2(db,self,objects=objects)
                 if db.execute('PRAGMA journal_mode').fetchone()[0]!='delete' or db.execute('PRAGMA synchronous').fetchone()[0]!=2: raise ValueError('Unsafe pipeline durability mode')
                 self._validate_db(db)
                 try:
                     yield db
                     if write:
+                        if db.execute('PRAGMA user_version').fetchone()[0]==2:
+                            from .group_storage import reconcile_legacy,validate_v2
+                            reconcile_legacy(db,self)
+                            self._validate_db(db)
+                            validate_v2(db,self)
                         if existing:self._assert_existing()
                         remaining=self._wait_seconds()
                         # Shutdown must not enter a fresh lock wait at COMMIT.
@@ -439,20 +455,26 @@ class PipelineJournal:
                 if not isinstance(priority,str) or priority not in ('P0','P1','P2','P3') or (repository,issue) in priorities:raise ValueError('Invalid queued priority')
                 priorities[repository,issue]=int(priority[1])
         with self._db(True) as db:
+            if db.execute('PRAGMA user_version').fetchone()[0]==2:
+                if db.execute('SELECT 1 FROM group_resource_leases WHERE held=1 AND unknown_estimate=1 LIMIT 1').fetchone():return None
             active=[self._run(r) for r in db.execute('SELECT * FROM runs') if r['state'] in ACTIVE]
             if owner_id in self._owners:
                 for saved in db.execute("SELECT * FROM runs WHERE state='ready' ORDER BY repository,issue"):
                     row=dict(saved)
+                    if self._legacy_components_busy(db,row):continue
                     if self._repository_busy(db,row):continue
                     own=row['owner_id']==owner_id and row['owner_pid']==os.getpid()
                     dead=_dead(row['owner_pid'])
                     if not (own or dead) or not self._safe_ready(db,row): continue
-                    if own: return self._run(row)
+                    if own:
+                        self._legacy_claim_fence(db,row['run_id'])
+                        return self._run(row)
                     now=_now()
                     if datetime.datetime.fromisoformat(now)<datetime.datetime.fromisoformat(row['updated_at']):raise ValueError('deadline')
                     changed=db.execute("UPDATE runs SET owner_id=?,owner_pid=?,updated_at=? WHERE run_id=? AND state='ready' AND owner_id=? AND owner_pid=? AND generation=? AND input_sha256 IS ?",(owner_id,os.getpid(),now,row['run_id'],row['owner_id'],row['owner_pid'],row['generation'],row['input_sha256'])).rowcount
                     if changed!=1: raise ValueError('Ready handoff changed')
                     self._event(db,row['run_id'],'handoff','ready','ready',old_owner_id=row['owner_id'],new_owner_id=owner_id)
+                    self._legacy_claim_fence(db,row['run_id'])
                     return self._run(db.execute('SELECT * FROM runs WHERE run_id=?',(row['run_id'],)).fetchone())
             if len(active)>=max_active: return None
             queued=[self._run(saved) for saved in db.execute("SELECT * FROM runs WHERE state='queued' AND cancel_requested=0 ORDER BY repository,issue")]
@@ -460,14 +482,26 @@ class PipelineJournal:
                 queued=[row for row in queued if (row['repository'],row['issue']) in priorities]
                 queued.sort(key=lambda row:(priorities[row['repository'],row['issue']],row['repository'],row['issue']))
             for row in queued:
+                if self._legacy_components_busy(db,row):continue
                 if self._repository_busy(db,row):continue
                 if any(r['repository']==row['repository'] and ('*' in r['component_keys'] or '*' in row['component_keys'] or set(r['component_keys'])&set(row['component_keys'])) for r in active): continue
                 now=_now(); deadline=(datetime.datetime.fromisoformat(now)+datetime.timedelta(seconds=row['limits']['task_timeout_seconds'])).isoformat()
                 changed=db.execute("UPDATE runs SET state='preparing',owner_id=?,owner_pid=?,deadline_at=?,updated_at=? WHERE run_id=? AND state='queued' AND owner_id IS NULL AND generation=? AND input_sha256 IS ?",(owner_id,os.getpid() if owner_id in self._owners else None,deadline,now,row['run_id'],row['generation'],row['input_sha256'])).rowcount
                 if changed!=1: raise ValueError('Pipeline claim changed')
                 self._event(db,row['run_id'],'claimed','queued','preparing')
+                self._legacy_claim_fence(db,row['run_id'])
                 return self._run(db.execute('SELECT * FROM runs WHERE run_id=?',(row['run_id'],)).fetchone())
             return None
+    def _legacy_claim_fence(self,db,run_id):
+        if db.execute('PRAGMA user_version').fetchone()[0]==2:
+            from .group_storage import claim_fence
+            claim_fence(db,self,run_id)
+    @staticmethod
+    def _legacy_components_busy(db,row):
+        if db.execute('PRAGMA user_version').fetchone()[0]!=2:return False
+        keys=set(_json(row['component_keys']) if isinstance(row['component_keys'],str) else row['component_keys'])
+        return any(other['component']=='*' or '*' in keys or other['component'] in keys
+                   for other in db.execute('SELECT component FROM group_component_locks WHERE repository=? AND run_id<>?',(row['repository'],row['run_id'])))
     @staticmethod
     def _repository_busy(db,row):
         """Global ref checks require serialized actions within one repository.

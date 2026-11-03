@@ -66,7 +66,7 @@ def adapter(request,config,journal):
 def _parser():
     parser=argparse.ArgumentParser(description='Durable local stage pipeline')
     sub=parser.add_subparsers(dest='command',required=True)
-    for name in ('adapter','work','watch','status','cancel','reconcile','_action','_dispatch'):
+    for name in ('adapter','work','watch','status','cancel','reconcile','migrate','_action','_dispatch'):
         command=sub.add_parser(name)
         for key in ('connections','journal'):command.add_argument('--'+key,type=Path,required=True)
         if name in ('adapter','work','watch','_action','_dispatch'):
@@ -81,6 +81,10 @@ def _parser():
         if name in ('cancel','reconcile'):command.add_argument('--run-id',required=True)
         if name=='status':command.add_argument('--run-id')
         if name=='reconcile':command.add_argument('--inspect',action='store_true',required=True)
+        if name=='migrate':
+            mode=command.add_mutually_exclusive_group(required=True)
+            mode.add_argument('--inspect',action='store_true')
+            mode.add_argument('--apply',action='store_true')
     return parser
 
 
@@ -410,7 +414,8 @@ def main(argv=None):
             if len(json.dumps(report).encode('utf-8'))>_CAP:raise ValueError('Oversize host report')
             _write(args.host_result,report);return 0
         if args.command=='watch':return watch(config,journal)
-        if args.command=='work':report=work(config,journal)
+        if args.command=='migrate':report=journal.migrate_groups() if args.apply else journal.inspect_group_migration()
+        elif args.command=='work':report=work(config,journal)
         elif args.command=='status':report=_status(connections,journal,args.run_id)
         else:
             _status(connections,journal,args.run_id)
@@ -425,11 +430,16 @@ def main(argv=None):
                     required_action='unknown_requires_owner_reconciliation' if journal.status(args.run_id)['state']=='unknown' else None)
         if args.connections.read_bytes()!=args._connections_bytes:raise ValueError('Connections changed')
         print(json.dumps(report,sort_keys=True))
+        if args.command=='migrate' and report['status']=='recovery_required':return 1
         completed={'idle','ready','needs_input','cancelled','timed_out','ready_for_pr','awaiting_pr'}
         return 1 if args.command=='work' and report.get('status') not in completed else 0
     except UnsupportedPlatform:
         print(json.dumps(dict(error='unsupported_platform')),file=sys.stderr);return 2
-    except (OSError,ValueError,TypeError,KeyError):
+    except (OSError,ValueError,TypeError,KeyError) as error:
+        if args.command=='migrate':
+            from .group_storage import MigrationFailure
+            if isinstance(error,MigrationFailure):
+                print(json.dumps(dict(error='migration_failed',backup_path=error.backup_path)),file=sys.stderr);return 2
         print(json.dumps(dict(error='invalid_or_unavailable_private_state')),file=sys.stderr);return 2
 
 
