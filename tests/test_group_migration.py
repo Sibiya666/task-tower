@@ -675,13 +675,50 @@ PipelineJournal(Path(sys.argv[1])).migrate_groups()
         self.assertEqual(self.path.read_bytes(),before)
 
     def test_busy_writer_wait_is_capped_and_never_creates_backup(self):
-        self.seed();before=self.path.read_bytes()
-        with contextlib.closing(sqlite3.connect(self.path)) as writer:
+        from task_tower import group_storage
+        self.seed();before=self.path.read_bytes();waits=[];preflight={}
+        actual_connect=sqlite3.connect;checkpoint=group_storage._checkpoint
+        journal=self.journal
+        with contextlib.closing(actual_connect(self.path)) as writer:
             writer.execute('BEGIN IMMEDIATE')
+            class ObservedConnection(sqlite3.Connection):
+                def execute(connection,sql,*args,**kwargs):
+                    if sql!='BEGIN IMMEDIATE':return super().execute(sql,*args,**kwargs)
+                    # Observe the actual SQLite setting and blocking statement;
+                    # never replace the lock attempt or approve a mocked result.
+                    timeout=super().execute('PRAGMA busy_timeout').fetchone()[0]
+                    sample=dict(timeout_ms=timeout,deadline=journal._operation_deadline,
+                                writer_held=writer.in_transaction)
+                    waits.append(sample);started=time.monotonic()
+                    try:return super().execute(sql,*args,**kwargs)
+                    finally:
+                        sample.update(seconds=time.monotonic()-started,writer_still_held=writer.in_transaction)
+            def connect(*args,**kwargs):
+                return actual_connect(*args,**dict(kwargs,factory=ObservedConnection))
+            def observe_checkpoint(phase):
+                checkpoint(phase)
+                if phase=='after_inspection':
+                    preflight.update(deadline=journal._operation_deadline,finished=time.monotonic())
             start=time.monotonic()
-            with self.assertRaises(ValueError):self.journal.migrate_groups()
-            self.assertLess(time.monotonic()-start,7)
+            with patch.object(sqlite3,'connect',side_effect=connect),patch.object(group_storage,'_checkpoint',side_effect=observe_checkpoint):
+                with self.assertRaises(ValueError) as failure:self.journal.migrate_groups()
+            total=time.monotonic()-start
             writer.rollback()
+        self.assertEqual(len(waits),1)
+        wait=waits[0];timing=dict(total_seconds=total,preflight_and_other_seconds=total-wait['seconds'],**wait)
+        self._busy_timing=timing
+        self.assertEqual(getattr(failure.exception.__cause__,'sqlite_errorcode',None),sqlite3.SQLITE_BUSY)
+        self.assertTrue(wait['writer_held'] and wait['writer_still_held'])
+        self.assertGreater(wait['timeout_ms'],0)
+        self.assertLessEqual(wait['timeout_ms'],5000)
+        # Keep the existing scheduling allowance for the real <=5s SQLite
+        # timeout; filesystem/schema preflight is part of the separate 60s budget.
+        self.assertLess(wait['seconds'],7,timing)
+        self.assertEqual(wait['deadline'],preflight['deadline'],timing)
+        self.assertGreater(preflight['deadline']-preflight['finished'],0,timing)
+        self.assertLessEqual(preflight['deadline']-preflight['finished'],60,timing)
+        self.assertLess(total,60,timing)
+        self.assertIsNone(getattr(self.journal,'_operation_deadline',None))
         self.assertEqual(self.path.read_bytes(),before)
         self.assertEqual(list(self.path.parent.glob('*.backup')),[])
 
