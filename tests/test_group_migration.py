@@ -675,20 +675,39 @@ PipelineJournal(Path(sys.argv[1])).migrate_groups()
         self.assertEqual(self.path.read_bytes(),before)
 
     def test_busy_writer_wait_is_capped_and_never_creates_backup(self):
+        self.exercise_busy_writer()
+
+    def exercise_busy_writer(self,delay_before_pragma=0):
         from task_tower import group_storage
-        self.seed();before=self.path.read_bytes();waits=[];preflight={}
+        self.seed();before=self.path.read_bytes();waits=[];preflight={};operation={}
+        operation['outer_deadline']=getattr(self.journal,'_operation_deadline',None)
+        original_deadline=self.journal.operation_deadline
+        @contextlib.contextmanager
+        def observe_deadline(deadline):
+            with original_deadline(deadline):
+                operation.update(deadline=journal._operation_deadline,started=time.monotonic())
+                yield
         actual_connect=sqlite3.connect;checkpoint=group_storage._checkpoint
-        journal=self.journal
+        journal=self.journal;budgets=[]
+        original_wait=journal._wait_seconds
+        def observe_wait():
+            sample=dict(started=time.monotonic(),deadline=journal._operation_deadline)
+            sample['budget_seconds']=original_wait()
+            budgets.append(sample)
+            return sample['budget_seconds']
         with contextlib.closing(actual_connect(self.path)) as writer:
             writer.execute('BEGIN IMMEDIATE')
             class ObservedConnection(sqlite3.Connection):
                 def execute(connection,sql,*args,**kwargs):
+                    if sql.startswith('PRAGMA busy_timeout='):
+                        time.sleep(delay_before_pragma)
+                        connection.busy_budget=dict(budgets[-1])
                     if sql!='BEGIN IMMEDIATE':return super().execute(sql,*args,**kwargs)
                     # Observe the actual SQLite setting and blocking statement;
                     # never replace the lock attempt or approve a mocked result.
                     timeout=super().execute('PRAGMA busy_timeout').fetchone()[0]
                     sample=dict(timeout_ms=timeout,deadline=journal._operation_deadline,
-                                writer_held=writer.in_transaction)
+                                writer_held=writer.in_transaction,budget=connection.busy_budget)
                     waits.append(sample);started=time.monotonic()
                     try:return super().execute(sql,*args,**kwargs)
                     finally:
@@ -700,7 +719,7 @@ PipelineJournal(Path(sys.argv[1])).migrate_groups()
                 if phase=='after_inspection':
                     preflight.update(deadline=journal._operation_deadline,finished=time.monotonic())
             start=time.monotonic()
-            with patch.object(sqlite3,'connect',side_effect=connect),patch.object(group_storage,'_checkpoint',side_effect=observe_checkpoint):
+            with patch.object(sqlite3,'connect',side_effect=connect),patch.object(group_storage,'_checkpoint',side_effect=observe_checkpoint),patch.object(journal,'operation_deadline',side_effect=observe_deadline),patch.object(journal,'_wait_seconds',side_effect=observe_wait):
                 with self.assertRaises(ValueError) as failure:self.journal.migrate_groups()
             total=time.monotonic()-start
             writer.rollback()
@@ -709,18 +728,42 @@ PipelineJournal(Path(sys.argv[1])).migrate_groups()
         self._busy_timing=timing
         self.assertEqual(getattr(failure.exception.__cause__,'sqlite_errorcode',None),sqlite3.SQLITE_BUSY)
         self.assertTrue(wait['writer_held'] and wait['writer_still_held'])
-        self.assertGreater(wait['timeout_ms'],0)
-        self.assertLessEqual(wait['timeout_ms'],5000)
-        # Keep the existing scheduling allowance for the real <=5s SQLite
-        # timeout; filesystem/schema preflight is part of the separate 60s budget.
-        self.assertLess(wait['seconds'],7,timing)
+        self.assert_busy_budget(wait,operation['deadline'])
+        # SQLite counts requested sleep, not a strict elapsed-time upper bound.
+        # Preserve genuine contention and the single shared operation deadline.
         self.assertEqual(wait['deadline'],preflight['deadline'],timing)
+        self.assertGreater(operation['deadline']-operation['started'],0,timing)
+        self.assertLessEqual(operation['deadline']-operation['started'],60,timing)
         self.assertGreater(preflight['deadline']-preflight['finished'],0,timing)
         self.assertLessEqual(preflight['deadline']-preflight['finished'],60,timing)
         self.assertLess(total,60,timing)
-        self.assertIsNone(getattr(self.journal,'_operation_deadline',None))
+        self.assertEqual(getattr(self.journal,'_operation_deadline',None),operation.get('outer_deadline'))
         self.assertEqual(self.path.read_bytes(),before)
         self.assertEqual(list(self.path.parent.glob('*.backup')),[])
+
+    def test_busy_writer_accepts_delay_after_budget_calculation(self):
+        with self.journal.operation_deadline(time.monotonic()+4):
+            self.exercise_busy_writer(delay_before_pragma=.02)
+
+    def test_busy_writer_uses_remaining_outer_deadline(self):
+        with self.journal.operation_deadline(time.monotonic()+4):
+            self.test_busy_writer_wait_is_capped_and_never_creates_backup()
+
+    def assert_busy_budget(self,wait,original_deadline):
+        self.assertGreater(wait['timeout_ms'],0)
+        self.assertLessEqual(wait['timeout_ms'],5000)
+        self.assertEqual(wait['deadline'],original_deadline)
+        budget=wait['budget']
+        self.assertEqual(budget['deadline'],original_deadline)
+        self.assertLessEqual(budget['budget_seconds'],min(5,original_deadline-budget['started']))
+        self.assertEqual(wait['timeout_ms'],max(0,int(budget['budget_seconds']*1000)))
+
+    def test_busy_budget_observation_rejects_excess_and_renewal(self):
+        sample=dict(timeout_ms=5000,deadline=60.,budget=dict(started=1.,deadline=60.,budget_seconds=5.))
+        self.assert_busy_budget(sample,60.)
+        for changed in (dict(timeout_ms=5001),dict(deadline=61.),dict(budget=dict(started=59.,deadline=60.,budget_seconds=5.))):
+            with self.subTest(changed=changed),self.assertRaises(AssertionError):
+                self.assert_busy_budget(dict(sample,**changed),60.)
 
     def test_reader_blocking_commit_leaves_exact_v1_and_retained_backup(self):
         self.seed();before=legacy_dump(self.path)
