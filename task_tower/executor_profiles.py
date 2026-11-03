@@ -6,6 +6,7 @@ from pathlib import Path, PurePosixPath
 import re
 
 from .project_connections import safe_config_path
+from .capacity_policy import counts, harness_resources, strict_pairs
 
 
 def profile_fingerprint(profile):
@@ -66,7 +67,7 @@ def _pins(value):
 
 
 def load_executor_config(path, connections):
-    """Validate strict v1 policy and return JSON-safe normalized dictionaries.
+    """Validate versioned policy and return JSON-safe normalized dictionaries.
 
     Profiles are keyed by installation ID; allowlist rows bind a repository Issue,
     task ID and runner to one such profile. No environment or model policy exists.
@@ -75,11 +76,19 @@ def load_executor_config(path, connections):
         path = _path(str(path))
         checkouts = [c.checkout for c in connections]
         _private(path, checkouts)
-        value = json.loads(path.read_text(encoding='utf-8'))
-        if (not isinstance(value, dict) or set(value) - {'version','profiles','allowlist','max_active'} or
-                not {'version','profiles','allowlist'} <= set(value) or type(value['version']) is not int or value['version'] != 1):
+        raw = path.read_text(encoding='utf-8')
+        value = json.loads(raw)
+        if not isinstance(value, dict) or type(value.get('version')) is not int or value['version'] not in (1, 2):
             raise ValueError('Invalid executor configuration')
-        maximum = _integer(value.get('max_active', 2), 2)
+        version = value['version']
+        if version == 2:
+            value = json.loads(raw, object_pairs_hook=strict_pairs)
+        required_keys = {'version','profiles','allowlist'} | ({'harness_resources'} if version == 2 else set())
+        optional_keys = {'max_active'} if version == 1 else {'capacity'}
+        if not required_keys <= set(value) or set(value) - required_keys - optional_keys:
+            raise ValueError('Invalid executor configuration')
+        maximum = _integer(value.get('max_active', 2), 2) if version == 1 else None
+        capacity = counts(value.get('capacity', dict(max_executors=None,max_inflight=None))) if version == 2 else None
         if not isinstance(value['profiles'], dict) or not isinstance(value['allowlist'], list):
             raise ValueError('Invalid executor configuration')
         normalized = {}
@@ -136,6 +145,9 @@ def load_executor_config(path, connections):
             identity=(row['repository'].casefold(),row['issue'])
             if identity in seen: raise ValueError('Duplicate executor authorization')
             seen.add(identity)
-        return dict(version=1,max_active=maximum,profiles=normalized,allowlist=value['allowlist'])
+        if version == 1:
+            return dict(version=1,max_active=maximum,profiles=normalized,allowlist=value['allowlist'])
+        return dict(version=2,capacity=capacity,profiles=normalized,allowlist=value['allowlist'],
+                    harness_resources=harness_resources(value['harness_resources'],normalized))
     except (OSError, ValueError, TypeError, KeyError, UnicodeError):
         raise ValueError('Invalid executor configuration') from None

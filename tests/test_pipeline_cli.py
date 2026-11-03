@@ -3,6 +3,61 @@ import io
 from pathlib import Path
 import tempfile
 import unittest
+
+
+class CapacityRuntimeTests(unittest.TestCase):
+    def test_v2_callable_runtime_refuses_before_any_dependency_effect(self):
+        from task_tower import pipeline, pipeline_worker, pipeline_roles, pipeline_publish, executor_worker
+        class Untouched:
+            def __getattr__(self,name):raise AssertionError('Unsupported mode touched dependency: '+name)
+        obj=Untouched()
+        configs=[dict(version=2,capacity=dict(max_executors=1,max_inflight=None)),
+                 dict(version=1,max_active=2,_executor_config=dict(version=2,capacity=dict(max_executors=None,max_inflight=None)))]
+        for config in configs:
+            calls=[lambda:pipeline.work(config,obj),lambda:pipeline.watch(config,obj),
+                   lambda:pipeline.watch_tick(config,obj),lambda:pipeline._action(config,obj),
+                   lambda:pipeline._dispatch(config,obj),lambda:pipeline_worker.step(config,obj),
+                   lambda:pipeline_roles.run_role(config,obj,obj,'spec_executor',obj,'owner'),
+                   lambda:pipeline_roles.run_checks(config,obj,obj,obj,'owner'),
+                   lambda:pipeline_publish.publish_one(config,obj,obj,'owner')]
+            for i,call in enumerate(calls):
+                expected='unsupported_platform' if i<5 and not pipeline.native_execution_supported() else 'group_runtime_unavailable'
+                with self.subTest(config=config,index=i),self.assertRaisesRegex(ValueError,expected):call()
+        with self.assertRaisesRegex(ValueError,'group_runtime_unavailable'):
+            executor_worker.execute_one(configs[0],obj)
+
+    def test_pipeline_v2_adapter_submit_unknown_before_journal_or_authority(self):
+        from task_tower import pipeline
+        import uuid
+        request=dict(operation='submit',delivery_id=str(uuid.uuid4()),repository='owner/repo',issue=18,task_id='TT-GROUPS-001',runner_label='local')
+        class Untouched:
+            def __getattr__(self,name):raise AssertionError('Unsupported submit touched journal')
+        result=pipeline.adapter(request,dict(version=2),Untouched())
+        self.assertEqual(result,dict(version=1,delivery_id=request['delivery_id'],status='unknown'))
+
+    def test_actual_v2_cli_policy_files_refuse_before_journal_or_host(self):
+        from tests.test_group_policy import GroupPolicyTests
+        from task_tower import pipeline
+        import json,io,contextlib
+        fixture=GroupPolicyTests();fixture.setUp();self.addCleanup(fixture.doCleanups)
+        raw=json.loads(fixture.executor_path.read_text())
+        raw.update(version=2,harness_resources={'local':dict(pool_id='local',cpu_millis=1000,memory_bytes=1048576,max_parallel=None)})
+        fixture.executor_path.write_text(json.dumps(raw),encoding='utf-8')
+        fixture.pipeline_path.write_text(json.dumps(dict(version=2,tasks=[fixture.task])),encoding='utf-8')
+        connections=fixture.root/'connections.json'
+        connections.write_text(json.dumps(dict(version=1,projects=[dict(id='r',repository='Owner/Repo',checkout=str(fixture.checkout),runner_label='local',trusted_publishers=['publisher'])])),encoding='utf-8')
+        journal=fixture.root/'untouched'/'journal.db';host_result=fixture.root/'host-result.json'
+        common=['--connections',str(connections),'--journal',str(journal),'--config',str(fixture.pipeline_path),'--executor-config',str(fixture.executor_path)]
+        for command,extra in [('work',['--once']),('_action',['--host-owner','00000000-0000-4000-8000-000000000001','--host-result',str(host_result)])]:
+            output=io.StringIO();error=io.StringIO()
+            with contextlib.redirect_stdout(output),contextlib.redirect_stderr(error):
+                code=pipeline.main([command,*common,*extra])
+            if pipeline.native_execution_supported():
+                self.assertEqual(code,1,error.getvalue())
+                self.assertEqual(json.loads(output.getvalue()),dict(status='needs_input',reason='group_runtime_unavailable'))
+            else:
+                self.assertEqual(code,2);self.assertEqual(json.loads(error.getvalue()),dict(error='unsupported_platform'))
+            self.assertFalse(journal.parent.exists());self.assertFalse(host_result.exists())
 import uuid
 import threading
 from datetime import datetime,timedelta,timezone

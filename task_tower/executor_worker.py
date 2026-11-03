@@ -1,4 +1,6 @@
 """One foreground attempt; uncertain effects retain durable ownership fencing."""
+
+from .capacity_policy import require_legacy_capacity
 import hashlib
 import json
 import os
@@ -65,6 +67,7 @@ def _authorized(config,job,profile):
     return True
 
 def execute_one(config,queue,*,owner_id=None):
+    require_legacy_capacity(config)
     owner_id=owner_id or str(uuid.uuid4())
     with queue.owner(owner_id):
         job=queue.claim(owner_id,max_active=config.get('max_active',2))

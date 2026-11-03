@@ -71,6 +71,27 @@ class GroupPolicyTests(unittest.TestCase):
     def route(self, policy=None, issue=18, task_id='TT-GROUPS-001'):
         return group_policy.resolve_route(policy or self.load(), 'OWNER/REPO', issue, task_id)
 
+    def test_v2_actual_executor_pipeline_loaders_compose_without_count_fallback(self):
+        from task_tower.pipeline_policy import load_pipeline_config
+        raw=json.loads(self.executor_path.read_text())
+        raw.update(version=2,capacity=dict(max_executors=3,max_inflight=None),
+                   harness_resources={'local':dict(pool_id='local',cpu_millis=1000,memory_bytes=1048576,max_parallel=3)})
+        self.executor_path.write_text(json.dumps(raw),encoding='utf-8')
+        self.executor=load_executor_config(self.executor_path,self.connections)
+        self.pipeline_path.write_text(json.dumps(dict(version=2,tasks=[self.task],capacity=dict(max_executors=1,max_inflight=None))),encoding='utf-8')
+        self.pipeline=load_pipeline_config(self.pipeline_path,self.connections,self.executor)
+        self.value['version']=2
+        loaded=self.load()
+        self.assertEqual(loaded['effective_capacity']['max_executors'],1)
+        self.assertEqual(loaded['harness_resources']['local']['max_parallel'],3)
+        self.assertNotIn('max_active',self.executor)
+        self.assertNotIn('max_active',self.pipeline)
+        # A real v1 executor does not silently supply v2 resource authority.
+        raw.pop('harness_resources');raw.pop('capacity');raw['version']=1
+        self.executor_path.write_text(json.dumps(raw),encoding='utf-8')
+        self.executor=load_executor_config(self.executor_path,self.connections)
+        with self.assertRaises(ValueError):self.load()
+
     def test_strict_schema_defaults_and_role_profiles(self):
         policy = self.load()
         route = self.route(policy)

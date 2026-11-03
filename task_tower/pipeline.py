@@ -3,6 +3,8 @@
 Only fixed host Python invocations inherit API credentials. Roles and checks
 continue to construct their own stripped environments in pipeline_roles.
 """
+
+from .capacity_policy import require_legacy_capacity, UnsupportedCapacityMode
 import argparse
 from contextlib import ExitStack
 from datetime import datetime, timezone
@@ -48,6 +50,9 @@ def _require_native_execution():
 def adapter(request,config,journal):
     request=validate_request(request)
     unknown=dict(version=1,delivery_id=request['delivery_id'],status='unknown')
+    if request['operation']=='submit':
+        try:require_legacy_capacity(config)
+        except UnsupportedCapacityMode:return unknown
     rows=[t for t in config['tasks'] if t['repository'].casefold()==request['repository'] and
           all(t[k]==request[k] for k in ('issue','task_id','runner_label'))]
     if len(rows)!=1 or not config['_authority_check']():return unknown
@@ -209,6 +214,7 @@ def _status(connections,journal,run_id=None):
 
 def _action(config,journal):
     _require_native_execution()
+    require_legacy_capacity(config)
     from .pipeline_worker import step
     journal.recover()
     return step(config,journal,owner_id=config['_cli_args'].host_owner)
@@ -216,6 +222,7 @@ def _action(config,journal):
 
 def _dispatch(config,journal):
     _require_native_execution()
+    require_legacy_capacity(config)
     args=config['_cli_args'];_backend_scope(config,journal)
     if args.dispatch_config.read_bytes()!=config['_dispatch_bytes']:raise ValueError('Dispatcher policy changed')
     report=dispatcher.tick(config['_connections'],config['_dispatch_config'],args.dispatch_journal,
@@ -269,6 +276,7 @@ class _Host:
 
 def work(config,journal):
     _require_native_execution()
+    require_legacy_capacity(config)
     args=config['_cli_args'];args.journal.parent.mkdir(parents=True,exist_ok=True)
     stop=threading.Event();host=_Host(args,'_action',_remaining(config,journal),stop)
     interrupted=False;confirmed=False
@@ -295,9 +303,11 @@ def _watch_read_failures(state):
 def watch_tick(config,journal,*,dispatch_tick=dispatcher.tick):
     """Poll contained hosts and refill; slow API operations remain off-loop."""
     _require_native_execution()
+    require_legacy_capacity(config)
     state=config['_watch'];args=config['_cli_args']
     # Fresh private policy validation happens in every helper and here each pass.
     _,_,fresh=_runtime(args)
+    require_legacy_capacity(fresh)
     if fresh['policy_sha256']!=config['policy_sha256']:raise ValueError('Pipeline watch policy changed')
     journal.recover();now=time.monotonic()
     for host in list(state['workers']):
@@ -389,6 +399,7 @@ def _shutdown(config,journal,state,*,cancel_runs=True):
 
 def watch(config,journal):
     _require_native_execution()
+    require_legacy_capacity(config)
     owner=str(uuid.uuid4());journal.claim_controller(owner,config['policy_sha256'])
     state=dict(owner=owner,stop=threading.Event(),workers=[],dispatcher=None,ticks=0,failures=0,next_dispatch=0)
     config['_watch']=state;exit_code=0
@@ -435,6 +446,8 @@ def main(argv=None):
         return 1 if args.command=='work' and report.get('status') not in completed else 0
     except UnsupportedPlatform:
         print(json.dumps(dict(error='unsupported_platform')),file=sys.stderr);return 2
+    except UnsupportedCapacityMode:
+        print(json.dumps(dict(status='needs_input',reason='group_runtime_unavailable')),file=sys.stdout);return 1
     except (OSError,ValueError,TypeError,KeyError) as error:
         if args.command=='migrate':
             from .group_storage import MigrationFailure

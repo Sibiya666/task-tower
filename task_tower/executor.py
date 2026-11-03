@@ -9,11 +9,15 @@ import tempfile
 from .executor_profiles import load_executor_config, profile_fingerprint
 from .executor_queue import ExecutionQueue, validate_request
 from .project_connections import load_connections, safe_config_path
+from .capacity_policy import require_legacy_capacity, UnsupportedCapacityMode
 
 
 def adapter(request,config,queue,*,authority_check=None):
     r=validate_request(request)
     unknown=dict(version=1,delivery_id=r['delivery_id'],status='unknown')
+    if r['operation']=='submit':
+        try:require_legacy_capacity(config)
+        except UnsupportedCapacityMode:return unknown
     rows=[row for row in config['allowlist'] if row['repository'].casefold()==r['repository'] and all(row[k]==r[k] for k in ('issue','task_id','runner_label'))]
     if len(rows)!=1: return unknown
     row=rows[0]; profile=config['profiles'].get(row['profile'])
@@ -116,6 +120,7 @@ def main(argv=None):
             if args.command=='cancel': queue.cancel(args.run_id); report=queue.status(args.run_id)
         else:
             policy=args.config.read_bytes(); config=load_executor_config(args.config,connections)
+            if args.command in ('work','retry'):require_legacy_capacity(config)
             def authority_check():
                 try:
                     _paths([*inputs,args.queue],connections)

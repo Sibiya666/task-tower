@@ -36,6 +36,23 @@ class PipelinePolicyTests(unittest.TestCase):
             self.value[key]=value
             with self.assertRaises(ValueError): self.load()
             del self.value[key]
+
+    def test_v2_actual_loader_nullable_capacity_without_max_active(self):
+        legacy=self.load()
+        self.value['version']=2
+        loaded=self.load()
+        self.assertNotIn('max_active',loaded)
+        self.assertEqual(loaded['capacity'],dict(max_executors=None,max_inflight=None))
+        for key in ('tasks','profiles','interval_seconds','task_timeout_seconds','role_timeout_seconds','max_reworks','max_processes','log_max_bytes'):
+            self.assertEqual(loaded[key],legacy[key])
+        for cap in (1,3,2**63-1):
+            self.value['capacity']=dict(max_executors=cap,max_inflight=cap)
+            self.assertEqual(self.load()['capacity'],self.value['capacity'])
+        for invalid in (True,0,-1,2**63,1.5):
+            self.value['capacity']=dict(max_executors=invalid,max_inflight=None)
+            with self.assertRaises(ValueError):self.load()
+        self.value.pop('capacity');self.value['max_active']=1
+        with self.assertRaises(ValueError):self.load()
     def test_alias_and_policy_escalation_rejected(self):
         for key,value in [('allowed_paths',['../src/']),('allowed_paths',['docs/','docs/spec.md']),('components',['core','core']),('components',['*','core']),('publisher_account','attacker'),('issue',17),('spec_path','outside.md')]:
             target=self.row['publish'] if key=='publisher_account' else self.row

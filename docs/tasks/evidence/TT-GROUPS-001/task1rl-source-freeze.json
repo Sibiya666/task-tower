@@ -1,0 +1,31 @@
+{
+  "base": "73186e6c58b6610eaa4f3e8745aca0437110e2f1",
+  "scope": "Task1R-L fixround1 fresh watch runtime guard only; pending same independent acceptor re-review/full",
+  "prior_freeze_sha256": "f42ec55e46a53e22627d38521a028847b0645ed63da41e306cf285b324582584",
+  "rejected_review_sha256": "825bd566f3cdc3fd1152db11883fedbfafbc97423dcb570dd5016eab66f648f2",
+  "files": {
+    "task_tower/capacity_policy.py": "387e8c665a71dabaf70528e888dd9a2bd9443ed36b0c37a8f956cee9ba08b185",
+    "task_tower/executor.py": "601c20f164b2066361248f9cd199540450428e7af8deceab3e1675845bffd66c",
+    "task_tower/executor_profiles.py": "823f9eb47b6942f365a953795b95f25500fa0361fc19b0ff8b0c8965b3967731",
+    "task_tower/executor_worker.py": "521a76f199734326d70d3de691013a224c34cfdf618c582cc3362a3a87b74473",
+    "task_tower/pipeline.py": "e7ea181a8bda0582116f1c44baa5f51118e74e809354733771882aa4a95f0964",
+    "task_tower/pipeline_policy.py": "ee30e5b5d2033dd3f0cfba405bc354e2a862989a704d5653215efd6644158e27",
+    "task_tower/pipeline_publish.py": "a2520315c07bb3515ab35577e2478138120d99478547443a19c3e0274d44ea4a",
+    "task_tower/pipeline_roles.py": "97bb7bea826b7beb1a4a16c8c3a40ec033784b7cd0ac981353822d63d697f8c2",
+    "task_tower/pipeline_worker.py": "1733b0387db325c4d1b600ce9afc3f21ea7d2eb182b8feabf0f567cf2d1dcca6",
+    "tests/test_executor_adapter.py": "975e1e5c27286c959c7677aa445521e086f526e3922dcdc7d5a13fcf0b3841d1",
+    "tests/test_executor_profiles.py": "0dbed8eb41b5999e30b6fcfb1df9706c9696b36bf3952a31d5cb01d487111ddd",
+    "tests/test_group_policy.py": "e539b6ba0df694e420592b1d0873e67db439eda0950f920ea2fe8b32bde525d7",
+    "tests/test_pipeline_cli.py": "85f69c8516b6eee7698d428f94528ee0b5127bcdd55ef1bb12740e44eb56112e",
+    "tests/test_pipeline_policy.py": "3473f3ce214dd4d881c3d27f3a7c528f1006e0b044366434efca3b256da97b23",
+    "tests/test_pipeline_watch.py": "e251db568d3dc18052e64f4b02f7a931e275a689fae1b6bb5795b159b574663d"
+  },
+  "fix_verification": {
+    "tests": 40,
+    "seconds": 32.145,
+    "skipped": 1,
+    "exit_code": 0,
+    "result": "OK"
+  },
+  "full_suite": "NOT_RUN_ROOT_OWNS_AFTER_REVIEW"
+}

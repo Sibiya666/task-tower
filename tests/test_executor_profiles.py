@@ -46,6 +46,54 @@ class ExecutorProfilesTests(unittest.TestCase):
         self.assertEqual(profiles.profile_fingerprint(policy), digest(policy))
         self.assertEqual(profiles.profile_fingerprint(dict(reversed(list(policy.items())))), digest(policy))
 
+    def v2(self):
+        self.config['version']=2
+        self.config['harness_resources']={'local':dict(pool_id='local',cpu_millis=1000,memory_bytes=1048576,max_parallel=None)}
+
+    def test_v2_actual_file_defaults_and_caps_do_not_change_profiles(self):
+        legacy=self.load()
+        self.v2()
+        loaded=self.load()
+        self.assertEqual(set(loaded),{'version','profiles','allowlist','capacity','harness_resources'})
+        self.assertEqual(loaded['capacity'],dict(max_executors=None,max_inflight=None))
+        self.assertEqual(loaded['profiles'],legacy['profiles'])
+        for cap in (1,3,2**63-1):
+            self.config['capacity']=dict(max_executors=cap,max_inflight=cap)
+            self.assertEqual(self.load()['capacity'],self.config['capacity'])
+
+    def test_v2_grants_caps_aliases_and_duplicate_json_are_closed(self):
+        import copy
+        self.v2();valid=copy.deepcopy(self.config)
+        for field in ('max_executors','max_inflight'):
+            for invalid in (True,0,-1,2**63,1.5):
+                self.config=copy.deepcopy(valid);self.config['capacity']=dict(max_executors=None,max_inflight=None)
+                self.config['capacity'][field]=invalid
+                with self.subTest(field=field,invalid=invalid),self.assertRaises(ValueError):self.load()
+        for grants in ({},{'foreign':valid['harness_resources']['local']},
+                       {'local':dict(valid['harness_resources']['local'],cpu_millis=True)},
+                       {'local':dict(valid['harness_resources']['local'],memory_bytes=2**63)},
+                       {'local':dict(valid['harness_resources']['local'],max_parallel=0)},
+                       {'local':dict(valid['harness_resources']['local'],extra=1)}):
+            self.config=copy.deepcopy(valid);self.config['harness_resources']=grants
+            with self.assertRaises(ValueError):self.load()
+        self.config=copy.deepcopy(valid)
+        self.config['profiles']['alias']=dict(self.profile,runs_dir=str(self.root/'other-runs'))
+        self.config['harness_resources']['alias']=dict(valid['harness_resources']['local'],pool_id='split')
+        with self.assertRaises(ValueError):self.load()
+        self.config=valid;self.config['max_active']=1
+        with self.assertRaises(ValueError):self.load()
+        del self.config['max_active']
+        for text in (json.dumps(self.config).replace('"version": 2','"version": 2, "version": 2'),
+                     json.dumps(self.config).replace('"cpu_millis": 1000','"cpu_millis": 1000, "cpu_millis": 1000')):
+            self.path.write_text(text,encoding='utf-8')
+            with self.assertRaises(ValueError):profiles.load_executor_config(self.path,self.connections)
+
+    def test_v1_duplicate_last_wins_and_normalized_shape_stay_legacy(self):
+        expected=self.load()
+        raw=json.dumps(self.config).replace('"version": 1','"version": 2, "version": 1')
+        self.path.write_text(raw,encoding='utf-8')
+        self.assertEqual(profiles.load_executor_config(self.path,self.connections),expected)
+
     def test_child_environment_removes_tokens_case_insensitively_without_mutating_host(self):
         host = {'GH_TOKEN':'secret', 'github_token':'secret2', 'Gh_ToKeN':'secret3', 'PATH':'installed'}
         self.assertEqual(profiles.child_environment(host), {'PATH':'installed'})

@@ -8,6 +8,7 @@ from .executor_profiles import _path, _private, _pins, profile_fingerprint
 from .github_tasks import START, END, parse_metadata
 from .dispatch_selection import _pairs, _identity, identity_matches, select_ready
 from .project_worker import issue_lifecycle, verified_done
+from .capacity_policy import counts
 
 LIMITS=dict(max_active=(2,1,2),interval_seconds=(5,1,60),task_timeout_seconds=(7200,1,86400),role_timeout_seconds=(900,1,3600),max_reworks=(2,0,5),max_processes=(36,6,100),log_max_bytes=(1048576,1,67108864))
 NAME=r'[A-Za-z0-9][A-Za-z0-9_.-]{0,99}'
@@ -30,9 +31,13 @@ def load_pipeline_config(path,connections,executor_config):
     try:
         path=_path(str(path)); _private(path,[c.checkout for c in connections])
         raw=path.read_bytes(); value=json.loads(raw.decode('utf-8'),object_pairs_hook=_pairs)
-        if not isinstance(value,dict) or set(value)-{'version','tasks',*LIMITS} or type(value.get('version')) is not int or value['version']!=1 or not isinstance(value.get('tasks'),list): raise ValueError()
-        result=dict(version=1,tasks=[])
-        for key,(default,low,high) in LIMITS.items():
+        if not isinstance(value,dict) or type(value.get('version')) is not int or value['version'] not in (1,2) or not isinstance(value.get('tasks'),list): raise ValueError()
+        version=value['version']
+        limits=LIMITS if version==1 else {key:bound for key,bound in LIMITS.items() if key!='max_active'}
+        if set(value)-{'version','tasks',*limits}-({'capacity'} if version==2 else set()):raise ValueError()
+        result=dict(version=version,tasks=[])
+        if version==2:result['capacity']=counts(value.get('capacity',dict(max_executors=None,max_inflight=None)))
+        for key,(default,low,high) in limits.items():
             limit=value.get(key,default)
             if type(limit) is not int or not low<=limit<=high: raise ValueError()
             result[key]=limit

@@ -19,6 +19,59 @@ from task_tower.github_tasks import replace_metadata
 from tests import test_pipeline_default_source as source_fixture
 
 
+@unittest.skipUnless(pipeline.native_execution_supported(),'Windows native watch')
+class CapacityReloadTests(unittest.TestCase):
+    def setUp(self):
+        from types import SimpleNamespace
+        from tests.test_group_policy import GroupPolicyTests
+        self.fixture=GroupPolicyTests();self.fixture.setUp();self.addCleanup(self.fixture.doCleanups)
+        f=self.fixture
+        f.pipeline_path.write_text(json.dumps(dict(version=1,tasks=[f.task])),encoding='utf-8')
+        connections=f.root/'connections.json'
+        connections.write_text(json.dumps(dict(version=1,projects=[dict(id='r',repository='Owner/Repo',
+            checkout=str(f.checkout),runner_label='local',trusted_publishers=['publisher'])])),encoding='utf-8')
+        self.args=SimpleNamespace(connections=connections,journal=f.root/'journal.sqlite3',
+            config=f.pipeline_path,executor_config=f.executor_path)
+        _,self.journal,self.old=pipeline._runtime(self.args)
+        self.pipeline_bytes=f.pipeline_path.read_bytes()
+        raw=json.loads(f.executor_path.read_text())
+        raw.update(version=2,harness_resources={'local':dict(pool_id='local',cpu_millis=1000,memory_bytes=1048576,max_parallel=None)})
+        f.executor_path.write_text(json.dumps(raw),encoding='utf-8')
+
+    def test_actual_executor_upgrade_refuses_before_recovery_helpers_or_state(self):
+        _,_,fresh=pipeline._runtime(self.args)
+        self.assertEqual(self.old['_executor_config']['version'],1)
+        self.assertEqual(fresh['_executor_config']['version'],2)
+        self.assertEqual(self.old['policy_sha256'],fresh['policy_sha256'])
+        self.assertEqual(self.fixture.pipeline_path.read_bytes(),self.pipeline_bytes)
+        state=dict(workers=[],dispatcher=None,ticks=0,failures=0,next_dispatch=0)
+        self.old['_watch']=state
+        effects=[]
+        class Journal:
+            def recover(self):
+                effects.append('recover')
+                raise AssertionError('recovery reached before fresh capacity guard')
+        with patch.object(pipeline,'_Host',side_effect=AssertionError('helper reached')) as host:
+            with self.assertRaisesRegex(ValueError,'group_runtime_unavailable'):
+                pipeline.watch_tick(self.old,Journal())
+            host.assert_not_called()
+        self.assertEqual(effects,[])
+        self.assertEqual(state,dict(workers=[],dispatcher=None,ticks=0,failures=0,next_dispatch=0))
+        self.assertFalse(self.args.journal.exists())
+
+    def test_actual_reload_refusal_still_releases_existing_watch_controller(self):
+        # The watch's existing finally cleanup must still run after mode refusal.
+        # No helpers/roles are launched; the genuine local controller is stopped.
+        with patch.object(pipeline,'_Host',side_effect=AssertionError('helper reached')) as host:
+            with self.assertRaisesRegex(ValueError,'group_runtime_unavailable'):
+                pipeline.watch(self.old,self.journal)
+            host.assert_not_called()
+        health=self.journal.controller_health()
+        self.assertTrue(health['health']['stopped'])
+        self.assertEqual(health['health']['workers'],0)
+        self.assertEqual(health['health']['dispatcher'],0)
+
+
 class WatchTests(unittest.TestCase):
     def setUp(self):
         self.source=source_fixture.DefaultSourceTests();self.source.setUp();self.addCleanup(self.source.doCleanups)
