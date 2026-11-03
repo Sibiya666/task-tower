@@ -1,0 +1,25 @@
+{
+  "repository": "task-tower-capture",
+  "source_unchanged": true,
+  "verified_success": true,
+  "runner_release": "7586df4ac2e59316521463b7526089c8314024e4",
+  "runner_sha256": "f46049aa320ad3e57b3c9e1ddcf4467babd118797d8dfaa71a8a39a0d362ee33",
+  "result": {
+    "status": "passed",
+    "exit_code": 0,
+    "started": true,
+    "cleanup_confirmed": true,
+    "pid": 200296,
+    "stdout_sha256": "fd546d01c6d2880b01d3bce9a7b1f43d0c4125bcc137c4ce97d019d3e8643e08",
+    "stdout_bytes": 85,
+    "stdout_captured_bytes": 85,
+    "stdout_tail_unknown": false,
+    "stdout_truncated": false,
+    "stderr_sha256": "d0936e091626794eef0ef937c770df09383cebb1eccd3db6229e65619a155b01",
+    "stderr_bytes": 144689,
+    "stderr_captured_bytes": 144689,
+    "stderr_tail_unknown": false,
+    "stderr_truncated": false,
+    "duration_seconds": 1642.078
+  }
+}

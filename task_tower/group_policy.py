@@ -117,7 +117,7 @@ def _relative(value):
         raise ValueError('Invalid group task path')
     for part in value.rstrip('/').split('/'):
         if (part.endswith(('.', ' ')) or any(ord(c) < 32 or ord(c) == 127 or c in '<>"|?*' for c in part)
-                or re.fullmatch(r'(?i:con|prn|aux|nul|conin\$|conout\$|com[1-9¹²³]|lpt[1-9¹²³])', part.split('.')[0])):
+                or re.fullmatch(r'(?i:con|prn|aux|nul|conin\$|conout\$|com[1-9\u00b9\u00b2\u00b3]|lpt[1-9\u00b9\u00b2\u00b3])', part.split('.')[0])):
             raise ValueError('Nonportable group task path')
     return value
 
@@ -363,31 +363,11 @@ def load_group_config(path: Path, connections: list, executor_config: dict, pipe
             for key in ('max_executors', 'max_inflight'):
                 result['effective_capacity'][key] = _minimum(result['capacity'][key],
                     _counts(executor_config)[key], _counts(pipeline_config)[key])
-        authority = copy.deepcopy(result)
-        if version == 1:
-            del authority['max_active'], authority['effective_max_active']
-        else:
-            del authority['capacity'], authority['effective_capacity']
-            for resource in authority['harness_resources'].values():
-                del resource['max_parallel']
-        for project in authority['projects']:
-            for group in project['groups']:
-                del group['capacity']
-                group.pop('max_inflight', None)
-        authority.update(config_path=str(path), tasks=list(tasks.values()),
-            profiles={k: profile_fingerprint(v) for k, v in executor_config['profiles'].items()},
-            limits={k: v for k, v in limits.items() if k != 'max_active'},
-            connections=[dict(repository=c.repository.casefold(), checkout=str(c.checkout),
-                              runner_label=c.runner_label, trusted_publishers=list(c.trusted_publishers)) for c in connections])
-        capacity = dict(max_active=maximum, pipeline_max_active=limits.get('max_active'),
-                        groups=[dict(repository=p['repository'], id=g['id'], capacity=g['capacity'])
-                                for p in projects for g in p['groups']])
-        if version == 2:
-            capacity = dict(capacity=result['capacity'], effective_capacity=result['effective_capacity'],
-                executor_capacity=_counts(executor_config), pipeline_capacity=_counts(pipeline_config),
-                harness_caps={k: v['max_parallel'] for k, v in result['harness_resources'].items()},
-                groups=[dict(repository=p['repository'], id=g['id'], capacity=g['capacity'],
-                    max_inflight=g['max_inflight']) for p in projects for g in p['groups']])
+        result.update(_policy_path=path, _tasks=tasks, _limits=limits,
+            _connections=copy.deepcopy(connections), _executor_config=copy.deepcopy(executor_config),
+            _pipeline_config=copy.deepcopy(pipeline_config))
+        manifests = policy_manifests(result)
+        authority, capacity = manifests['authorization'], manifests['capacity']
         result.update(policy_sha256=hashlib.sha256(raw).hexdigest(),
             authorization_sha256=profile_fingerprint(authority), capacity_sha256=profile_fingerprint(capacity),
             _policy_path=path, _policy_bytes=raw, _tasks=tasks, _limits=limits,
@@ -465,3 +445,43 @@ def group_binding(policy: dict, task: dict) -> dict:
             authorization_sha256=fresh['authorization_sha256'], capacity_sha256=fresh['capacity_sha256'])
     except (OSError, ValueError, TypeError, KeyError, AttributeError):
         raise ValueError('Invalid or stale group binding') from None
+
+
+def policy_manifests(policy):
+    """Return copies of the exact loader digest preimages, never execution authority."""
+    result = {k: copy.deepcopy(v) for k,v in policy.items() if not k.startswith("_") and k not in {"policy_sha256","authorization_sha256","capacity_sha256"}}
+    version = result["version"]
+    maximum = result.get("max_active")
+    projects = result["projects"]
+    path = policy["_policy_path"]
+    tasks = policy["_tasks"]
+    limits = policy["_limits"]
+    executor_config = policy["_executor_config"]
+    pipeline_config = policy["_pipeline_config"]
+    connections = policy["_connections"]
+    authority = copy.deepcopy(result)
+    if version == 1:
+        del authority['max_active'], authority['effective_max_active']
+    else:
+        del authority['capacity'], authority['effective_capacity']
+        for resource in authority['harness_resources'].values():
+            del resource['max_parallel']
+    for project in authority['projects']:
+        for group in project['groups']:
+            del group['capacity']
+            group.pop('max_inflight', None)
+    authority.update(config_path=str(path), tasks=list(tasks.values()),
+        profiles={k: profile_fingerprint(v) for k, v in executor_config['profiles'].items()},
+        limits={k: v for k, v in limits.items() if k != 'max_active'},
+        connections=[dict(repository=c.repository.casefold(), checkout=str(c.checkout),
+                          runner_label=c.runner_label, trusted_publishers=list(c.trusted_publishers)) for c in connections])
+    capacity = dict(max_active=maximum, pipeline_max_active=limits.get('max_active'),
+                    groups=[dict(repository=p['repository'], id=g['id'], capacity=g['capacity'])
+                            for p in projects for g in p['groups']])
+    if version == 2:
+        capacity = dict(capacity=result['capacity'], effective_capacity=result['effective_capacity'],
+            executor_capacity=_counts(executor_config), pipeline_capacity=_counts(pipeline_config),
+            harness_caps={k: v['max_parallel'] for k, v in result['harness_resources'].items()},
+            groups=[dict(repository=p['repository'], id=g['id'], capacity=g['capacity'],
+                max_inflight=g['max_inflight']) for p in projects for g in p['groups']])
+    return dict(authorization=authority,capacity=capacity)

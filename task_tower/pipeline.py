@@ -4,7 +4,9 @@ Only fixed host Python invocations inherit API credentials. Roles and checks
 continue to construct their own stripped environments in pipeline_roles.
 """
 
+from .group_registration import guard_execution
 from .capacity_policy import require_legacy_capacity, UnsupportedCapacityMode
+from .group_registration import RegistrationUnavailable, RegistrationRecoveryRequired
 import argparse
 from contextlib import ExitStack
 from datetime import datetime, timezone
@@ -51,8 +53,10 @@ def adapter(request,config,journal):
     request=validate_request(request)
     unknown=dict(version=1,delivery_id=request['delivery_id'],status='unknown')
     if request['operation']=='submit':
-        try:require_legacy_capacity(config)
-        except UnsupportedCapacityMode:return unknown
+        try:
+            guard_execution(journal,config)
+            require_legacy_capacity(config)
+        except (UnsupportedCapacityMode,RegistrationUnavailable,OSError,ValueError):return unknown
     rows=[t for t in config['tasks'] if t['repository'].casefold()==request['repository'] and
           all(t[k]==request[k] for k in ('issue','task_id','runner_label'))]
     if len(rows)!=1 or not config['_authority_check']():return unknown
@@ -71,10 +75,10 @@ def adapter(request,config,journal):
 def _parser():
     parser=argparse.ArgumentParser(description='Durable local stage pipeline')
     sub=parser.add_subparsers(dest='command',required=True)
-    for name in ('adapter','work','watch','status','cancel','reconcile','migrate','_action','_dispatch'):
+    for name in ('adapter','work','watch','status','cancel','reconcile','migrate','register-groups','_action','_dispatch'):
         command=sub.add_parser(name)
         for key in ('connections','journal'):command.add_argument('--'+key,type=Path,required=True)
-        if name in ('adapter','work','watch','_action','_dispatch'):
+        if name in ('adapter','work','watch','_action','_dispatch','register-groups'):
             for key in ('config','executor-config'):command.add_argument('--'+key,type=Path,required=True)
         if name in ('watch','_dispatch'):
             for key in ('dispatch-config','dispatch-journal'):command.add_argument('--'+key,type=Path,required=True)
@@ -86,6 +90,11 @@ def _parser():
         if name in ('cancel','reconcile'):command.add_argument('--run-id',required=True)
         if name=='status':command.add_argument('--run-id')
         if name=='reconcile':command.add_argument('--inspect',action='store_true',required=True)
+        if name in ('work','watch'):
+            command.add_argument('--groups-config',type=Path)
+        if name=='register-groups':
+            command.add_argument('--groups-config',type=Path,required=True)
+            command.add_argument('--apply',action='store_true',required=True)
         if name=='migrate':
             mode=command.add_mutually_exclusive_group(required=True)
             mode.add_argument('--inspect',action='store_true')
@@ -207,13 +216,19 @@ def _status(connections,journal,run_id=None):
         age=(datetime.now(timezone.utc)-datetime.fromisoformat(controller['last_tick_at'])).total_seconds()
         controller={k:controller[k] for k in ('started_at','last_tick_at','health')}
         controller['uncertain']=(controller['health']['stopped'] and bool(controller['health']['workers'] or controller['health']['dispatcher'])) or age<0 or (not controller['health']['stopped'] and age>65)
-    return dict(runs=[_public_run(r,journal) for r in runs],controller=controller,
+    result=dict(runs=[_public_run(r,journal) for r in runs],controller=controller,
         active=sum(r['state'] in ACTIVE for r in runs),queued=sum(r['state']=='queued' for r in runs),
         unknown=sum(r['state']=='unknown' for r in runs),parked=sum(r['state'] in ('needs_input','cancelled','timed_out') for r in runs))
+    if journal.path.exists():
+        registration=journal.registered_groups()
+        if registration is not None:
+            result['registration']={k:registration[k] for k in ('installation_id','current_capacity_epoch','current_policy_sha256','current_authorization_sha256')}
+    return result
 
 
 def _action(config,journal):
     _require_native_execution()
+    guard_execution(journal,config,known_run=True)
     require_legacy_capacity(config)
     from .pipeline_worker import step
     journal.recover()
@@ -222,6 +237,7 @@ def _action(config,journal):
 
 def _dispatch(config,journal):
     _require_native_execution()
+    guard_execution(journal,config)
     require_legacy_capacity(config)
     args=config['_cli_args'];_backend_scope(config,journal)
     if args.dispatch_config.read_bytes()!=config['_dispatch_bytes']:raise ValueError('Dispatcher policy changed')
@@ -276,8 +292,27 @@ class _Host:
 
 def work(config,journal):
     _require_native_execution()
+    guard_execution(journal,config)
     require_legacy_capacity(config)
-    args=config['_cli_args'];args.journal.parent.mkdir(parents=True,exist_ok=True)
+    args=config['_cli_args']
+    if not journal.path.exists():
+        # Only the existing fresh-v1/no-G bootstrap exception may initialize J.
+        # Continuation helpers themselves remain existing-only. Reload actual
+        # private files rather than trusting caller-mutated normalized flags.
+        current=config.get('_authority_check')
+        if not callable(current) or current() is not True:raise ValueError('Pipeline policy changed')
+        _,bootstrap_journal,bootstrap_config=_runtime(args)
+        require_legacy_capacity(bootstrap_config)
+        if bootstrap_journal.path!=journal.path or bootstrap_config['policy_sha256']!=config['policy_sha256']:
+            raise ValueError('Pipeline policy changed')
+        args.journal.parent.mkdir(parents=True,exist_ok=True)
+        with bootstrap_journal._db(True) as db:
+            if db.execute('PRAGMA user_version').fetchone()[0]!=1:
+                raise ValueError('Legacy bootstrap journal changed')
+            if current() is not True or bootstrap_config['_authority_check']() is not True:
+                raise ValueError('Pipeline policy changed')
+    else:
+        args.journal.parent.mkdir(parents=True,exist_ok=True)
     stop=threading.Event();host=_Host(args,'_action',_remaining(config,journal),stop)
     interrupted=False;confirmed=False
     try:
@@ -303,6 +338,7 @@ def _watch_read_failures(state):
 def watch_tick(config,journal,*,dispatch_tick=dispatcher.tick):
     """Poll contained hosts and refill; slow API operations remain off-loop."""
     _require_native_execution()
+    guard_execution(journal,config)
     require_legacy_capacity(config)
     state=config['_watch'];args=config['_cli_args']
     # Fresh private policy validation happens in every helper and here each pass.
@@ -399,6 +435,7 @@ def _shutdown(config,journal,state,*,cancel_runs=True):
 
 def watch(config,journal):
     _require_native_execution()
+    guard_execution(journal,config)
     require_legacy_capacity(config)
     owner=str(uuid.uuid4());journal.claim_controller(owner,config['policy_sha256'])
     state=dict(owner=owner,stop=threading.Event(),workers=[],dispatcher=None,ticks=0,failures=0,next_dispatch=0)
@@ -417,6 +454,17 @@ def main(argv=None):
     args=_parser().parse_args(argv)
     try:
         if args.command in ('work','watch','_action','_dispatch'):_require_native_execution()
+        if args.command=='register-groups':
+            from .group_registration import load_registration_context
+            journal=PipelineJournal(args.journal)
+            with load_registration_context(args.groups_config,args.connections,args.config,args.executor_config,journal) as context:
+                report=journal.register_groups(context)
+            print(json.dumps(report,sort_keys=True))
+            return 0
+        if args.command in ('work','watch','_action','_dispatch'):
+            # Discover the existing installation before loading potentially
+            # revoked profiles. This never initializes or falls back from G.
+            guard_execution(PipelineJournal(args.journal),{'_cli_args':args},known_run=args.command=='_action')
         connections,journal,config=_runtime(args)
         if args.command=='adapter':
             report=adapter(_read(args.request),config,journal);_write(args.result,report);return 0
@@ -444,6 +492,10 @@ def main(argv=None):
         if args.command=='migrate' and report['status']=='recovery_required':return 1
         completed={'idle','ready','needs_input','cancelled','timed_out','ready_for_pr','awaiting_pr'}
         return 1 if args.command=='work' and report.get('status') not in completed else 0
+    except RegistrationUnavailable as error:
+        print(json.dumps(dict(status='needs_input',reason=error.reason)),file=sys.stdout);return 1
+    except RegistrationRecoveryRequired:
+        print(json.dumps(dict(status='recovery_required',version=None)),file=sys.stdout);return 1
     except UnsupportedPlatform:
         print(json.dumps(dict(error='unsupported_platform')),file=sys.stderr);return 2
     except UnsupportedCapacityMode:

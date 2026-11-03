@@ -334,8 +334,14 @@ class HostCheckProcessTests(unittest.TestCase):
         task=dict(self.config['tasks'][0],checks=[dict(id='unit',argv=argv,timeout_seconds=30),*(extra_checks or [])])
         run=dict(self.run,stage='test',state='checking')
         manifest=dict(run['manifest'],stage='test'); run['manifest']=manifest
-        class Journal:
-            def __init__(this): this.bindings=[]; this.finished=[]
+        source_journal=self.journal
+        class Journal(type(source_journal)):
+            def __init__(this):
+                # Keep isolated attempt recording, but recognition must inspect
+                # the genuine existing fixture J before any host check starts.
+                super().__init__(source_journal.path,checkouts=source_journal.checkouts,
+                                 forbidden_paths=source_journal.forbidden_paths)
+                this.bindings=[]; this.finished=[]
             def begin_attempt(this,run_id,owner,binding):
                 this.bindings.append(binding)
                 return dict(attempt_id=str(uuid.uuid4()),instance_id=str(uuid.uuid4()))

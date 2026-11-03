@@ -13,18 +13,31 @@ class CapacityRuntimeTests(unittest.TestCase):
         obj=Untouched()
         configs=[dict(version=2,capacity=dict(max_executors=1,max_inflight=None)),
                  dict(version=1,max_active=2,_executor_config=dict(version=2,capacity=dict(max_executors=None,max_inflight=None)))]
-        for config in configs:
-            calls=[lambda:pipeline.work(config,obj),lambda:pipeline.watch(config,obj),
-                   lambda:pipeline.watch_tick(config,obj),lambda:pipeline._action(config,obj),
-                   lambda:pipeline._dispatch(config,obj),lambda:pipeline_worker.step(config,obj),
-                   lambda:pipeline_roles.run_role(config,obj,obj,'spec_executor',obj,'owner'),
-                   lambda:pipeline_roles.run_checks(config,obj,obj,obj,'owner'),
-                   lambda:pipeline_publish.publish_one(config,obj,obj,'owner')]
-            for i,call in enumerate(calls):
-                expected='unsupported_platform' if i<5 and not pipeline.native_execution_supported() else 'group_runtime_unavailable'
-                with self.subTest(config=config,index=i),self.assertRaisesRegex(ValueError,expected):call()
+        from task_tower.pipeline_journal import PipelineJournal
+        from tests.test_pipeline_journal import request,policy
+        with tempfile.TemporaryDirectory() as directory:
+            journal=PipelineJournal(Path(directory).resolve()/'existing.sqlite3')
+            journal.submit(request(),policy());before=journal.path.read_bytes()
+            self.check_unregistered_calls(configs,journal,obj)
+            self.assertEqual(journal.path.read_bytes(),before)
+        expected='unsupported_platform' if not pipeline.native_execution_supported() else 'Invalid pipeline journal'
+        with self.assertRaisesRegex(ValueError,expected):pipeline.work(configs[0],obj)
+
         with self.assertRaisesRegex(ValueError,'group_runtime_unavailable'):
             executor_worker.execute_one(configs[0],obj)
+
+    def check_unregistered_calls(self,configs,journal,obj):
+        from task_tower import pipeline,pipeline_worker,pipeline_roles,pipeline_publish
+        for config in configs:
+            calls=[lambda:pipeline.work(config,journal),lambda:pipeline.watch(config,journal),
+                   lambda:pipeline.watch_tick(config,journal),lambda:pipeline._action(config,journal),
+                   lambda:pipeline._dispatch(config,journal),lambda:pipeline_worker.step(config,journal),
+                   lambda:pipeline_roles.run_role(config,obj,obj,'spec_executor',journal,'owner'),
+                   lambda:pipeline_roles.run_checks(config,obj,obj,journal,'owner'),
+                   lambda:pipeline_publish.publish_one(config,obj,journal,'owner')]
+            for i,call in enumerate(calls):
+                expected='unsupported_platform' if i<5 and not pipeline.native_execution_supported() else 'group_registration_required'
+                with self.subTest(config=config,index=i),self.assertRaisesRegex(ValueError,expected):call()
 
     def test_pipeline_v2_adapter_submit_unknown_before_journal_or_authority(self):
         from task_tower import pipeline
@@ -53,8 +66,8 @@ class CapacityRuntimeTests(unittest.TestCase):
             with contextlib.redirect_stdout(output),contextlib.redirect_stderr(error):
                 code=pipeline.main([command,*common,*extra])
             if pipeline.native_execution_supported():
-                self.assertEqual(code,1,error.getvalue())
-                self.assertEqual(json.loads(output.getvalue()),dict(status='needs_input',reason='group_runtime_unavailable'))
+                self.assertEqual(code,2,error.getvalue())
+                self.assertEqual(json.loads(error.getvalue()),dict(error='invalid_or_unavailable_private_state'))
             else:
                 self.assertEqual(code,2);self.assertEqual(json.loads(error.getvalue()),dict(error='unsupported_platform'))
             self.assertFalse(journal.parent.exists());self.assertFalse(host_result.exists())

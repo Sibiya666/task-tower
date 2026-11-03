@@ -46,18 +46,16 @@ class CapacityReloadTests(unittest.TestCase):
         self.assertEqual(self.fixture.pipeline_path.read_bytes(),self.pipeline_bytes)
         state=dict(workers=[],dispatcher=None,ticks=0,failures=0,next_dispatch=0)
         self.old['_watch']=state
-        effects=[]
-        class Journal:
-            def recover(self):
-                effects.append('recover')
-                raise AssertionError('recovery reached before fresh capacity guard')
-        with patch.object(pipeline,'_Host',side_effect=AssertionError('helper reached')) as host:
+        from tests.test_pipeline_journal import request,policy
+        self.journal.submit(request(),policy());before=self.journal.path.read_bytes()
+        with patch.object(self.journal,'recover',side_effect=AssertionError('recovery reached')) as recover,patch.object(self.journal,'_db',wraps=self.journal._db) as reads,patch.object(pipeline,'_Host',side_effect=AssertionError('helper reached')) as host:
             with self.assertRaisesRegex(ValueError,'group_runtime_unavailable'):
-                pipeline.watch_tick(self.old,Journal())
-            host.assert_not_called()
-        self.assertEqual(effects,[])
+                pipeline.watch_tick(self.old,self.journal)
+            host.assert_not_called();recover.assert_not_called()
+            self.assertTrue(reads.called)
+            self.assertTrue(all(not call.args or call.args[0] is False for call in reads.call_args_list))
+        self.assertEqual(self.journal.path.read_bytes(),before)
         self.assertEqual(state,dict(workers=[],dispatcher=None,ticks=0,failures=0,next_dispatch=0))
-        self.assertFalse(self.args.journal.exists())
 
     def test_actual_reload_refusal_still_releases_existing_watch_controller(self):
         # The watch's existing finally cleanup must still run after mode refusal.
@@ -115,6 +113,63 @@ class WatchTests(unittest.TestCase):
             if predicate():return
             time.sleep(.05)
         self.fail('Watch condition timed out: '+str(self.journal.status()))
+
+    @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native pipeline execution')
+    def test_fresh_v1_work_initializes_before_owned_helper_launch(self):
+        self.assertFalse(self.args.journal.exists())
+        original=pipeline._Host;observed=[]
+        def launch(args,kind,timeout,stop):
+            self.assertTrue(self.args.journal.is_file(),'Fresh legacy J must exist before continuation helper')
+            with contextlib.closing(sqlite3.connect(self.args.journal.resolve().as_uri()+'?mode=ro',uri=True)) as db:
+                self.assertEqual(db.execute('PRAGMA user_version').fetchone()[0],1)
+            observed.append(kind)
+            return original(args,kind,timeout,stop)
+        output=io.StringIO()
+        with patch('task_tower.pipeline._Host',side_effect=launch),contextlib.redirect_stdout(output):
+            code=pipeline.main(['work','--connections',str(self.connections),'--journal',str(self.args.journal),
+                '--config',str(self.args.config),'--executor-config',str(self.executor),'--once'])
+        self.assertEqual(code,0);self.assertEqual(json.loads(output.getvalue())['status'],'idle')
+        self.assertEqual(observed,['_action']);self.assertEqual(self.journal.status()['runs'],[])
+
+    @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native work startup')
+    def test_fresh_v1_work_refuses_revoked_inputs_before_initialization(self):
+        self.assertFalse(self.args.journal.exists())
+        self.executor.write_bytes(self.executor.read_bytes()+b' ')
+        with patch('task_tower.pipeline._Host',side_effect=AssertionError('Revoked startup reached helper')) as host:
+            with self.assertRaisesRegex(ValueError,'Pipeline policy changed'):
+                pipeline.work(self.config,self.journal)
+            host.assert_not_called()
+        self.assertFalse(self.args.journal.exists())
+
+    @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native work startup')
+    def test_fresh_v1_work_rolls_back_if_inputs_change_during_bootstrap(self):
+        actual=pipeline.PipelineJournal._db
+        @contextlib.contextmanager
+        def changed(journal,write=False,**kwargs):
+            with actual(journal,write,**kwargs) as db:
+                if write and journal.path==self.args.journal:self.executor.write_bytes(self.executor.read_bytes()+b' ')
+                yield db
+        with patch.object(pipeline.PipelineJournal,'_db',changed),patch('task_tower.pipeline._Host',side_effect=AssertionError('Drifted bootstrap reached helper')) as host:
+            with self.assertRaisesRegex(ValueError,'Pipeline policy changed'):
+                pipeline.work(self.config,self.journal)
+            host.assert_not_called()
+        with contextlib.closing(sqlite3.connect(self.args.journal.resolve().as_uri()+'?mode=ro',uri=True)) as db:
+            self.assertEqual(db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall(),[])
+
+    @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native work startup')
+    def test_fresh_work_bootstrap_cannot_trust_v1_memory_over_actual_v2_files(self):
+        raw=json.loads(self.executor.read_text())
+        raw.update(version=2,harness_resources={'local':dict(pool_id='local',cpu_millis=1000,
+            memory_bytes=1048576,max_parallel=None)})
+        self.executor.write_text(json.dumps(raw))
+        _,journal,config=pipeline._runtime(self.args)
+        config['_executor_config']['version']=1
+        config['_authority_check']=lambda:True
+        with patch('task_tower.pipeline._Host',side_effect=AssertionError('Forged v1 reached helper')) as host:
+            with self.assertRaisesRegex(ValueError,'group_runtime_unavailable'):
+                pipeline.work(config,journal)
+            host.assert_not_called()
+        self.assertFalse(self.args.journal.exists())
 
     @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native pipeline execution')
     def test_real_dispatch_adapter_to_six_roles_and_host_tests(self):
@@ -196,18 +251,28 @@ class WatchTests(unittest.TestCase):
         host.done=InterruptOnce()
         locked=self.root/'work-locked';lock_stop=threading.Event()
         code="import sqlite3,sys,time;from pathlib import Path;db=sqlite3.connect(sys.argv[1]);db.execute('BEGIN EXCLUSIVE');Path(sys.argv[2]).write_text('locked');time.sleep(60)"
-        holder=threading.Thread(target=lambda:pipeline.processes.run_command([str(Path(sys.executable).resolve()),'-c',code,str(self.args.journal),str(locked)],self.root,30,cancel_requested=lock_stop.is_set));holder.start()
-        def existing(args,kind,timeout,stop):host.stop=stop;return host
-        try:
+        holder=threading.Thread(target=lambda:pipeline.processes.run_command([str(Path(sys.executable).resolve()),'-c',code,str(self.args.journal),str(locked)],self.root,30,cancel_requested=lock_stop.is_set))
+        interrupted_at=[]
+        def existing(args,kind,timeout,stop):
+            # Public startup must recognize J before launching an owned helper.
+            # Contend only after that real preflight, at the interruption point.
+            host.stop=stop;holder.start()
             end=time.monotonic()+10
             while not locked.exists() and time.monotonic()<end:time.sleep(.02)
-            self.assertTrue(locked.exists());output=io.StringIO();started=time.monotonic()
+            self.assertTrue(locked.exists());interrupted_at.append(time.monotonic())
+            return host
+        try:
+            output=io.StringIO()
             with patch('task_tower.pipeline._Host',side_effect=existing),contextlib.redirect_stdout(output):
                 exit_code=pipeline.main(['work','--connections',str(self.connections),'--journal',str(self.args.journal),'--config',str(self.args.config),'--executor-config',str(self.executor),'--once'])
-            self.assertLess(time.monotonic()-started,5)
+            self.assertEqual(len(interrupted_at),1)
+            self.assertLess(time.monotonic()-interrupted_at[0],5)
             self.assertTrue(host.stop.is_set());self.assertEqual(exit_code,1)
             self.assertEqual(json.loads(output.getvalue())['status'],'unknown')
-        finally:lock_stop.set();holder.join(5);host.stop.set();real_done.wait(5);host.close()
+        finally:
+            lock_stop.set()
+            if holder.ident is not None:holder.join(5)
+            host.stop.set();real_done.wait(5);host.close()
         self.assertTrue(host.outcome['cleanup_confirmed'])
         self.journal.recover();self.assertEqual(self.journal.status(receipt['receipt_id'])['state'],'unknown')
 

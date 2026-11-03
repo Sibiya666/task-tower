@@ -4,6 +4,7 @@ Only host observations enter the journal. A valid model JSON is neutral data;
 stage acceptance belongs to the controller and immutable reviewer receipts.
 """
 
+from .group_registration import guard_execution
 from .capacity_policy import require_legacy_capacity
 import hashlib
 import json
@@ -187,6 +188,7 @@ def _role_obligations(role,task,source_sha):
 
 
 def run_role(config:dict,run:dict,binding:dict,role:str,journal,owner_id:str)->dict:
+    guard_execution(journal,config,known_run=True)
     require_legacy_capacity(config)
     if role not in ROLE_NAMES or set(binding)!={'role','manifest','artifact_names'} or binding['role']!=role or binding['manifest']!=run['manifest']: raise ValueError('Invalid role binding')
     task,profile=_authority(config,run,journal,owner_id)
@@ -278,6 +280,7 @@ def run_role(config:dict,run:dict,binding:dict,role:str,journal,owner_id:str)->d
 
 
 def run_checks(config:dict,run:dict,checkpoint:dict,journal,owner_id:str)->dict:
+    guard_execution(journal,config,known_run=True)
     require_legacy_capacity(config)
     task,profile=_authority(config,run,journal,owner_id)
     manifest=run['manifest']

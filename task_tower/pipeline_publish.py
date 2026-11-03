@@ -5,6 +5,7 @@ commit adds only reproducible Markdown; it never creates stage acceptance.
 Unknown effects are observation-only and this module has no integration API.
 """
 
+from .group_registration import guard_execution
 from .capacity_policy import require_legacy_capacity
 import hashlib
 from pathlib import Path
@@ -229,6 +230,7 @@ def _fresh(config,run,journal,owner):
 
 def publish_one(config:dict,run:dict,journal,owner_id:str,*,store_factory=GitHubTasks)->dict:
     """Perform one next final commit/push/PR effect, with intent before writes."""
+    guard_execution(journal,config,known_run=True)
     require_legacy_capacity(config)
     task=_fresh(config,run,journal,owner_id); history=journal.history(run['run_id'])
     if any(e['status'] in ('intent','unknown') for e in history['effects']):raise ValueError('Unresolved effect')

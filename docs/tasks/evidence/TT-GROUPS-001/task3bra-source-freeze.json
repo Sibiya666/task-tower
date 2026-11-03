@@ -1,0 +1,27 @@
+{
+  "base": "db708022586d71ccc5ff860399299eae3b8ff689",
+  "files": {
+    "task_tower/group_policy.py": "7d1c5e9fef9842743f2eb30c39a77b89949ceeb9e4b008b6ae696cef6a847547",
+    "task_tower/group_storage.py": "d7ffd98c98dc742660004b2ddd1944f38503c6631608241c61c6ea22f9592022",
+    "task_tower/pipeline.py": "0f1bad71c744efd9d419f9bf007ff4b49c8af86b51ccb2beb306a87e8a1e8700",
+    "task_tower/pipeline_journal.py": "338c629cdfbacb7e4a025494eac80ac74154a77d02cfc6826b5fd8e62c9c811c",
+    "task_tower/pipeline_publish.py": "9222dd96d3cde7827a6dcf8604ddc60b79799c1d05a9e9d22e099ec2cecf392f",
+    "task_tower/pipeline_roles.py": "7eb527d8ea3e4593a44b6d9d68237730a9992a475878c1171dc889e22b1a2f9b",
+    "task_tower/pipeline_worker.py": "05bb6e6fbf5b14ba2a69cd621dbb5ee2cc9dfb4e98c262fec856c1d8a371a3af",
+    "task_tower/group_registration.py": "1c53dbafb5a09d24d4081ef0f9087ff1822d2907f4636a8781072ec4a8b1f925",
+    "tests/test_group_policy.py": "16e8c25b7f6088854e8b0754517aedb65c8b30ff392cd5b7226c98288d9cecbd",
+    "tests/test_group_registration.py": "c0f3f85058eaabfd05753af42d409a3f444bdabdf507231f52c651d4b52de8c2",
+    "tests/test_pipeline_cli.py": "9a63ed131598321eacc3be64c200cb5ed0c6fa67c6844ea93024dcd425fcefea",
+    "tests/test_pipeline_watch.py": "dd0c904fea3ec1219546cd2697ecdb1ea7ac2ae363fa3f5dc79391479a4c2f9d",
+    "tests/test_pipeline_roles.py": "13c40d21c8b79db2f333aceffc60a28e2a01c6ec0f8715b57c363afa026aa227"
+  },
+  "scope": "Task3BRa registration/discovery and original host/interrupt fixture alignment; pure wire/resources/workspaces remain closed; genuine fresh-v1 bootstrap before existing-only helper, reload actual files and rollback on drift; restore reserved-device Unicode regex using ASCII escapes",
+  "original_full": "verification/groups18-task3bra-root-full/completion.json",
+  "focused": "verification/groups18-root-full-faults-focused/completion.json",
+  "diagnostic": "groups18-two-slot-observation-faithful/completion.json",
+  "bootstrap_focus": "verification/groups18-fresh-v1-root-scoped/completion.json",
+  "related_41_tests": "verification/groups18-fresh-v1-root-final/completion.json",
+  "prior_full_before_bootstrap": "verification/groups18-task3bra-root-full-fix1/completion.json",
+  "prior_rejected_review": "groups18-task3bra-native-independent-fix2/completion.json",
+  "focused_86": "verification/groups18-unicode-root-green/completion.json"
+}

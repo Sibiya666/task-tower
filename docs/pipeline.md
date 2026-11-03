@@ -140,3 +140,13 @@ The second installed pilot completed all six real roles, three independent appro
 The third pilot used six fresh installed Codex instances and three current approval receipts. It reached ready_for_pr after a configured check and final evidence-only checkpoint, with seven cleaned attempts and no unresolved effect. The [independent installed-pilot audit](tasks/evidence/TT-PIPELINE-001/installed-codex-smoke-review.md) binds source8981c6d and443 frozen files. GitHub transport was a fixture using production readers; publishing was disabled. This proves neither live GitHub deployment nor service/night operation. Later checkpoint-authority, scheduling/source handling and SQLite-sidecar corrections lie outside that model-pilot source and require their own current regressions and independent acceptance. Original parked runs, rejected reports and the unproven cause of the original macOS CI failure remain preserved.
 
 A user may start watch through an existing supervisor; this change installs no service/startup task. Local SQLite/PID ownership is not a cross-host lock. Issue18 owns broader groups/capacity/fair scheduling, Issue19 distributed ownership, and Issue17 integration through exact-main/postmerge/automatic closure. The qualified installed pilot is accepted only at source8981c6d; every release additionally requires current whole-branch/CI and exact-main acceptance.
+
+## Explicit group registration (bounded Task3BRa)
+
+After independent review of the installation inputs and an explicitly chosen cold storage migration, the host registration command is:
+
+```text
+python -m task_tower.pipeline register-groups --connections C --config P --executor-config E --journal J --groups-config G --apply
+```
+
+This changes the existing private installation journal. Do not run it implicitly during setup or against a live installation. Actual private inputs must be valid and owners/controllers stopped; registration/adoption and epoch updates are atomic and never manufacture old process facts. Missing/foreign/hot storage remains refused. Metadata status and discovery stay read-only. Registered work/watch execution remains unavailable until the later pure-wire/resource/workspace gates; registration does not lift v1's two-slot limit or qualify unattended operation. See [bounded acceptance](tasks/evidence/TT-GROUPS-001/task3bra-acceptance.md). Original hot recovery remains Issue65.

@@ -516,9 +516,10 @@ def validate_v2(db,journal,*,objects=None):
         raise ValueError('Migration backup path binding mismatch')
     _uuid(backup.name[len(prefix):-len('.backup')])
     PipelineJournal(backup,checkouts=journal.checkouts,forbidden_paths=(*journal.forbidden_paths,journal.path))
-    # Task3A provides recognized unregistered legacy mode only. Later consumers
-    # must add their strict body/proof validation before accepting registered G.
-    for name in ('group_installation','group_capacity_epochs','group_resource_observations','group_fair_cursors',
+    from .group_registration import validate_stored
+    registration=validate_stored(db,journal)
+    # Registration admits metadata/adoption only; execution tables stay closed.
+    for name in ('group_resource_observations','group_fair_cursors',
                  'group_observations','group_main_proofs','group_source_resolutions','group_base_epochs','group_base_updates','group_base_phases'):
         if db.execute('SELECT 1 FROM '+name+' LIMIT 1').fetchone():raise ValueError('Group execution is not available')
     events=[]
@@ -551,7 +552,7 @@ def validate_v2(db,journal,*,objects=None):
     if set(actions)!=set(leases):raise ValueError('Missing legacy fence lease')
     boundaries={};boundary_events={};boundary_cleanup={};releases={};markers={}
     for event,body in events:
-        if event['kind']=='migration':continue
+        if event['kind'] in {'migration','binding','capacity_epoch'}:continue
         if event['kind']=='observation':
             if set(body)!={'version','action_id','run_id','origin_sha256','run_row','history'} or type(body['version']) is not int or body['version']!=1:
                 raise ValueError('Invalid legacy origin snapshot')
@@ -618,8 +619,9 @@ def validate_v2(db,journal,*,objects=None):
         if canonical_json(origin)!=canonical_json(expected) or origin['observation_kind'] not in {'migration','legacy_claim','reconcile'} or digest_manifest(origin)!=row['origin_sha256'] or boundary['origin_sha256']!=row['origin_sha256']:
             raise ValueError('Legacy origin provenance mismatch')
         lease=leases[action_id]
-        if lease['run_id']!=row['run_id'] or any(lease[k] is not None for k in ('observation_id','capacity_epoch','harness_pool','cpu_millis','memory_bytes')) or lease['unknown_estimate']!=1:
-            raise ValueError('Invalid pre-registration legacy lease')
+        if registration is None:
+            if lease['run_id']!=row['run_id'] or any(lease[k] is not None for k in ('observation_id','capacity_epoch','harness_pool','cpu_millis','memory_bytes')) or lease['unknown_estimate']!=1:
+                raise ValueError('Invalid pre-registration legacy lease')
         if lease['held']==1:
             if lease['cleanup_sha256'] is not None or action_id in releases:raise ValueError('Held lease claims cleanup')
             held_by_run[row['run_id']]=held_by_run.get(row['run_id'],0)+1
@@ -635,7 +637,7 @@ def validate_v2(db,journal,*,objects=None):
     if any(number>1 for number in held_by_run.values()):raise ValueError('Multiple held legacy actions')
     reservations={r['run_id']:dict(r) for r in db.execute('SELECT * FROM group_reservations')}
     for run_id,row in reservations.items():
-        if row['capacity_epoch'] is not None or row['component_held']!=1 or row['slot_held']!=int(bool(held_by_run.get(run_id))) or row['release_reason'] is not None or row['completion_proof_sha256'] is not None:
+        if row['capacity_epoch']!=(1 if registration else None) or row['component_held']!=1 or row['slot_held']!=int(bool(held_by_run.get(run_id))) or row['release_reason'] is not None or row['completion_proof_sha256'] is not None:
             raise ValueError('Legacy reservation mismatch')
         if not _needs_product(db,runs[run_id]) or not row['slot_held'] and not _positive_cleanup(db,journal,runs[run_id]):
             raise ValueError('Legacy execution lacks a conservative fence')

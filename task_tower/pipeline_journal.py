@@ -181,8 +181,21 @@ class PipelineJournal:
     def migrate_groups(self):
         from .group_storage import migrate
         return migrate(self)
+    def register_groups(self,context):
+        from .group_registration import register
+        return register(self,context)
+    def registered_groups(self):
+        from .group_registration import discover
+        return discover(self)
     @contextmanager
     def _db(self,write=False,*,initialize=True):
+        expected=getattr(self,'_registration_expectation',None)
+        if expected is not None and getattr(self,'_existing_database_identity',None) is None:
+            with self.operation_deadline(time.monotonic()+60),self._pinned_database() as identity:
+                if identity is None or not os.path.samestat(expected,identity):raise ValueError('group_binding_mismatch')
+                with self._existing_database(identity),self._db(write,initialize=False) as db:
+                    yield db
+            return
         self._wait_seconds()
         self._safe()
         existing=getattr(self,'_existing_database_identity',None) is not None
@@ -375,6 +388,8 @@ class PipelineJournal:
         for key in ('profile_fingerprint','policy_sha256'): _sha(policy[key])
         components=self._components(policy['component_keys']); limits=self._limits(policy['limits'])
         with self._db(True) as db:
+            if db.execute('PRAGMA user_version').fetchone()[0]==2 and db.execute('SELECT 1 FROM group_installation').fetchone():
+                raise ValueError('group_runtime_unavailable')
             row=db.execute('SELECT * FROM runs WHERE delivery_id=?',(req['delivery_id'],)).fetchone()
             if row is not None:
                 if any(row[k]!=req[k] for k in ('repository','issue','task_id','runner_label')) or row['profile_id']!=profile_id or any(row[k]!=policy[k] for k in ('profile_fingerprint','policy_sha256')) or _json(row['component_keys'])!=components or _json(row['limits'])!=limits: raise ValueError('Delivery identity collision')
@@ -455,6 +470,8 @@ class PipelineJournal:
                 if not isinstance(priority,str) or priority not in ('P0','P1','P2','P3') or (repository,issue) in priorities:raise ValueError('Invalid queued priority')
                 priorities[repository,issue]=int(priority[1])
         with self._db(True) as db:
+            if db.execute('PRAGMA user_version').fetchone()[0]==2 and db.execute('SELECT 1 FROM group_installation').fetchone():
+                raise ValueError('group_runtime_unavailable')
             if db.execute('PRAGMA user_version').fetchone()[0]==2:
                 if db.execute('SELECT 1 FROM group_resource_leases WHERE held=1 AND unknown_estimate=1 LIMIT 1').fetchone():return None
             active=[self._run(r) for r in db.execute('SELECT * FROM runs') if r['state'] in ACTIVE]

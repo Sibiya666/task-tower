@@ -8,6 +8,7 @@ Its return value is never process/effect evidence. Until linked, accepted work
 remains ready with an environment_unavailable action result.
 """
 
+from .group_registration import guard_execution
 from .capacity_policy import require_legacy_capacity
 from contextlib import nullcontext
 import copy
@@ -466,6 +467,7 @@ def _step(config,journal,owner):
 
 def step(config:dict,journal,*,owner_id:str|None=None)->dict:
     """Perform at most one role, checkpoint, check batch or publication action."""
+    guard_execution(journal,config)
     require_legacy_capacity(config)
     owner=owner_id or config.get('_owner_id') or str(uuid.uuid4())
     if not hasattr(journal,'_pipeline_clocks'):journal._pipeline_clocks={}

@@ -18,6 +18,23 @@ ROLES = ('spec_executor', 'spec_reviewer', 'development_executor',
          'development_reviewer', 'test_executor', 'test_reviewer')
 
 
+class GroupPathUnicodeTests(unittest.TestCase):
+    def test_reserved_device_superscripts_are_refused_in_every_component(self):
+        for prefix in ('COM','com','LpT'):
+            for digit in ('1','9','\u00b9','\u00b2','\u00b3'):
+                for directory in ('src/','docs/notes/'):
+                    for suffix in ('','.txt'):
+                        path=directory+prefix+digit+suffix
+                        with self.subTest(path=ascii(path)),self.assertRaises(ValueError):
+                            group_policy._relative(path)
+
+    def test_unrelated_unicode_and_nondevice_numbers_keep_legacy_acceptance(self):
+        for name in ('COM0','COM10','LPT0','LPT11','COM\u0412','LPT\u2013','COM\u0420','component\u00b9'):
+            path='src/'+name+'.txt'
+            with self.subTest(path=ascii(path)):
+                self.assertEqual(group_policy._relative(path),path)
+
+
 class GroupPolicyTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -91,6 +108,21 @@ class GroupPolicyTests(unittest.TestCase):
         self.executor_path.write_text(json.dumps(raw),encoding='utf-8')
         self.executor=load_executor_config(self.executor_path,self.connections)
         with self.assertRaises(ValueError):self.load()
+
+    def test_policy_manifests_match_original_digest_preimages(self):
+        for version in (1, 2):
+            if version == 2:
+                self.value['version'] = 2
+                self.executor['harness_resources'] = {'local':dict(pool_id='local',cpu_millis=1000,memory_bytes=1048576,max_parallel=None)}
+            policy = self.load()
+            original = copy.deepcopy(policy)
+            manifests = group_policy.policy_manifests(policy)
+            self.assertEqual(set(manifests), {'authorization','capacity'})
+            for name in manifests:
+                self.assertEqual(profile_fingerprint(manifests[name]),policy[name+'_sha256'])
+            self.assertEqual(policy,original)
+            manifests['authorization']['projects'].clear()
+            self.assertEqual(policy,original)
 
     def test_strict_schema_defaults_and_role_profiles(self):
         policy = self.load()
