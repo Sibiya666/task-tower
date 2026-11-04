@@ -94,3 +94,6 @@ Issue не может задавать исполняемую команду. Cl
 Отдельный [реальный GitHub-пилот владения #69 и исправление Windows handles](shared-conveyor-evidence.md)
 проверяют серверную гонку и отказ повторного захвата. Его первоначальный cleanup failure сохранён;
 эта проверка не заменяет полный запуск модели, приёмку main или автоматическое закрытие.
+
+
+Scope amendment, explicit user decision 2026-11-04: all macOS/Linux actions, including CI, native/manual diagnostics and postmerge execution, are deferred to #58–#62. Current release execution and acceptance are Windows-only. Preserve portable code and historical receipts. Fresh Windows profiles must explicitly require windows; do not rewrite accepted history or treat old all-platform receipts as a new Windows acceptance.

@@ -74,3 +74,6 @@ two processes on one host do not prove two physical machines. Original Issue19
 multi-machine/handoff/recovery scope stays required and is not silently waived.
 Preserve original pending17/18 branches. Keep local test profiles/credentials out
 of Git; update README/AGENTS/bootstrap instructions with actual installed state.
+
+
+Scope amendment, explicit user decision 2026-11-04: all macOS/Linux actions, including CI, native/manual diagnostics and postmerge execution, are deferred to #58–#62. Current release execution and acceptance are Windows-only. Preserve portable code and historical receipts. Fresh Windows profiles must explicitly require windows; do not rewrite accepted history or treat old all-platform receipts as a new Windows acceptance.

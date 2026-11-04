@@ -31,3 +31,6 @@ results to independent PR/main consumer without inventing provenance. Verify
 accepted-main automatic closure before claiming whole conveyor ready. Document
 remaining external access/platform requirements accurately. Run full regression,
 independent exact head/base PR review, CI and authorized main integration.
+
+
+Scope amendment, explicit user decision 2026-11-04: all macOS/Linux actions, including CI, native/manual diagnostics and postmerge execution, are deferred to #58–#62. Current release execution and acceptance are Windows-only. Preserve portable code and historical receipts. Fresh Windows profiles must explicitly require windows; do not rewrite accepted history or treat old all-platform receipts as a new Windows acceptance.
