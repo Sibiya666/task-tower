@@ -188,5 +188,5 @@
       "runner_sha256": "cf4f2e5732a7b089f69a0eb96b853056aaac8b9409f13a9c302ca0908243c488"
     }
   },
-  "full_suite": "running; unconfirmed; no full-regression claim"
+  "full_suite": "passed on frozen foundation;960 tests,7skips; see task5-foundation-full-suite.json"
 }
