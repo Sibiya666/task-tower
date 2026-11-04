@@ -16,6 +16,7 @@ public sealed class BooksBridge : IDisposable
     static readonly UTF8Encoding Utf8=new UTF8Encoding(false,true);
     readonly HashSet<string> repositories=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     readonly HashSet<string> projects=new HashSet<string>(StringComparer.Ordinal);
+    readonly HashSet<string> localScopes=new HashSet<string>(StringComparer.Ordinal);
     readonly object gate=new object();
     Process process;
     long attempt;
@@ -41,7 +42,7 @@ public sealed class BooksBridge : IDisposable
         foreach(var url in configuredProjects)
             if(Regex.IsMatch(url,@"\Ahttps://github\.com/(users|orgs)/[A-Za-z0-9-]+/projects/[1-9][0-9]*\z"))projects.Add(url);
     }
-    public static BooksBridge FromConfiguration(string path)
+    public static BooksBridge FromConfiguration(string path,string beadsPath=null)
     {
         var repos=new List<string>();var urls=new List<string>();
         if(!String.IsNullOrEmpty(path))try{
@@ -66,7 +67,27 @@ public sealed class BooksBridge : IDisposable
                 }
             }
         }catch{repos.Clear();urls.Clear();}
-        return new BooksBridge(repos,urls);
+        var bridge=new BooksBridge(repos,urls);
+        if(!String.IsNullOrEmpty(beadsPath))try{
+            var file=new FileInfo(Path.GetFullPath(beadsPath));
+            if((file.Attributes&FileAttributes.ReparsePoint)!=0 || file.Length>1024*1024)throw new IOException();
+            for(var parent=file.Directory;parent!=null;parent=parent.Parent)
+                if((parent.Attributes&FileAttributes.ReparsePoint)!=0)throw new IOException();
+            var value=Parse(File.ReadAllText(file.FullName,Utf8));
+            if(value.Count!=3 || !value.ContainsKey("executable") || Integer(value["version"])!=1)throw new FormatException();
+            var rows=value["projects"] as object[];if(rows==null || rows.Length>16)throw new FormatException();
+            var scopes=new List<string>();var localRepos=new List<string>();
+            foreach(var item in rows){
+                var row=item as Dictionary<string,object>;if(row==null || row.Count!=3)throw new FormatException();
+                var repo=row["repository"] as string;var id=row["id"] as string;
+                if(repo==null || id==null || !Regex.IsMatch(repo,@"\A[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9_][A-Za-z0-9_.-]*\z") || !Regex.IsMatch(id,@"\A[A-Za-z0-9][A-Za-z0-9_.-]{0,99}\z"))throw new FormatException();
+                scopes.Add(repo+"\n"+id);localRepos.Add(repo);
+            }
+            if(scopes.Distinct().Count()!=scopes.Count || localRepos.Distinct(StringComparer.OrdinalIgnoreCase).Count()!=localRepos.Count)throw new FormatException();
+            foreach(var scope in scopes)bridge.localScopes.Add(scope);
+            foreach(var repo in localRepos)bridge.repositories.Add(repo);
+        }catch{bridge.localScopes.Clear();}
+        return bridge;
     }
     public bool IsAllowedSource(string url)
     {
@@ -171,14 +192,18 @@ public sealed class BooksBridge : IDisposable
         if(value["fetched_at"]!=null && !(value["fetched_at"] is string))throw new FormatException();
         var entries=value["entries"] as object[];var errors=value["errors"] as object[];
         if(entries==null || entries.Length>10000 || errors==null)throw new FormatException();
-        var fields=new HashSet<string>("id repository number project book title source status remote_state verification description phase blockers blocked_by results history relationships stages remote_attempt created_at updated_at capture path commit artifact_state declaration_source issues milestone available migrations".Split(' '));
+        var fields=new HashSet<string>("id repository number project book title source status remote_state verification description phase blockers blocked_by results history relationships stages remote_attempt created_at updated_at capture path commit artifact_state declaration_source issues milestone available migrations source_kind bead_id assignee".Split(' '));
         foreach(var item in entries){
             var entry=item as Dictionary<string,object>;
             if(entry==null || entry.Keys.Any(k=>!fields.Contains(k)))throw new FormatException();
             foreach(string key in new[]{"id","repository","project","book","title","status"})if(!entry.ContainsKey(key)||!(entry[key] is string))throw new FormatException();
             string repo=(string)entry["repository"];
+            object kind;
+            bool local=entry.TryGetValue("source_kind",out kind) && (kind as string)=="beads";
+            if(entry.ContainsKey("source_kind") && !local)throw new FormatException();
+            if(local && (!localScopes.Contains(repo+"\n"+(string)entry["project"]) || !entry.ContainsKey("source") || entry["source"]!=null))throw new FormatException();
             bool inert=(string)entry["book"]=="library" && entry.ContainsKey("available") && entry["available"] is bool && !(bool)entry["available"] && entry.ContainsKey("source") && entry["source"]==null;
-            if(!repositories.Contains(repo) || (!inert && (!entry.ContainsKey("source") || !(entry["source"] is string) || !IsAllowedSource((string)entry["source"]))))throw new FormatException();
+            if(!repositories.Contains(repo) || (!inert && !local && (!entry.ContainsKey("source") || !(entry["source"] is string) || !IsAllowedSource((string)entry["source"]))))throw new FormatException();
             object migrations;
             if(entry.TryGetValue("migrations",out migrations)){
                 var records=migrations as object[];if(records==null || records.Length>100)throw new FormatException();
@@ -196,7 +221,10 @@ public sealed class BooksBridge : IDisposable
                 }
             }
             if((string)entry["book"]!="library"){
-                if(!new[]{"ideas","tasks"}.Contains((string)entry["book"]) || !entry.ContainsKey("number") || Integer(entry["number"])<1 ||
+                if(local){
+                    object bead;
+                    if((string)entry["book"]!="tasks" || !entry.TryGetValue("bead_id",out bead) || !(bead is string) || !Regex.IsMatch((string)bead,@"\A[A-Za-z0-9][A-Za-z0-9_.-]{0,199}\z") || (string)entry["id"]!=repo+":beads:"+(string)entry["project"]+":"+(string)bead || (string)entry["verification"]!="not_required" || (string)entry["status"]=="done")throw new FormatException();
+                }else if(!new[]{"ideas","tasks"}.Contains((string)entry["book"]) || !entry.ContainsKey("number") || Integer(entry["number"])<1 ||
                     (string)entry["id"]!=repo+"#"+Integer(entry["number"]) || (string)entry["source"]!="https://github.com/"+repo+"/issues/"+Integer(entry["number"]))throw new FormatException();
                 object proof;if(!entry.TryGetValue("verification",out proof)|| !new[]{"pending","verified","unverified","not_required"}.Contains(proof as string))throw new FormatException();
                 if((string)entry["status"]=="done" && (string)proof!="verified")throw new FormatException();
@@ -220,7 +248,7 @@ public sealed class BooksBridge : IDisposable
         if(latest!=null)value=Parse(latest);
         else value=new Dictionary<string,object>{{"kind","books"},{"version",1},{"sequence",1},{"final",false},{"fetched_at",null},{"entries",new object[0]},{"errors",new object[0]}};
         value["state"]=state;value["stale"]=true;value["final"]=false;
-        foreach(var item in (object[])value["entries"]){var row=(Dictionary<string,object>)item;if((string)row["book"]!="library"){
+        foreach(var item in (object[])value["entries"]){var row=(Dictionary<string,object>)item;if((string)row["book"]!="library" && (!row.ContainsKey("source_kind") || (row["source_kind"] as string)!="beads")){
             row["verification"]="pending";if((string)row["status"]=="done")row["status"]="needs_input";
         }}
         if(error)value["errors"]=new object[]{new Dictionary<string,object>{{"project",""},{"source",""},{"error","Books refresh interrupted or invalid"}}};

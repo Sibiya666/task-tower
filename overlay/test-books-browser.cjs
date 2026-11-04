@@ -67,3 +67,15 @@ test('source URL canonical encoding rejects structural and repeated decoding spe
   assert.equal(await p.evaluate(v=>{try{BooksPolicy.normalizeEnvelope(v);return false}catch{return true}},frame([valid])),true);
  }finally{await b.close()}
 });
+
+test('local Beads source shows actor chronology without fake GitHub or file links',async()=>{
+ const b=await chromium.launch({headless:true,channel:'msedge'});
+ try{const p=await b.newPage();await p.goto('file:///'+path.join(__dirname,'web/index.html').replaceAll('\\','/'));await p.keyboard.press('Control+b');
+ const card={id:'o/r:beads:local:tt-a',repository:'o/r',project:'local',book:'tasks',source_kind:'beads',bead_id:'tt-a',source:null,title:'Local Beads task',status:'in_progress',remote_state:'in_progress',verification:'not_required',assignee:'worker-a',history:[{at:'2026-11-04T18:00:00Z',actor:'worker-a',operation:'claim',status:'in_progress'}],relationships:{parent:null,sub_issues:[],milestone:null}};
+ await p.evaluate(v=>BooksView.acceptSnapshot(v),frame([card],{state:'ready',final:true}));
+ assert.match(await p.locator('.books-card').textContent(),/Beads/);await p.getByRole('button',{name:'Подробнее',exact:true}).click();
+ assert.match(await p.locator('[data-field="history"]').textContent(),/Хронология Beads.*worker-a.*claim/);
+ assert.equal(await p.locator('#books-detail').getByRole('button',{name:'Открыть источник',exact:true}).count(),0);
+ assert.match(await p.locator('[data-field="assignee"]').textContent(),/worker-a/);
+ }finally{await b.close()}
+});

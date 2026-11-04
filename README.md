@@ -145,3 +145,5 @@ Active-chat authorization continues to the next eligible backlog task after ever
 ## Explicit session capture
 
 [Capture, idea promotion and legacy migration](docs/session-capture.md) use explicit input and the selected project. Original text/session provenance and native parent/milestone links are retained. Ideas do not execute implicitly; migration keeps the original card/evidence bytes and exposes drift while GitHub remains canonical. No all-chat scraping or Codex database writes are involved.
+
+Local Beads tasks and chronology can feed the desktop Books without GitHub task polling. Configure the read-only Windows source through [local Beads setup](docs/local-beads-books.md); closed source cards do not grant code/main acceptance.
