@@ -52,12 +52,19 @@ def adapter(request,config,journal):
           all(t[k]==request[k] for k in ('issue','task_id','runner_label'))]
     if len(rows)!=1 or not config['_authority_check']():return unknown
     task=rows[0];profile=config['profiles'][task['executor_profile']]
+    if task.get('shared_worker') is True and request['operation']=='submit':return unknown
     if request['operation']=='lookup':
         receipt=journal.lookup(request['delivery_id'])
         if receipt is None:return dict(version=1,delivery_id=request['delivery_id'],status='not_found')
         run=journal.status(receipt['receipt_id'])
         if any(run[k]!=request[k] for k in ('repository','issue','task_id','runner_label')) or run['policy_sha256']!=config['policy_sha256'] or run['profile_fingerprint']!=profile_fingerprint(profile):return unknown
         return receipt
+    return _submit(request,config,journal,task)
+
+
+def _submit(request,config,journal,task):
+    """Host-only identity insertion; caller supplies current admission authority."""
+    profile=config['profiles'][task['executor_profile']]
     limits={k:config[k] for k in ('task_timeout_seconds','role_timeout_seconds','max_reworks','max_processes','log_max_bytes')}
     return journal.submit(request,dict(profile_id=task['executor_profile'],profile_fingerprint=profile_fingerprint(profile),
         policy_sha256=config['policy_sha256'],component_keys=task['components'],limits=limits))
@@ -104,6 +111,7 @@ def _runtime(args):
     saved={path:path.read_bytes() for path in (args.connections,args.config,args.executor_config)}
     executor=load_executor_config(args.executor_config,connections)
     config=load_pipeline_config(args.config,connections,executor)
+    config['_shared_journal']=journal
     def authority():
         try:
             _paths(paths,connections,transient_paths=sidecars)

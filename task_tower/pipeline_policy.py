@@ -38,7 +38,7 @@ def load_pipeline_config(path,connections,executor_config):
             result[key]=limit
         seen=set(); aliases=set()
         for original in value['tasks']:
-            if not isinstance(original,dict) or set(original)!=FIELDS: raise ValueError()
+            if not isinstance(original,dict) or set(original)-{'shared_worker'}!=FIELDS: raise ValueError()
             row=copy.deepcopy(original)
             if not isinstance(row['repository'],str) or type(row['issue']) is not int or row['issue']<1: raise ValueError()
             matches=[c for c in connections if c.repository.casefold()==row['repository'].casefold()]
@@ -76,6 +76,7 @@ def load_pipeline_config(path,connections,executor_config):
             if not isinstance(ci,dict) or set(ci)!={'enabled','required_platforms'} or type(ci['enabled']) is not bool or not isinstance(ci['required_platforms'],list): raise ValueError()
             platforms=ci['required_platforms']
             if any(p not in ('windows','macos','linux') for p in platforms) or len(set(platforms))!=len(platforms) or bool(platforms)!=ci['enabled']: raise ValueError()
+            if 'shared_worker' in row and (row['shared_worker'] is not True or platforms!=['windows']): raise ValueError()
             publish=row['publish']
             if not isinstance(publish,dict) or set(publish)!={'enabled','remote','base_ref','publisher_account'} or type(publish['enabled']) is not bool or publish['remote']!='origin' or publish['base_ref']!='refs/heads/main' or not isinstance(publish['publisher_account'],str) or publish['publisher_account'].casefold() not in [p.casefold() for p in connection.trusted_publishers]: raise ValueError()
             result['tasks'].append(row)
@@ -131,7 +132,7 @@ def _current(config):
     if not callable(config.get('_authority_check')) or not config['_authority_check'](): return False
     return True
 
-def admission_authorized(config,task,snapshot):
+def admission_authorized(config,task,snapshot,*,delivery_id=None,run_id=None,shared_intent=None):
     try:
         if not _current(config): return None
         rows=[r for r in config['tasks'] if r==task]
@@ -139,6 +140,10 @@ def admission_authorized(config,task,snapshot):
         selected=select_ready(snapshot,rows,verify_done=verified_done)
         if not any(all(row[k]==task[k] for k in ('issue','task_id','runner_label')) and row['repository']==task['repository'].casefold() for row in selected['ready']): return None
         project=snapshot[task['repository'].casefold()]; issue=project['issues'][task['issue']]
+        if task.get('shared_worker') is True:
+            from .pipeline_shared import shared_claim,consumer_binding
+            shared_claim(project,task,delivery_id,run_id=run_id,intent=shared_intent,
+                consumer=None if shared_intent is not None else consumer_binding(config,config['_shared_journal']))
         criteria=criteria_snapshot(issue,project['metadata'][task['issue']],task['repository'])
         profile=config['profiles'][rows[0]['executor_profile']]
         source,base=_source_current(project,profile)
@@ -213,6 +218,9 @@ def continuation_authorized(config,run,snapshot):
         repo=saved['repository'].casefold(); project=snapshot[repo]
         if not identity_matches(snapshot,dict(repository=repo,issue=saved['issue'],task_id=saved['task_id'])): return False
         issue=project['issues'][saved['issue']]; meta=project['metadata'][saved['issue']]
+        if rows[0].get('shared_worker') is True:
+            from .pipeline_shared import shared_claim,consumer_binding
+            shared_claim(project,rows[0],saved['delivery_id'],run_id=saved['run_id'],consumer=consumer_binding(config,config['_journal']))
         if issue['state']!='open' or meta.get('kind')!='task' or meta.get('mode')!='autonomous': return False
         lifecycle=issue_lifecycle(project['store'],issue)
         if 'remote_attempt' in lifecycle or lifecycle.get('status') not in ('open','running','in_progress'): return False

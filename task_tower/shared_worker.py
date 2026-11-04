@@ -114,14 +114,18 @@ class SharedWorker:
         self.skills=safe_config_path(Path(settings['superpowers_root'])/'.worker-path-check').parent.resolve();self.harness=settings['harness'];self.plans=settings['plans']
         if self.root==self.source or self.root.is_relative_to(self.source) or self.source.is_relative_to(self.root):raise ValueError('Worker output overlaps source checkout')
         if not (self.skills/'executing-plans/SKILL.md').is_file():raise ValueError('Installed Superpowers required')
-        if self.harness.get('kind') not in ('custom','codex') or self.harness.get('kind')=='custom' and self.harness.get('trusted') is not True:
+        self.pipeline=self.harness.get('kind')=='pipeline'
+        if self.pipeline:
+            from .pipeline_shared import validate_installation
+            self.pipeline_binding=validate_installation(self.harness,self.queue._client()[5],self.plans,settings['allowlist'])
+        if self.harness.get('kind') not in ('custom','codex','pipeline') or self.harness.get('kind')=='custom' and self.harness.get('trusted') is not True:
             raise ValueError('Explicit trusted harness required')
         argv=self.harness.get('argv')
-        if not isinstance(argv,list) or not argv or any(not isinstance(a,str) or not a for a in argv):raise ValueError('Invalid private harness argv')
-        if not shutil.which(argv[0]) or Path(shutil.which(argv[0])).suffix.lower() in ('.cmd','.bat'):raise ValueError('Native harness executable required')
+        if not self.pipeline and (not isinstance(argv,list) or not argv or any(not isinstance(a,str) or not a for a in argv)):raise ValueError('Invalid private harness argv')
+        if not self.pipeline and (not shutil.which(argv[0]) or Path(shutil.which(argv[0])).suffix.lower() in ('.cmd','.bat')):raise ValueError('Native harness executable required')
         for key,low,high in [('timeout_seconds',1,7200),('log_max_bytes',1024,67108864)]:
             value=self.harness.get(key)
-            if type(value) is not int or not low<=value<=high:raise ValueError('Invalid harness budget')
+            if not self.pipeline and (type(value) is not int or not low<=value<=high):raise ValueError('Invalid harness budget')
         for path in self.plans.values():
             if not isinstance(path,str) or Path(path).is_absolute() or '..' in Path(path).parts or path.lower().startswith('.git'):raise ValueError('Invalid private plan path')
         self.root.mkdir(parents=True,exist_ok=True);self.bootstrap=self.root/'bootstrap';self.bootstrap.mkdir(exist_ok=True)
@@ -167,6 +171,8 @@ class SharedWorker:
             except ValueError:continue
             if claim is None:continue
             if not self.queue.assign(claim):return dict(issue=number,state='needs_input',reason='assignment_unconfirmed')
+            if self.pipeline:
+                return self._handoff(claim,number)
             body,directory,checkout,mirror,branch,logs=self._workspace(claim)
             controls=git_controls(checkout,mirror)
             permit=self.queue.start(claim)
@@ -215,6 +221,32 @@ class SharedWorker:
             self.queue.finish(permit,state,digest(outcome))
             return {k:outcome[k] for k in ('issue','state','worker','head_sha')}
         return None
+
+    def _handoff(self,claim,number):
+        from .pipeline_shared import deliver
+        permit=self.queue.start(claim)
+        if permit is None:return dict(issue=number,state='needs_input',reason='start_unconfirmed')
+        task=self.queue.consume(permit)
+        directory=self.root/task['claim_id'][:24];directory.mkdir(exist_ok=False)
+        write(directory/'handoff.json',dict(version=1,task=task))
+        outcome=dict(issue=number,state='awaiting_acceptance',worker=self.name,head_sha=None)
+        # No model launches until the original worker confirms this exact
+        # consumer/run in GitHub. A lost response stays execution_intent and
+        # fenced even if a queued identity was committed.
+        write(self.fence,dict(version=1,kind='pipeline_handoff',claim_id=task['claim_id'],state='delivery_intent'))
+        receipt=deliver(task,self.harness,expected=self.pipeline_binding)
+        if (set(receipt)!={'version','delivery_id','status','receipt_id'} or receipt['version']!=1
+                or receipt['delivery_id']!=task['claim_id'] or receipt['status']!='accepted'):
+            raise ValueError('Pipeline handoff unconfirmed')
+        import uuid
+        if str(uuid.UUID(receipt['receipt_id']))!=receipt['receipt_id']:raise ValueError('Invalid pipeline receipt')
+        write(directory/'handoff-result.json',receipt)
+        outcome['pipeline_run_id']=receipt['receipt_id']
+        write(directory/'outcome.json',outcome)
+        self.queue.finish(permit,'awaiting_acceptance',digest(outcome),handoff=dict(version=1,kind='pipeline',
+            consumer_sha256=self.pipeline_binding,run_id=receipt['receipt_id']))
+        self.fence.unlink()
+        return outcome
 
 
 def main(argv=None):

@@ -165,7 +165,7 @@ def _prepare(config,run,journal,owner):
     from .pipeline_policy import admission_authorized
     task=_task(config,run);profile=config['profiles'][run['profile_id']]
     if run['admission'] is None:
-        admission=admission_authorized(config,task,collect_snapshot(config['_connections']))
+        admission=admission_authorized(dict(config,_shared_journal=journal),task,collect_snapshot(config['_connections']),delivery_id=run['delivery_id'],run_id=run['run_id'])
         if admission is None:raise ValueError('policy_revoked')
         run=_record(journal,run,owner,state='preparing',admission=admission,**{k:admission[k] for k in ('issue_id','criteria_sha256','source_sha','base_sha')})
     _authority(config,run,journal,owner)
@@ -357,12 +357,22 @@ def _queued_selection(config,journal=None,queued=()):
                 project=snapshot.get(run['repository'])
                 # Do not re-poll away a known unknown while classifying denial.
                 if not reject and private_current is True and reason not in (None,'source_unavailable','lifecycle_unavailable') and not (reason=='dependency_unverified' and source_unknown) and project and not project['error']:
-                    reject=admission_authorized(config,tasks[0],snapshot) is None
+                    reject=admission_authorized(dict(config,_shared_journal=journal),tasks[0],snapshot,delivery_id=run['delivery_id'],run_id=run['run_id']) is None
                 if reject:
                     result=journal.deny_queued(run)
                     if result is not None:denied.append(result)
             known={(r['repository'],r['issue']) for r in queued}
             selected['ready']=[r for r in selected['ready'] if (r['repository'],r['issue']) in known]
+            # Wait for the original worker's exact consumer/run confirmation.
+            # Queued identity alone and legacy outcomes never launch a model.
+            ready=[]
+            for row in selected['ready']:
+                run=next(r for r in queued if (r['repository'],r['issue'])==(row['repository'],row['issue']))
+                task=next(t for t in config['tasks'] if t['repository'].casefold()==run['repository'] and t['issue']==run['issue'])
+                if task.get('shared_worker') is True and admission_authorized(dict(config,_shared_journal=journal),task,snapshot,delivery_id=run['delivery_id'],run_id=run['run_id']) is None:
+                    failed=True;continue
+                ready.append(row)
+            selected['ready']=ready
             if private_current is not True:selected['ready']=[]
         return [{key:row[key] for key in ('repository','issue','priority')} for row in selected['ready']],failed,denied
     except (OSError,ValueError,TypeError,KeyError):return [],True,denied
