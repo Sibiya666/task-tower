@@ -18,6 +18,8 @@ Resolve link targets lexically against tracked Git tree entries; never read arbi
 
 Implementation ruling: cache unique prose blobs by Git OID across both revisions under the16MiB prose budget. Fixed per-blob reads may replace batch stdin to reuse the existing contained supervisor. Bound each command's captured output to16MiB and all observed Git stdout/stderr to64MiB, including tree/diff metadata; do not describe this additional metadata allowance as a16MiB total-output cap. Reserve cleanup time within the shared30second deadline. No unbounded in-memory command capture is permitted.
 
+Parser refusal limits are explicit:4096 destination characters (including leading whitespace),4096 normalized/tree path characters,128 ancestor separators for an existing target,65536 characters per Markdown line, and100000 combined preprocessing line/backtick items per blob. Exceeding these limits refuses validation; do not silently truncate content or report docs passed. Check the shared deadline inside scans/preprocessing, including cases that produce no yielded link. Reference destinations cannot scan across an unterminated angle line repeatedly. Check absent targets before building ancestors; never materialize a quadratic list of joined prefixes.
+
 ## Helper interface
 
 - `classify()` returns a JSON-compatible report with `mode` (`docs` or `full`), actual `head`, `base` when known, stable reason, and changed paths. It uses a fixed Git argument array; task/Markdown prose is never executed.

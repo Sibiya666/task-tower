@@ -6,6 +6,8 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import tracemalloc
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -270,6 +272,79 @@ class DocsTests(unittest.TestCase):
             env = call.kwargs['env']
             self.assertFalse({'GH_TOKEN', 'GITHUB_TOKEN'} & {key.upper() for key in env})
             self.assertEqual(env['CI_DOCS_TEST_MARKER'], 'retained')
+
+
+class ParserResourceTests(unittest.TestCase):
+    @staticmethod
+    def source(text, remaining=lambda: None):
+        return SimpleNamespace(
+            git=lambda *args: b'100644 blob ' + b'a'*40 + b'\tREADME.md\0',
+            blob=lambda oid: text, remaining=remaining)
+
+    def test_deadline_interrupts_scans_even_when_no_links_are_yielded(self):
+        from task_tower import ci_docs
+        for text in ('[r]: <\n'*256, '`x` '*1024, 'plain text '*1024):
+            with self.subTest(prefix=text[:12]):
+                calls = 0
+
+                def budget():
+                    nonlocal calls
+                    calls += 1
+                    if calls >= 20:
+                        raise ci_docs.DocumentationError('fake_deadline')
+
+                with self.assertRaisesRegex(ci_docs.DocumentationError, 'fake_deadline'):
+                    ci_docs._broken(self.source(text, budget), 'a'*40)
+                self.assertEqual(calls, 20)
+
+    def test_missing_deep_target_does_not_allocate_all_ancestor_prefixes(self):
+        from task_tower import ci_docs
+        destination = 'a/'*800 + 'missing.md'
+        source = self.source('[missing](' + destination + ')\n')
+        tracemalloc.start()
+        try:
+            broken, count = ci_docs._broken(source, 'a'*40)
+            _, peak = tracemalloc.get_traced_memory()
+        finally:
+            tracemalloc.stop()
+        self.assertEqual((broken, count), ({('README.md', destination)}, 1))
+        self.assertLess(peak, 256*1024, 'missing target allocated quadratic ancestor prefixes')
+
+    def test_deadline_is_checked_inside_an_unterminated_destination(self):
+        from task_tower import ci_docs
+        calls = 0
+
+        def budget():
+            nonlocal calls
+            calls += 1
+            if calls == 3:
+                raise ci_docs.DocumentationError('scan_deadline')
+
+        with self.assertRaisesRegex(ci_docs.DocumentationError, 'scan_deadline'):
+            ci_docs._destination('<' + 'a'*2048, 0, False, budget)
+        self.assertEqual(calls, 3)
+
+    def test_explicit_parser_limits_refuse_instead_of_dropping_input(self):
+        from task_tower import ci_docs
+        cases = (('MAX_PARSER_ITEMS', 4, '`x` '*8),
+                 ('MAX_MARKDOWN_LINE_CHARS', 32, 'a'*33),
+                 ('MAX_DESTINATION_CHARS', 32, '[x](' + 'a'*33 + ')'),
+                 ('MAX_PATH_CHARS', 32, '[x](a' + '/..'*12 + '/target)'))
+        for name, limit, text in cases:
+            with self.subTest(limit=name), patch.object(ci_docs, name, limit):
+                with self.assertRaises(ci_docs.DocumentationError):
+                    ci_docs._broken(self.source(text), 'a'*40)
+
+    def test_existing_deep_target_refuses_before_ancestor_walk(self):
+        from task_tower import ci_docs
+        target = 'a/'*10 + 'target'
+        source = self.source('[x](' + target + ')')
+        original_git = source.git
+        source.git = lambda *args: original_git(*args) + (
+            b'100644 blob ' + b'b'*40 + b'\t' + target.encode('utf-8') + b'\0')
+        with patch.object(ci_docs, 'MAX_ANCESTOR_DEPTH', 4):
+            with self.assertRaisesRegex(ci_docs.DocumentationError, 'ancestor_depth_limit'):
+                ci_docs._broken(source, 'a'*40)
 
 
 if __name__ == '__main__':

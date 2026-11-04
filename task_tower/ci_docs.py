@@ -4,6 +4,7 @@ Local links are a deliberately small Markdown subset, not a CommonMark renderer
 or external URL checker. No link is opened on the filesystem or network.
 """
 import argparse
+import io
 import json
 from pathlib import Path
 import posixpath
@@ -19,6 +20,12 @@ MAX_SECONDS = 30
 MAX_PROSE_BYTES = 16 * 1024 * 1024
 MAX_OUTPUT_BYTES = 16 * 1024 * 1024
 MAX_CAPTURE_BYTES = 64 * 1024 * 1024
+# Conservative parser limits refuse validation; they never discard excess links.
+MAX_DESTINATION_CHARS = 4096
+MAX_PATH_CHARS = 4096
+MAX_ANCESTOR_DEPTH = 128
+MAX_MARKDOWN_LINE_CHARS = 65536
+MAX_PARSER_ITEMS = 100000
 _OID = re.compile(r'(?:[0-9a-f]{40}|[0-9a-f]{64})\Z')
 
 
@@ -143,9 +150,14 @@ def classify(repo='.'):
     return _classify(_Source(repo))
 
 
-def _without_code(text):
+def _without_code(text, checkpoint):
     lines, fence = [], None
-    for line in text.splitlines(keepends=True):
+    items = 0
+    for line in io.StringIO(text):
+        checkpoint()
+        items += 1
+        if items > MAX_PARSER_ITEMS or len(line) > MAX_MARKDOWN_LINE_CHARS:
+            raise DocumentationError('markdown_parser_limit')
         marker = re.match(r'^ {0,3}(`{3,}|~{3,})(.*)$', line.rstrip('\r\n'))
         if fence:
             if marker and marker[1][0] == fence[0] and len(marker[1]) >= len(fence) and not marker[2].strip():
@@ -158,15 +170,24 @@ def _without_code(text):
             lines.append(line)
     text = ''.join(lines)
     # Pair exact-length backtick runs in linear scanning; unmatched runs remain.
-    runs = list(re.finditer(r'`+', text))
+    runs = []
+    for run in re.finditer(r'`+', text):
+        checkpoint()
+        items += 1
+        if items > MAX_PARSER_ITEMS:
+            raise DocumentationError('markdown_parser_limit')
+        runs.append(run)
+    checkpoint()
     next_run, pairs = {}, {}
     for run in reversed(runs):
+        checkpoint()
         length = run.end()-run.start()
         if length in next_run:
             pairs[run.start()] = next_run[length]
         next_run[length] = run
     out, end = [], 0
     for run in runs:
+        checkpoint()
         if run.start() < end or run.start() not in pairs:
             continue
         out.append(text[end:run.start()])
@@ -177,17 +198,33 @@ def _without_code(text):
     return ''.join(out)
 
 
-def _destination(text, start, inline):
+def _destination(text, start, inline, checkpoint):
     """Read angle or balanced bare destinations, including escaped parens."""
+    checkpoint()
+    origin = start
     while start < len(text) and text[start].isspace():
+        if text[start] in '\r\n':
+            return None, start+1
+        if start-origin >= MAX_DESTINATION_CHARS:
+            raise DocumentationError('destination_limit')
+        if (start-origin) % 256 == 0:
+            checkpoint()
         start += 1
     angle = start < len(text) and text[start] == '<'
     if angle:
         start += 1
     chars, depth, index = [], 0, start
     while index < len(text):
+        if index-origin >= MAX_DESTINATION_CHARS:
+            raise DocumentationError('destination_limit')
+        if (index-origin) % 256 == 0:
+            checkpoint()
         char = text[index]
+        if char in '\r\n':
+            return (None if angle else ''.join(chars).strip()), index+1
         if char == '\\' and index+1 < len(text):
+            if text[index+1] in '\r\n':
+                return None, index+2
             chars.extend(text[index:index+2])
             index += 2
             continue
@@ -209,28 +246,38 @@ def _destination(text, start, inline):
     return (''.join(chars).strip() if not angle and not inline else None), index
 
 
-def _links(text):
-    text = _without_code(text)
+def _links(text, checkpoint):
+    checkpoint()
+    text = _without_code(text, checkpoint)
     # Definitions are destinations even when their labels are currently unused.
-    for match in re.finditer(r'^ {0,3}\[[^\]\n]+\]:', text, re.MULTILINE):
-        value, _ = _destination(text, match.end(), False)
+    for line in io.StringIO(text):
+        checkpoint()
+        match = re.match(r'^ {0,3}\[[^\]\n]+\]:', line)
+        if match is None:
+            continue
+        value, _ = _destination(line, match.end(), False, checkpoint)
         if value is not None:
             yield value
     index = 0
     while index < len(text):
+        if index % 256 == 0:
+            checkpoint()
         if text[index] == '\\':
             index += 2
             continue
         if text[index:index+2] == '](':
-            value, end = _destination(text, index+2, True)
+            value, end = _destination(text, index+2, True, checkpoint)
             if value is not None:
                 yield value
             index = end
             continue
         index += 1
+    checkpoint()
 
 
 def _target(referrer, destination):
+    if len(destination) > MAX_DESTINATION_CHARS:
+        raise DocumentationError('destination_limit')
     value = re.sub(r'\\([!"#$%&\'()*+,\-./:;<=>?@\[\]\\^_`{|}~])', r'\1', destination)
     if not value or value.startswith('#') or value.startswith('//') or re.match(r'^[A-Za-z][A-Za-z0-9+.-]*:', value):
         return None
@@ -242,6 +289,8 @@ def _target(referrer, destination):
         resolved = posixpath.normpath(value)
     else:
         resolved = posixpath.normpath(posixpath.join(posixpath.dirname(referrer), value))
+    if len(resolved) > MAX_PATH_CHARS:
+        raise DocumentationError('path_limit')
     if '\\' in resolved or any(unicodedata.category(c).startswith('C') for c in resolved):
         return '!invalid:' + resolved
     return resolved
@@ -257,27 +306,37 @@ def _broken(source, revision):
         metadata, name = record.split(b'\t', 1)
         mode, kind, oid = metadata.decode('ascii').split(' ')
         path = name.decode('utf-8', errors='strict')
+        if len(path) > MAX_PATH_CHARS:
+            raise DocumentationError('path_limit')
         if not _OID.fullmatch(oid) or mode not in ('100644', '100755', '120000', '160000', '040000'):
             raise DocumentationError('malformed_tree')
         entries[path] = (mode, kind, oid)
     broken, count = set(), 0
     for path, (mode, kind, oid) in entries.items():
+        source.remaining()
         # All regular tracked Markdown can refer to a changed target, even
         # outside the deliberately narrow fast-classification allowlist.
         if mode not in ('100644', '100755') or kind != 'blob' or not path.endswith('.md'):
             continue
-        for destination in _links(source.blob(oid)):
+        for destination in _links(source.blob(oid), source.remaining):
             source.remaining()
             target = _target(path, destination)
             if target is None:
                 continue
             count += 1
-            parts = target.split('/')
-            ancestors = ['/'.join(parts[:i]) for i in range(1, len(parts))]
             if (target not in entries or target == '..' or target.startswith('../')
-                    or entries[target][0] in ('120000', '160000')
-                    or any(entries.get(a, ('',))[0] != '040000' for a in ancestors)):
+                    or entries[target][0] in ('120000', '160000')):
                 broken.add((path, target))
+                continue
+            if target.count('/') > MAX_ANCESTOR_DEPTH:
+                raise DocumentationError('ancestor_depth_limit')
+            slash = target.find('/')
+            while slash != -1:
+                source.remaining()
+                if entries.get(target[:slash], ('',))[0] != '040000':
+                    broken.add((path, target))
+                    break
+                slash = target.find('/', slash+1)
     return broken, count
 
 
