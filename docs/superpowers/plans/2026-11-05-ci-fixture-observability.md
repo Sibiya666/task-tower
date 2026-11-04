@@ -41,3 +41,7 @@
 - [ ] Run the affected unchanged native cases once with bounded supervisor capture and source-unchanged/EOF/cleanup proof. Do not loop the full suite to obtain green.
 - [ ] Freeze full head/base diff, fresh independent PR acceptance and real complete Windows matrix; no merge on failed checks.
 - [ ] Serialize integration against accepted current main; independently verify exact-main source/CI/artifact. Diagnostic delivery may finish, but parent bug remains open without cause evidence.
+
+## Evidence-driven amendment: fourth preparation helper
+
+Actual PR80 CI41935061044 failed in `accepted_publication()` before intentional lost-response injection; the failing helper was outside the original observer scopes. Independent read-only design review approved a preparation-only extension. Preserve its admission assertions, 25 iterations, forbidden states, three-verdict return and normal close. Exit the context before caller publication actions. Run the newly affected native caller once with bounded EOF/cleanup/source identity evidence, then obtain fresh whole-diff approval and new-head CI; do not retry the failed head or claim the cause fixed.

@@ -505,13 +505,14 @@ with j.owner(sys.argv[2]):
         remote=self.root/'remote.git';_git(f.profile['checkout'],'init','--bare',str(remote))
         value=json.loads(self.http.read_text());value.update(remote=str(remote),prs=str(self.root/'prs.json'))
         self.http.write_text(json.dumps(value));_,self.journal,self.config=pipeline._runtime(self.args)
-        host=pipeline._Host(self.args,'_dispatch',30,threading.Event())
-        self.assertTrue(host.done.wait(30));self.assertFalse(host.result['operational_failure']);host.close()
-        for _ in range(25):
-            pipeline.work(self.config,self.journal);run=self.journal.status()['runs'][0]
-            self.assertNotIn(run['state'],('unknown','needs_input','timed_out'))
-            if len(self.journal.history(run['run_id'])['verdicts'])==3:return run
-        self.fail('Three actual independent stages not accepted')
+        with HostObservation(self.root) as observation:
+            host=pipeline._Host(self.args,'_dispatch',30,threading.Event())
+            self.assertTrue(host.done.wait(30),observation.lazy_message(self.journal));self.assertFalse(host.result['operational_failure'],observation.lazy_message(self.journal));host.close()
+            for _ in range(25):
+                pipeline.work(self.config,self.journal);run=self.journal.status()['runs'][0]
+                self.assertNotIn(run['state'],('unknown','needs_input','timed_out'),observation.lazy_message(self.journal))
+                if len(self.journal.history(run['run_id'])['verdicts'])==3:return run
+            self.fail(observation.lazy_message(self.journal))
 
     @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native pipeline execution')
     def test_distinct_worker_processes_commit_push_and_create_one_pr(self):

@@ -7,12 +7,13 @@ Parent Beads bug: `tt-qrk.4`. This is test-fixture observability, not developmen
 - PR77 postmerge attempt1: `test_stop_during_validated_cancel_read_remains_bounded` failed its first preparation `ready` precondition with `unknown`, before the measured cancellation test. An unchanged isolated local case and one bounded CI repeat passed; original cause remains unknown.
 - Rejected PR79 head2635: `test_public_work_contains_blocked_git_descendant_and_no_replay` reached one accepted verdict instead of three. The unchanged isolated local case passed with complete host capture; no callback exception or shutdown failure was observed.
 - PR79 head9bd CI41928888029: `test_real_dispatch_adapter_to_six_roles_and_host_tests` timed out waiting for `ready_for_pr`. The row was `unknown`, reason `owner_dead`, stage `test`, generation7, process_count7. Recovery's `owner_dead` is an observation, not the reason the process stopped.
+- PR80 headb4cc CI41935061044, shard2 job126941315118: `test_lost_pr_response_is_unknown_and_restart_never_posts_again` failed the `accepted_publication()` preparation assertion with `unknown`, before intentional lost-response injection. This helper had no observer, so the log supplies no host/shutdown discriminator. No shared cause is established.
 
 Do not assume a shared cause. The separate C:/D: docs-test fixture error is corrected in PR79 and does not explain these observations. Preserve original CI logs/manifests/events and do not run another blind retry.
 
 ## Narrow implementation
 
-Create `tests/fixtures/host_observation.py` and `tests/test_host_observation.py`. Change only diagnostic wiring/messages in the three named WatchTests/precondition helpers. No production pipeline, journal, supervisor, clock, task admission, authority, timeout, test expectation, retry or cleanup-control changes.
+Create `tests/fixtures/host_observation.py` and `tests/test_host_observation.py`. Change only diagnostic wiring/messages in the named WatchTests/precondition helpers, including `accepted_publication()`. No production pipeline, journal, supervisor, clock, task admission, authority, timeout, test expectation, retry or cleanup-control changes.
 
 `HostObservation(fixture_root)` is a context manager exposing a lazy assertion message and `message(journal=None)` for a failure-only bounded report. It may wrap existing parent-host methods and restore every wrapper on exit. Always call original functions and preserve their return values/exceptions. Never acquire execution ownership, mutate a journal or close/terminate a host itself.
 
@@ -26,6 +27,7 @@ Normal passing-path observations must be minimal. Prepare reports only when an a
 - No environment, profiles, request/task prose, admission/manifest bodies or raw database dump. Redact GitHub credential values case-insensitively if an exception/result string could contain one. Bound strings before formatting.
 - A valid ASCII-escaped JSON failure report is at most16KiB. Prune records and include truncation/omission flags rather than produce invalid truncated JSON or allocate an unbounded message.
 - Do not change the native measured cancellation phase in `owned_role_with_delayed_cancel_read`; observe its initial preparation only. Observe publication preparation only before the blocked-Git portion. The watcher test may carry the observer through its existing precondition wait, with the same180-second limit.
+- In `accepted_publication()`, observe only its admission host and existing25-iteration preparation loop. Preserve the forbidden-state assertion, status/history reads, three-verdict return condition, returned run and normal close. Return inside the context so restoration finishes before either caller performs publication actions or sets `lost_post=True`.
 
 ## Integration
 
