@@ -1,0 +1,173 @@
+{
+  "qualifications": "Earlier captures identify earlier candidates explicitly; final20-test replay matches accepted candidate. No whole final full-suite claim.",
+  "captures": [
+    {
+      "capture": "pr17-supervised-cli-integration-green",
+      "source_unchanged": true,
+      "verified_success": true,
+      "result": {
+        "status": "passed",
+        "exit_code": 0,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 225560,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 0,
+        "stdout_captured_bytes": 0,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "d5bd4c88d9a6c92f342090913bed2dc52af4ba3629397374bebd1225e3102700",
+        "stderr_bytes": 13109,
+        "stderr_captured_bytes": 13109,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 63.797
+      },
+      "runner_sha256": "e3dcbbf73c4f3fe05adb153f04cd0e296bc6217924bdce7aeb8843e590636eb4"
+    },
+    {
+      "capture": "pr17-supervision-real-role-regression",
+      "source_unchanged": true,
+      "verified_success": true,
+      "result": {
+        "status": "passed",
+        "exit_code": 0,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 224640,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 0,
+        "stdout_captured_bytes": 0,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "85b0fff535672006926ab6b3bf7252bee9ef36fbeee31f27173ef7d77b20288a",
+        "stderr_bytes": 5958,
+        "stderr_captured_bytes": 5958,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 475.11
+      },
+      "runner_sha256": "e3dcbbf73c4f3fe05adb153f04cd0e296bc6217924bdce7aeb8843e590636eb4"
+    },
+    {
+      "capture": "pr17-supervisor-idle-and-forensic-red",
+      "source_unchanged": true,
+      "verified_success": false,
+      "result": {
+        "status": "failed",
+        "exit_code": 1,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 211920,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 0,
+        "stdout_captured_bytes": 0,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "658007044792bcdba79bdeb2da7adf787959e4acfe1e2cd899c2c02c028e3538",
+        "stderr_bytes": 2026,
+        "stderr_captured_bytes": 2026,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 146.687
+      },
+      "runner_sha256": "e3dcbbf73c4f3fe05adb153f04cd0e296bc6217924bdce7aeb8843e590636eb4"
+    },
+    {
+      "capture": "pr17-supervisor-idle-and-forensic-green",
+      "source_unchanged": true,
+      "verified_success": true,
+      "result": {
+        "status": "passed",
+        "exit_code": 0,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 227540,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 0,
+        "stdout_captured_bytes": 0,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "9e041f55c6dea114c0491ef06857bccbadaa9b29687ae9d2ed773a7f4bafd7f5",
+        "stderr_bytes": 490,
+        "stderr_captured_bytes": 490,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 147.063
+      },
+      "runner_sha256": "e3dcbbf73c4f3fe05adb153f04cd0e296bc6217924bdce7aeb8843e590636eb4"
+    },
+    {
+      "capture": "pr17-full-main-chain-with-telemetry",
+      "source_unchanged": true,
+      "verified_success": false,
+      "result": {
+        "status": "failed",
+        "exit_code": 1,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 226240,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 0,
+        "stdout_captured_bytes": 0,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "c9ac7f69450ce26d23693858e85dd95bda1999f2a47a719255aa87c64603cfb3",
+        "stderr_bytes": 5546,
+        "stderr_captured_bytes": 5546,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 178.093
+      },
+      "runner_sha256": "e3dcbbf73c4f3fe05adb153f04cd0e296bc6217924bdce7aeb8843e590636eb4"
+    },
+    {
+      "capture": "pr17-telemetry-admission-diagnostic",
+      "source_unchanged": true,
+      "verified_success": false,
+      "result": {
+        "status": "failed",
+        "exit_code": 1,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 228884,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 0,
+        "stdout_captured_bytes": 0,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "0846b42934311c77c169e982a35eec3cca962478fa6a7f59741092721f9bd8ec",
+        "stderr_bytes": 2490,
+        "stderr_captured_bytes": 2490,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 122.032
+      },
+      "runner_sha256": "e3dcbbf73c4f3fe05adb153f04cd0e296bc6217924bdce7aeb8843e590636eb4"
+    },
+    {
+      "capture": "pr17-telemetry-canonical-repository-green",
+      "source_unchanged": true,
+      "verified_success": true,
+      "result": {
+        "status": "passed",
+        "exit_code": 0,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 229348,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 0,
+        "stdout_captured_bytes": 0,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "785b581de8262bb6c13344920c642ca836d59eec873b2ad0acde901cef333f7a",
+        "stderr_bytes": 3989,
+        "stderr_captured_bytes": 3989,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 273.703
+      },
+      "runner_sha256": "e3dcbbf73c4f3fe05adb153f04cd0e296bc6217924bdce7aeb8843e590636eb4"
+    }
+  ]
+}

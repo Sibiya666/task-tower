@@ -1,0 +1,199 @@
+{
+  "base": "160528c0cdddcd92fd4acdacb43c250bb04e2f02",
+  "candidate_files": {
+    "AGENTS.md": "657c01011c22f5fbb9e6cad1ee344f9728f10ba60a0690da3b224adca788d964",
+    "README.md": "144513cfdde0990ad4a961bf9b6b37b754a8ffe6082b032d997531b841988fa1",
+    "docs/pr-worker.md": "32fddfe63312e5f3d6bd195ddf681f676a0e20d5feb2b7945ac510dc5b26812e",
+    "task_tower/__main__.py": "fdd797195fa226b1219a4d358d0bb640acf7fb43eeac8f5630343caf33442ac6",
+    "task_tower/_pr_host.py": "c2321d14d8fffdbbbead0835e728c7cc392dd22661c8053c0cd2d5732fd97b6f",
+    "task_tower/pr_journal.py": "604977cd6d7d57e8350af81be2678d017d2a7bbf378c6ab127b3705f90c8370e",
+    "task_tower/pr_persistence.py": "121ac383aec8b99031776424dd20e179aae6de39d45d1d36e670f27966d680d4",
+    "task_tower/pr_supervision.py": "0c9ce89273dc4733444a1999638fc5b5bc17191d336c4e17e39e17fa7af2c737",
+    "task_tower/pr_worker.py": "fa1ab042268252a2fde40c6863d2f5dc97769305df4840a10bb2fec4461055ac",
+    "task_tower/pr_worker_cli.py": "abbb39876def90b16242e32fbf1e1f662172591ee6001ae21c386463daca801c",
+    "task_tower/processes.py": "9c94d10d29269f6a4d2177001e207bdc10710221eda0eaa2329bf7820f515bc3",
+    "task_tower/reviewer.py": "451d02149fe351e80f83ee757d1ae02c692d72e739984bb63ed3b9de2fe8b752",
+    "tests/test_pr_host_supervision.py": "96470ac984fd0ddcad6bfa264188f889b68e99c1adf3522bc8e43c8a86af2976",
+    "tests/test_pr_journal.py": "8a663f32767150600419d7b879a4617166fde334338f39e9b0532c730ecdd8e2",
+    "tests/test_pr_main_preparation.py": "783e3d5f94ada0dbf2dbe10c2471f5965d225c50cdaec19754d0b50af32dafdf",
+    "tests/test_pr_supervision.py": "062a65fb54383e8adfcba314cd6642c9f6c0560e1b16971331038dd9c644edc1",
+    "tests/test_pr_worker_cli.py": "b673b8c0c6d23ecc1f240d7c0430759e1d1bfd772d780d8d985aacd4bce78fa6"
+  },
+  "scope": "Bounded persistent contained PR host, lifecycle monitor, metadata/execution CLI and original admission ownership; not whole feature or installed pilot",
+  "reviews": [
+    {
+      "capture": "pr17-supervision-native-review",
+      "qualified_current_review": true,
+      "source_unchanged": true,
+      "binary_unchanged": true,
+      "result": {
+        "status": "passed",
+        "exit_code": 0,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 216832,
+        "stdout_sha256": "39bebdd69f80a12e13d0d8780f4f6db5a9508256b822cad0beb58d195068e108",
+        "stdout_bytes": 274599,
+        "stdout_captured_bytes": 274599,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "5f9e5a5dc208e0a91092122f4833e8e0132ecdb28bdd30478b8987005dd56ccf",
+        "stderr_bytes": 10615,
+        "stderr_captured_bytes": 10615,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 103.734
+      },
+      "verdict": {
+        "run_id": "e62ee5f3-2fa8-4a17-a4c0-f0d4d8d3ca24",
+        "attempt_id": "3d05733b-36da-4fcb-ad21-2c1aa577495e",
+        "instance_id": "a8686a86-5149-4bdc-8b5a-258fcc1f87bd",
+        "stage": "development",
+        "generation": 1,
+        "source_sha": "160528c0cdddcd92fd4acdacb43c250bb04e2f02",
+        "checkpoint_sha": "160528c0cdddcd92fd4acdacb43c250bb04e2f02",
+        "input_sha256": "53ed836c6f30e8fbdd659a3e6a10b140d3fa5daf0337eb5880750d7bcea125fc",
+        "version": 2,
+        "verdict": "reject",
+        "return_stage": "development",
+        "findings": [
+          {
+            "code": "product_defect",
+            "line": 55
+          },
+          {
+            "code": "product_defect",
+            "line": 107
+          }
+        ]
+      },
+      "validation_error": null,
+      "runner_sha256": "39a4a692b075d211e822f1801e16ec78ba1b7d3de59f660882bc0784f2582c8c"
+    },
+    {
+      "capture": "pr17-supervision-fix1-native-review",
+      "qualified_current_review": false,
+      "source_unchanged": true,
+      "binary_unchanged": true,
+      "result": {
+        "status": "passed",
+        "exit_code": 0,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 225484,
+        "stdout_sha256": "cbd6dd559f7a4b540df489ac396455bb8d94affb0fd2f4a89e434e05ad027441",
+        "stdout_bytes": 273864,
+        "stdout_captured_bytes": 273864,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "a59d8b6612d257f96486f14181d0289a03b0ddd5516a10e9ce0ef673853bff82",
+        "stderr_bytes": 8696,
+        "stderr_captured_bytes": 8696,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 82.015
+      },
+      "verdict": {
+        "run_id": "99dc4a34-3596-48d5-83bd-1d2a590fd265",
+        "attempt_id": "1572bde4-8a80-40be-8088-b1d10d310a5f",
+        "instance_id": "b5d12c2c-118c-4950-990d-ee4e061c506c",
+        "stage": "development",
+        "generation": 1,
+        "source_sha": "160528c0cdddcd92fd4acdacb43c250bb04e2f02",
+        "checkpoint_sha": "160528c0cdddcd92fd4acdacb43c250bb04e2f02",
+        "input_sha256": "37f94523c860099f261a1db46ac489f8dab426411372d5df5ca277efb29e1167",
+        "version": 2,
+        "verdict": "needs_input",
+        "return_stage": "development",
+        "findings": [
+          {
+            "code": "evidence_missing",
+            "line": 1
+          }
+        ]
+      },
+      "validation_error": "ValueError",
+      "runner_sha256": "6361586e9cf95287421a13b95e3299a4b009685409a5ff44cef44c76cf9e40b6"
+    },
+    {
+      "capture": "pr17-supervision-fix1-complete-native-review",
+      "qualified_current_review": true,
+      "source_unchanged": true,
+      "binary_unchanged": true,
+      "result": {
+        "status": "passed",
+        "exit_code": 0,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 230980,
+        "stdout_sha256": "b55dac46e219babe4a8dd59678011b14e26f1e6b14a257edf18e547a7f385111",
+        "stdout_bytes": 329190,
+        "stdout_captured_bytes": 329190,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "323b25affa12789e9c4435a452d2fb783da052db363b07e4befbe77ac31420d2",
+        "stderr_bytes": 10254,
+        "stderr_captured_bytes": 10254,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 126.375
+      },
+      "verdict": {
+        "run_id": "a75388be-f3ab-45da-9521-448261511c74",
+        "attempt_id": "75d884a0-f001-4255-9d37-ee4827391298",
+        "instance_id": "6d4a0782-de24-4cc7-8447-a47c24ddeced",
+        "stage": "development",
+        "generation": 1,
+        "source_sha": "160528c0cdddcd92fd4acdacb43c250bb04e2f02",
+        "checkpoint_sha": "160528c0cdddcd92fd4acdacb43c250bb04e2f02",
+        "input_sha256": "37f94523c860099f261a1db46ac489f8dab426411372d5df5ca277efb29e1167",
+        "version": 2,
+        "verdict": "approve",
+        "return_stage": null,
+        "findings": []
+      },
+      "validation_error": null,
+      "runner_sha256": "61e972948d93e1ec411745230b44c8f197a0489fbaba871853654e30c3f7730d"
+    },
+    {
+      "capture": "pr17-supervision-native-test-review",
+      "qualified_current_review": true,
+      "source_unchanged": true,
+      "binary_unchanged": true,
+      "result": {
+        "status": "passed",
+        "exit_code": 0,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 230708,
+        "stdout_sha256": "84ac2d5368713948eb85d835180517d1a91c5cfbcb79f9fc1f54f41c4651db01",
+        "stdout_bytes": 254456,
+        "stdout_captured_bytes": 254456,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "8dc7b3c070f1753f5b04b14b333fef3d681396799bb5ca793aa42bdb24768051",
+        "stderr_bytes": 9171,
+        "stderr_captured_bytes": 9171,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 78.079
+      },
+      "verdict": {
+        "run_id": "599e4282-724a-403a-97a7-bed98d979d9c",
+        "attempt_id": "93d215b6-981a-4d71-bf5c-4c42e5d699fa",
+        "instance_id": "9b8a5095-6696-4359-be13-51414c163015",
+        "stage": "test",
+        "generation": 1,
+        "source_sha": "160528c0cdddcd92fd4acdacb43c250bb04e2f02",
+        "checkpoint_sha": "160528c0cdddcd92fd4acdacb43c250bb04e2f02",
+        "input_sha256": "37f94523c860099f261a1db46ac489f8dab426411372d5df5ca277efb29e1167",
+        "version": 2,
+        "verdict": "approve",
+        "return_stage": null,
+        "findings": []
+      },
+      "validation_error": null,
+      "runner_sha256": "1d0652d41c61cc3fcc3b291ed91eaccd1e999824ca7795f442e63ba30db20d7b"
+    }
+  ]
+}

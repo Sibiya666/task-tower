@@ -5,6 +5,9 @@ import io
 import zipfile
 import sys
 import time
+import os
+import uuid
+from contextlib import nullcontext
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -128,11 +131,32 @@ class MainPreparationTests(publication._PublicationFixture,unittest.TestCase):
             _git(worker.project,['-c','protocol.file.allow=always','fetch','--no-tags','--no-recurse-submodules','--',str(checkout),merge+':refs/remotes/origin/main'],prepared.mirror.parent/'logs')
             if getattr(self,'cancel_during_review_reads',False):self.pr.cancel(repository,number)
         from task_tower import reviewer
-        with patch('task_tower.postmerge_worker.Worker._refresh',refresh),patch('task_tower.reviewer.run_command',wraps=reviewer.run_command) as launches:
-            try:report=controller._advance(self.fresh['task'])[0]
-            except ValueError:
-                if not getattr(self,'cancel_during_review_reads',False):raise
-                report=dict(status='needs_input')
+        telemetry_fault=getattr(self,'fail_telemetry_cleanup',False)
+        if telemetry_fault:
+            from task_tower.pr_supervision import PRProgress,_Wire
+            namespace=Path(self.ctx.private_input_provenance['artifact_namespace'])
+            descriptor=os.open(namespace/'test-control.jsonl',os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+            self.addCleanup(os.close,descriptor)
+            self.ctx._lifecycle=PRProgress.from_controller(controller,_Wire(descriptor,str(uuid.uuid4()),self.owner_id),namespace/'test-stop')
+            self.ctx._lifecycle.begin(repository,number)
+        returned=[];actual_run=reviewer.run_command
+        def captured(*args,**kwargs):
+            value=actual_run(*args,**kwargs);returned.append(copy.deepcopy(value));return value
+        with patch('task_tower.postmerge_worker.Worker._refresh',refresh),patch('task_tower.reviewer.run_command',side_effect=captured) as launches:
+            fault=patch('task_tower.pr_supervision.PRProgress.end_role',side_effect=OSError('Controlled channel failure')) if telemetry_fault else nullcontext()
+            with fault:
+                try:report=controller._advance(self.fresh['task'])[0]
+                except ValueError:
+                    if not getattr(self,'cancel_during_review_reads',False) and not telemetry_fault:raise
+                    report=dict(status='needs_input')
+        if telemetry_fault:
+            self.assertEqual(launches.call_count,1)
+            effect=[e for e in self.pr.effects(repository,number) if e['kind']=='postmerge_review'][0]
+            path=prepared.mirror/'.task-tower'/'bound-output'/effect['effect_id']/'process.json'
+            self.assertTrue(path.is_file(),'Returned execution evidence lost before fallible telemetry')
+            self.assertEqual(json.loads(path.read_text())['process'],returned[0])
+            self.assertNotEqual(effect['status'],'confirmed');self.assertIsNotNone(self.pr.barrier(repository))
+            return
         if getattr(self,'cancel_during_review_reads',False):
             self.assertEqual(launches.call_count,0,'Cancelled original task must not launch a reviewer')
             self.assertNotEqual(report['status'],'awaiting_closure')
@@ -238,3 +262,50 @@ class CloseLateDeadlineMainTests(MainPreparationTests):
 
 class ReviewerLateCancellationMainTests(MainPreparationTests):
     cancel_during_review_reads=True
+
+
+class ReviewerTelemetryFailureMainTests(MainPreparationTests):
+    fail_telemetry_cleanup=True
+
+
+class TelemetryMainChainTests(MainPreparationTests):
+    """Real model/closure path and typed channel; observer is in-process."""
+    def test_actual_main_review_and_closure_never_repeat_lost_writes(self):
+        from task_tower.pr_worker import Controller
+        from task_tower.pr_supervision import PRProgress,PRMonitor,_Wire
+        factory=Controller.from_context.__func__;advance=Controller._advance;channels=[]
+        def constructed(cls,*args,**kwargs):
+            controller=factory(cls,*args,**kwargs)
+            namespace=Path(controller.context.private_input_provenance['artifact_namespace'])
+            path=namespace/('telemetry-'+str(uuid.uuid4())+'.jsonl')
+            descriptor=os.open(path,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
+            self.addCleanup(os.close,descriptor)
+            reader=path.open('rb');self.addCleanup(reader.close)
+            monitor=PRMonitor.from_context(controller.context,owner_id=controller.owner_id);monitor.started(os.getpid())
+            wire=_Wire(descriptor,monitor.session_id,controller.owner_id);send=wire.send
+            def observed(event,**fields):
+                send(event,**fields)
+                data=reader.read(65536)
+                if data:monitor.feed(data)
+                self.assertIsNone(monitor.reason)
+            wire.send=observed;wire.send('hello')
+            controller.context._lifecycle=PRProgress.from_controller(controller,wire,namespace/'unused-stop')
+            channels.append((wire,monitor));return controller
+        def monitored(controller,task):
+            progress=controller.context._lifecycle
+            own_phase=progress._phase is None
+            try:
+                if own_phase:progress.begin(task['repository'],task['pr_number'])
+                row=controller.journal.get(task['repository'],task['pr_number'])
+                reference=(task['repository'].casefold(),task['pr_number'])
+                if row is not None and row['owner_id']==controller.owner_id and reference not in progress._known:
+                    progress.admitted(*reference)
+                return advance(controller,task)
+            finally:
+                if own_phase:progress.end()
+        with patch.object(Controller,'from_context',classmethod(constructed)),patch.object(Controller,'_advance',monitored):
+            super().test_actual_main_review_and_closure_never_repeat_lost_writes()
+        self.assertTrue(channels)
+        for wire,monitor in channels:
+            wire.send('end');monitor.finished(0)
+            self.assertIsNone(monitor.reason)

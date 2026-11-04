@@ -67,7 +67,7 @@ class Controller:
         if row is None:
             prepare_admission(context,source,journal,task)
             return _public(journal.get(task['repository'],task['pr_number']),action='prepared'),True
-        if row['owner_id'] not in (None,self.owner_id):return _public(row,reason='owner_fenced'),False
+        if row['owner_id']!=self.owner_id:return _public(row,reason='owner_fenced'),False
         if row['state'] in ('completed','cancelled','timed_out','unknown'):return _public(row),False
         effects=PREffects(source,journal,task,self.owner_id,context=context)
         if row['state'] in ('merge_intent','merge_pending'):
@@ -145,13 +145,20 @@ def step(config,journal,*,owner_id):
     controller=config['_controller']
     if controller.journal is not journal or controller.owner_id!=owner_id or journal._active!=owner_id:
         raise ValueError('Foreign PR controller owner')
-    try:loaded=controller.context._fresh_inputs()
-    except (ValueError,OSError):return _public(reason='private_inputs_unverified')
+    from .pr_supervision import lifecycle_for
+    progress=lifecycle_for(controller.context)
+    if progress is not None:progress.poll()
+    try:
+        try:loaded=controller.context._fresh_inputs()
+        except (ValueError,OSError):return _public(reason='private_inputs_unverified')
+    finally:
+        if progress is not None:progress.end()
     count=len(controller.references)
     if not count:return _public()
     report=_public()
     for _ in range(min(count,loaded['policy']['max_prs_per_tick'])):
         repository,number=controller.references[controller.cursor%count];controller.cursor=(controller.cursor+1)%count
+        if progress is not None:progress.begin(repository,number)
         try:
             task=authorized_task(loaded['policy'],repository,number)
             report,acted=controller._advance(task)
@@ -162,4 +169,6 @@ def step(config,journal,*,owner_id):
             # scan another PR in this tick after an uncertain outcome. The
             # already-advanced cursor preserves fairness on the next tick.
             return _public(row,reason='pr_step_unverified')
+        finally:
+            if progress is not None:progress.end()
     return report

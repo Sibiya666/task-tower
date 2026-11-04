@@ -95,12 +95,23 @@ class ReviewRunner:
                 ', and the immutable postmerge request at '+str(request_path)+
                 '. Independently verify the task criteria, accepted stages and exact-main CI. Do not implement changes. '
                 'Return only the required postmerge review JSON.']
-        if main_preparation is not None:
-            from .pr_main import authorize_review_launch
-            bounds=authorize_review_launch(main_preparation,binding)
-            timeout=min(timeout,bounds['timeout_seconds']);limit=min(limit,bounds['log_max_bytes'])
-        execution=run_command(command,checkout,timeout,env=child_environment(os.environ),
-            capture=dict(directory=output,max_bytes_per_stream=limit))
+        # Reserve this host record before launch. Preserve the actual returned
+        # execution before any fallible telemetry or promotion validation.
+        with (output/'process.json').open('xb') as stream:
+            os.set_inheritable(stream.fileno(),False)
+            if main_preparation is not None:
+                from .pr_supervision import lifecycle_for
+                progress=lifecycle_for(main_preparation.context)
+                if progress is not None:progress.start_role(profile)
+                from .pr_main import authorize_review_launch
+                bounds=authorize_review_launch(main_preparation,binding)
+                timeout=min(timeout,bounds['timeout_seconds']);limit=min(limit,bounds['log_max_bytes'])
+            execution=run_command(command,checkout,timeout,env=child_environment(os.environ),
+                capture=dict(directory=output,max_bytes_per_stream=limit))
+            record=dict(version=1,effect_id=binding.effect_id,reviewer_instance_id=binding.reviewer_instance_id,
+                request_sha256=policy_fingerprint(request),process=execution)
+            stream.write(canonical(record).encode());stream.flush();os.fsync(stream.fileno())
+        if main_preparation is not None and progress is not None:progress.end_role(execution)
         if (execution.get('status')!='passed' or execution.get('started') is not True or
                 execution.get('cleanup_confirmed') is not True or execution.get('exit_code')!=0 or
                 type(execution.get('pid')) is not int or execution['pid']<1 or

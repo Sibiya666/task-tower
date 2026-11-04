@@ -93,9 +93,10 @@ def run_command(argv, cwd, timeout_seconds, env=None):
 
 # Optional executor mode keeps raw output bounded in storage and memory.
 class _Drain:
-    def __init__(self, reader, log, cap):
+    def __init__(self, reader, log, cap, observer=None):
         import threading
         self.reader, self.log, self.cap = reader, log, cap
+        self.observer=observer
         self.digest, self.size, self.saved = hashlib.sha256(), 0, 0
         self.complete = False
         self.thread = threading.Thread(target=self.run, daemon=True)
@@ -104,6 +105,7 @@ class _Drain:
     def run(self):
         try:
             while chunk := self.reader.read(65536):
+                if self.observer is not None:self.observer.feed(chunk)
                 self.digest.update(chunk)
                 self.size += len(chunk)
                 if self.log is not None and self.saved < self.cap:
@@ -155,7 +157,7 @@ def _capture_files(capture):
 _legacy_run_command = run_command
 
 
-def run_command(argv, cwd, timeout_seconds, env=None, *, cancel_requested=None, capture=None):
+def run_command(argv, cwd, timeout_seconds, env=None, *, cancel_requested=None, capture=None,lifecycle_monitor=None):
     """Capture schema: {directory: private existing dir, max_bytes_per_stream: int}.
 
     Optional mode omits argv. Stream hashes/counts cover observed bytes, with
@@ -164,6 +166,10 @@ def run_command(argv, cwd, timeout_seconds, env=None, *, cancel_requested=None, 
     """
     if timeout_seconds is None and (not callable(cancel_requested) or capture is None):
         raise ValueError('Lifecycle process requires cancellation and bounded capture')
+    if lifecycle_monitor is not None:
+        from .pr_supervision import PRMonitor
+        if type(lifecycle_monitor) is not PRMonitor or not callable(cancel_requested) or capture is None:
+            raise ValueError('Actual PR lifecycle monitor and bounded cancellation required')
     if cancel_requested is None and capture is None:
         return _legacy_run_command(argv, cwd, timeout_seconds, env)
     started = time.monotonic()
@@ -172,7 +178,8 @@ def run_command(argv, cwd, timeout_seconds, env=None, *, cancel_requested=None, 
     drains, writers, process = [], [], None
     try:
         try:
-            cancelled = cancel_requested is not None and cancel_requested()
+            cancelled = ((lifecycle_monitor is not None and lifecycle_monitor.cancelled())
+                or (cancel_requested is not None and cancel_requested()))
         except Exception:
             result['status'] = 'unknown'
             return result
@@ -185,11 +192,11 @@ def run_command(argv, cwd, timeout_seconds, env=None, *, cancel_requested=None, 
         if Path(executable).suffix.lower() in ('.cmd', '.bat'):
             result['reason'] = 'shell_script_requires_explicit_interpreter'
             return result
-        for log in logs:
+        for number,log in enumerate(logs):
             read_fd, write_fd = os.pipe()
             reader = os.fdopen(read_fd, 'rb', buffering=0)
             writers.append(os.fdopen(write_fd, 'wb', buffering=0))
-            drains.append(_Drain(reader, log, cap))
+            drains.append(_Drain(reader, log, cap,lifecycle_monitor if number==0 else None))
         actual = [executable, *argv[1:]]
         if os.name == 'nt':
             from .windows_job import WindowsJobProcess
@@ -199,12 +206,14 @@ def run_command(argv, cwd, timeout_seconds, env=None, *, cancel_requested=None, 
                                        stdout=writers[0], stderr=writers[1],
                                        start_new_session=True, env=env)
         result.update(started=True, pid=int(process.pid))
+        if lifecycle_monitor is not None:lifecycle_monitor.started(int(process.pid))
         for writer in writers:
             writer.close()
         deadline = None if timeout_seconds is None else time.monotonic() + timeout_seconds
         while True:
             try:
-                if cancel_requested is not None and cancel_requested():
+                if ((lifecycle_monitor is not None and lifecycle_monitor.cancelled())
+                        or (cancel_requested is not None and cancel_requested())):
                     result['status'] = 'cancelled'
                     break
             except Exception:
@@ -224,6 +233,8 @@ def run_command(argv, cwd, timeout_seconds, env=None, *, cancel_requested=None, 
         result['status'] = 'unavailable' if process is None else 'unknown'
     finally:
         cleanup_deadline = time.monotonic() + 5
+        if lifecycle_monitor is not None and lifecycle_monitor.cleanup_deadline is not None:
+            cleanup_deadline=min(cleanup_deadline,lifecycle_monitor.cleanup_deadline)
         if process is not None:
             try:
                 if os.name == 'nt':
@@ -269,5 +280,10 @@ def run_command(argv, cwd, timeout_seconds, env=None, *, cancel_requested=None, 
                     result.update({name+'_sha256':hashlib.sha256(b'').hexdigest(),
                         name+'_bytes':0,name+'_captured_bytes':0,
                         name+'_tail_unknown':False,name+'_truncated':False})
+        if lifecycle_monitor is not None:
+            lifecycle_monitor.finished(result['exit_code'],bool(drains) and all(d.complete for d in drains))
+            if lifecycle_monitor.cancelled():
+                result['reason']=lifecycle_monitor.reason
+                if result['status']=='passed':result['status']='unknown'
         result['duration_seconds'] = round(time.monotonic() - started, 3)
     return result

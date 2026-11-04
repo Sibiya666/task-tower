@@ -33,6 +33,16 @@ class JournalTests(unittest.TestCase):
         self.path=Path(self.tmp.name).resolve()/'pr.sqlite3'; self.j=PRJournal(self.path)
         self.owner=str(uuid.uuid4())
 
+    def test_real_admission_retains_original_owner_before_any_role_or_effect(self):
+        with self.j.owner(self.owner):
+            row=self.j.admit(binding())
+            self.assertEqual(row['owner_id'],self.owner)
+            self.assertEqual(row['owner_pid'],os.getpid())
+        replacement=str(uuid.uuid4())
+        with self.j.owner(replacement),self.assertRaises(ValueError):
+            self.j.transition('owner/repo',44,replacement,
+                dict(state='discovered',input_sha256=row['input_sha256']),dict(state='validating'))
+
     def advance(self,state):
         row=self.j.get('owner/repo',44)
         return self.j.transition('owner/repo',44,self.owner,

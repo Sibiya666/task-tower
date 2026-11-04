@@ -424,6 +424,7 @@ class PRJournal:
                 admitted_utc=_stamp(now),deadline_utc=_stamp(now+timedelta(seconds=timeout)),last_seen_utc=_stamp(now),
                 state='discovered',reason=None,owner_id=None,owner_pid=None,review_attempts=0,postmerge_attempts=0,
                 effect_count=0,cancel_requested=False,pr_receipt_sha256=None,reviewer_instance_id=None,merge_commit=None,postmerge_receipt_sha256=None)
+            if self._active is not None:self._owned(db,row,self._active)
             self._save(db,row); return row
 
     def get(self,repository,pr_number):

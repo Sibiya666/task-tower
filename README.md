@@ -160,3 +160,8 @@ development/test acceptance and current genuine positive/default regressions;
 see [qualified evidence](docs/tasks/evidence/TT-PR-WORKER-001/task5-main-consumer-acceptance.md).
 Installed supervised watch/CLI, real pilot and whole Issue17/PR/main completion
 remain pending. This internal integration does not yet enable unattended work.
+The candidate now includes [supervised PR worker commands](docs/pr-worker.md):
+`watch`, diagnostic `work --once`, and independent `status`/`cancel`/`reconcile --inspect`.
+Supervisor/CLI has bounded independent development and test acceptance;
+see [evidence](docs/tasks/evidence/TT-PR-WORKER-001/task5-supervision-acceptance.md).
+The installed pilot and whole-Issue readiness remain pending.

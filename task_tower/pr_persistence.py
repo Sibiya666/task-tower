@@ -53,6 +53,9 @@ def prepare_admission(context,source,journal,task):
     request=prepared['request'];policy=loaded['policy']
     journal.admit(dict({k:request[k] for k in BINDING},task_timeout_seconds=policy['task_timeout_seconds'],
         max_review_attempts=policy['max_review_attempts']))
+    from .pr_supervision import lifecycle_for
+    progress=lifecycle_for(context)
+    if progress is not None:progress.admitted(request['repository'],request['pr_number'])
     actual=directory/'request.json';info=actual.stat()
     _,request_sha=canonical_record_identity(request)
     record=dict(request=request,private_input_provenance=context.private_input_provenance,
@@ -168,6 +171,11 @@ def run_review(context,source,journal,task,owner_id,*,cancel_requested=None):
         fresh=PREffects(source,journal,task,owner_id,context=context)._diagnostic_proof('pending')
         current=_live_review(context,journal,owner_id,effect)
         profile=fresh['current']['task']['_review_profile']
+        from .pr_supervision import lifecycle_for
+        progress=lifecycle_for(context)
+        if progress is not None:
+            progress.start_role(profile)
+            current=_live_review(context,journal,owner_id,effect)
         def stopped():
             if cancel_requested is not None and cancel_requested():return True
             active=journal.get(row['repository'],row['pr_number'])
@@ -180,6 +188,7 @@ def run_review(context,source,journal,task,owner_id,*,cancel_requested=None):
         record=dict(request=request,envelope=envelope,review_effect_id=effect['effect_id'],
             private_input_provenance=retained['private_input_provenance'])
         _write_exclusive(namespace/'unverified-records'/(effect['effect_id']+'.json'),record)
+        if progress is not None:progress.end_role(envelope['process'])
         if _checkout_snapshot(checkout)!=before:raise ValueError('Private review source mutated')
         _live_review(context,journal,owner_id,effect)
         receipt=validate_pr_review(envelope,request,())
