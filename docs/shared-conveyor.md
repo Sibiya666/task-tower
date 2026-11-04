@@ -77,7 +77,7 @@ Issue не может задавать исполняемую команду. Cl
 То же правило действует для каждого служебного Git-процесса до и после harness;
 его фактический результат сохраняется отдельно перед проверкой cleanup.
 `execution_completed` от harness переводит работу только в `awaiting_acceptance`; задача остаётся открытой.
-Независимая приёмка и подтверждённый main обязательны. Передача в существующий PR/main consumer ещё не закончена.
+Независимая приёмка и подтверждённый main обязательны. For new tasks, see the Windows pipeline handoff below; legacy results require separate acceptance.
 
 Сейчас автоматически допускаются только явно разрешённые открытые autonomous-задачи без зависимостей;
 задачи с зависимостями блокируются до подключения проверяемого selector. Не снимайте зависимости ради запуска.
@@ -97,3 +97,88 @@ Issue не может задавать исполняемую команду. Cl
 
 
 Scope amendment, explicit user decision 2026-11-04: all macOS/Linux actions, including CI, native/manual diagnostics and postmerge execution, are deferred to #58–#62. Current release execution and acceptance are Windows-only. Preserve portable code and historical receipts. Fresh Windows profiles must explicitly require windows; do not rewrite accepted history or treat old all-platform receipts as a new Windows acceptance.
+
+## Windows pipeline handoff
+
+For new tasks, `harness.kind: pipeline` delivers the claimed identity to the
+existing [stage pipeline](pipeline.md) before any shared-worker model launch.
+Legacy `custom`/`codex` results remain awaiting separate acceptance; they cannot
+be converted into stage receipts or re-executed through this adapter.
+
+Review this template before installing it outside source checkouts. Issue 123 is
+a placeholder, not an authorization or installed pilot. Existing connections,
+executor profiles, pinned skills and pipeline task policy must already exist.
+
+```json
+{
+  "version": 1,
+  "repository": "owner/repository",
+  "worker_id": "21fa8457-1c54-499d-aafa-91ce0bc27049",
+  "worker_name": "windows-pipeline-1",
+  "assignee": "github-login",
+  "workspace_root": "C:/TaskTower/private/shared-worker-1",
+  "superpowers_root": "C:/installed/superpowers/skills",
+  "interval_seconds": 10,
+  "harness": {
+    "kind": "pipeline",
+    "connections": "C:/TaskTower/private/connections.json",
+    "config": "C:/TaskTower/private/pipeline.json",
+    "executor_config": "C:/TaskTower/private/executor.json",
+    "journal": "C:/TaskTower/private/pipeline.db"
+  },
+  "allowlist": [{"repository": "owner/repository", "issue": 123, "task_id": "TT-EXAMPLE-001"}],
+  "plans": {"123": "docs/superpowers/plans/example.md"}
+}
+```
+
+The matching pipeline task keeps all existing required fields, profile, checks,
+components, allowed paths and publication controls. Add `"shared_worker": true`
+and `"ci_substitution": {"enabled": true, "required_platforms": ["windows"]}`.
+Repository, Issue, task ID and plan must match the shared allowlist. Keep
+publishing disabled until independently authorized. Existing history is unchanged.
+
+`shared-worker run --once` consumes the confirmed intent, writes a private fence
+and submits the claim UUID as the delivery ID. The existing journal creates a
+queued run with no stage attempts or verdicts. The original worker saves the real
+admission receipt, then CAS-confirms `awaiting_acceptance` with the exact run UUID
+and consumer digest (selected journal path and installed policy/profiles). Only
+that run/consumer may execute. A second journal cannot obtain authority from the
+visible claim UUID. Ordinary dispatcher/adapter submits for these opted-in rows
+are rejected before reserving an Issue's unique journal slot.
+
+Run existing `pipeline work --once` or `pipeline watch` separately with those same
+private files. Pending or foreign handoffs wait unclaimed, with no model launch.
+Before preparation and every owned continuation, the pipeline checks immutable
+Issue identity, claim criteria, assignment, current main and exact run/consumer.
+Its existing role processes, containment, limits, independent reviews, checks,
+checkpoints and PR consumer create genuine evidence. With publishing disabled it
+stops at `ready_for_pr`; separately authorized publishing may reach `awaiting_pr`.
+Neither means accepted main, Done or automatic closure. Assignee and claim remain.
+
+A lost admission response leaves `execution_intent` and the private fence. A
+lost final CAS response may leave a confirmed bound run on GitHub, while the
+worker stays fenced. Neither permits resubmission, claim expiry or restart replay.
+The CLI reports `needs_input` on failure. Inspect shared status and preserve
+private `handoff.json`, `handoff-result.json`, `outcome.json`, the fence and both
+journals. The outcome file binds the locally confirmed admission; a retained
+fence still means final shared confirmation is unresolved. Do not delete state to
+recover. Other independent workers may continue
+unrelated authorized work. This mode installs no service or tools and changes no
+authentication, model or provider.
+
+### Remaining external evidence
+
+Local implementation and regression scope are recorded separately in the
+[Task 71 implementation record](evidence/2026-11-04-shared-pipeline-handoff.md).
+
+The preserved real ownership pilot names [Issue #69](https://github.com/Sibiya666/task-tower/issues/69);
+[Issue #71](https://github.com/Sibiya666/task-tower/issues/71) implements this local
+handoff. Neither establishes a new successful full conveyor pilot. Fixture tests
+cover admission, unknown/restart fencing and the existing six-role/check/local
+PR-preparation path, with publication disabled. They are not real GitHub/model or
+multi-machine evidence. The coordinator must explicitly name fresh authorized
+pilot Issues in the existing writable Project, review private profiles, retain
+native GitHub/harness evidence, obtain exact-head/base review and Windows CI, and
+verify authorized exact-main acceptance and automatic closure. This run creates
+no pilot Issues and performs no publishing. macOS/Linux/WSL execution, CI and
+diagnostics remain deferred to #58-#62.

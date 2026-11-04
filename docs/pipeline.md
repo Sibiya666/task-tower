@@ -1,5 +1,15 @@
 # Local stage pipeline operations
 
+Windows shared workers may deliver identities through the [trusted pipeline
+handoff](shared-conveyor.md#windows-pipeline-handoff). Opted-in task rows add
+`shared_worker: true` and explicitly require Windows CI substitution. All other
+task/profile controls remain mandatory. Ordinary adapter/dispatcher submits for
+those rows are rejected; the original worker confirms the exact consumer/run in
+its server-side claim. Pending or foreign deliveries wait queued without an owner
+or model launch. Legacy `execution_completed` output grants no stage receipt.
+Tasks without this field retain their current policy fingerprints and protocol;
+historical journals and receipts are not rewritten.
+
 The pipeline turns an explicitly authorized delivery into independently accepted specification, development and test stages, then an optional reviewable PR. It uses a private installation policy and journal, six fresh executor/reviewer role instances, fixed host checks and durable Git/publication intents. Public Markdown is an evidence projection; model output, Issue prose and editable cards do not grant authority.
 
 This guide describes the bounded local stage pipeline; task completion additionally requires independent PR/main acceptance and verified Issue publication. The first installed Codex pilot ran two fresh roles, then parked on a rejected specification at its zero-rework limit. The preserved UTF-8 source and reviewer shell rendering differed; the exact-shell diagnostic reproduced stdout encoding loss. See the [independent negative-pilot audit](tasks/evidence/TT-PIPELINE-001/installed-codex-blocked-review.md). ASCII-escaped UTF-8 source-reading guidance has its own independent review; a distinct third pilot subsequently completed the six-role ready boundary described below. Fixture tests, an installed executor scratch smoke and this guide do not establish unattended readiness. Issue17 owns PR acceptance/merge and the main/postmerge/Issue-closure barrier; this pipeline never merges or closes an Issue.

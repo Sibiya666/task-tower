@@ -21,6 +21,8 @@ Postmerge worker получает свежий `main` с отдельным се
 
 Работающий локальный watcher также может [публиковать успешную приёмку и закрывать связанную Issue](docs/github-publication.md). Для этого в приватной конфигурации явно задаются сопоставления задач и доверенный аккаунт; установка self-hosted runner для этого режима не требуется.
 
+Windows shared workers can hand task identities to the existing local pipeline before model execution: [operator profile and safety boundaries](docs/shared-conveyor.md#windows-pipeline-handoff). The pipeline creates its own independent stage evidence. This handoff does not establish real GitHub/model/multi-machine readiness, accepted main or automatic closure.
+
 ## Скриншоты
 
 Реальные пользовательские скриншоты приложения с обработкой фона для документации. Экспорты — прозрачные PNG на одинаковом холсте 960×640 с сохранением пропорций. [Исходники и описание обработки](docs/screenshots/README.md).

@@ -1,5 +1,10 @@
 # Запуск после clone
 
+Shared-worker pipeline handoff is configured separately using an existing private
+pipeline installation; bootstrap does not install it or start a service. See the
+[Windows operator profile](shared-conveyor.md#windows-pipeline-handoff). It does
+not import legacy execution results as accepted stage receipts.
+
 Установите Python 3.11+ и выбранный harness обычным способом. Bootstrap не устанавливает программы, не покупает доступ и не читает ключи или файлы авторизации.
 
 Для подключения GitHub выполните [полную настройку GitHub CLI, авторизации и Project](github-setup.md). Project создаётся/подключается **до импорта Issues**; локальный интерактивный режим ниже остаётся доступен и не означает полной готовности GitHub.

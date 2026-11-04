@@ -130,7 +130,7 @@ class SharedQueue:
         identity,criteria=self._issue(body['issue'],require_assigned=True)
         if criteria!=body['criteria_sha256'] or not self._current(value[3],value[4],body):raise ValueError('Execution intent/source changed')
         return body
-    def finish(self,permit,state,result_sha256):
+    def finish(self,permit,state,result_sha256,*,handoff=None):
         if state not in ('awaiting_acceptance','needs_input') or not re.fullmatch('[a-f0-9]{64}',result_sha256):raise ValueError('Invalid execution outcome')
         value=_PERMITS.get(id(permit))
         if value is None or value[0] is not permit or value[1] is not self or value[2]!=os.getpid() or id(permit) not in _CONSUMED:
@@ -138,6 +138,13 @@ class SharedQueue:
         old=json.loads(value[6])
         if not self._current(value[3],value[4],old):raise ValueError('Shared execution already advanced')
         body=dict(old,state=state,result_sha256=result_sha256)
+        if handoff is not None:
+            if (state!='awaiting_acceptance' or not isinstance(handoff,dict)
+                    or set(handoff)!={'version','kind','consumer_sha256','run_id'}
+                    or type(handoff['version']) is not int or handoff['version']!=1
+                    or handoff['kind']!='pipeline' or not re.fullmatch('[a-f0-9]{64}',handoff['consumer_sha256'])
+                    or str(uuid.UUID(handoff['run_id']))!=handoff['run_id']):raise ValueError('Invalid pipeline handoff')
+            body['handoff']=dict(handoff)
         proposed=self._commit(body,value[5],value[4])
         response=self._client()[2].request('PATCH','/git/refs/'+value[3].removeprefix('refs/'),dict(sha=proposed,force=False))
         if _ref(response,value[3])!=proposed or not self._current(value[3],proposed,body):raise ValueError('Execution outcome unconfirmed')
