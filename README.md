@@ -165,3 +165,6 @@ The candidate now includes [supervised PR worker commands](docs/pr-worker.md):
 Supervisor/CLI has bounded independent development and test acceptance;
 see [evidence](docs/tasks/evidence/TT-PR-WORKER-001/task5-supervision-acceptance.md).
 The installed pilot and whole-Issue readiness remain pending.
+Merged-row `reconcile --inspect` also exposes original workflow/archive marker
+provenance separately from live PR prose; see [bounded inspection acceptance](docs/tasks/evidence/TT-PR-WORKER-001/task5-recovery-inspection-acceptance.md).
+It cannot refresh old events, approve a recovery or close an Issue.

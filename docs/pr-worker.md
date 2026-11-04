@@ -67,3 +67,21 @@ exit1 operational uncertainty and exit2 invalid arguments/configuration/state.
 The local owner lock is not a distributed queue or installed service. The
 worker covers allowlisted PRs, not automatic development of every GitHub Issue.
 Task19 and the group pool provide separate coordination capabilities.
+
+## Original event inspection candidate
+
+For a journaled PR with a recorded merge, `reconcile --inspect` additionally
+reads original workflow archives through the matching connected repository.
+It reports run/attempt/artifact identities, original task markers, platform
+checks, merge identity and a canonical event digest. `event_sha256` uses the
+existing PR v1 canonical JSON fingerprint of the complete archived event.
+The live marker list is separate. Editing PR prose never refreshes an old
+payload. Missing/expired/mismatched archives refuse the remote inspection.
+Local status and cancellation still require no executable profile/policy/pins.
+
+`reviewed_followup_required`, `explicit_reconciliation_required` and
+`fresh_acceptance_required` are diagnostic required actions, not acceptance or
+recovery permission. Inspection never changes journal rows, effects, barriers,
+Issue state or archives. An unmerged local row retains its local-only report.
+The actual `recovery_of` baseline/follow-up execution gate is still pending;
+this reader does not enable old-card admission or manufacture baseline receipts.

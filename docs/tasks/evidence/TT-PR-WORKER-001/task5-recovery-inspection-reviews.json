@@ -1,0 +1,95 @@
+{
+  "base": "35354bbb09113f7752f83b94f353c744d1eb5876",
+  "candidate_files": {
+    "docs/pr-worker.md": "e60e95129beee17505b64a5776d107b6a1e8b9c28343163f5378264348b112ee",
+    "task_tower/pr_recovery.py": "62bb9e1fa362f216ae916c85e656c0ff971a0becc80034810afa0b0b515a09d2",
+    "task_tower/pr_worker_cli.py": "aa4ea1f70288a02ef025b2f58caad442a90fa20dfeaafc99f8d752abe977818d",
+    "tests/test_pr_main_preparation.py": "eff519db9cc7403a4414567f2fb15b3e56dc65c81f90c0eb3e5eb56cf3f3bab9",
+    "tests/test_pr_recovery_inspection.py": "2f101c0e7ced44d094377c6436f03346889fcf841f1427abd5cfaedb3bf9234f"
+  },
+  "scope": "Read-only original event inspection only",
+  "reviews": [
+    {
+      "capture": "pr17-recovery-inspection-native-review",
+      "qualified_current_review": true,
+      "source_unchanged": true,
+      "binary_unchanged": true,
+      "result": {
+        "status": "passed",
+        "exit_code": 0,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 231840,
+        "stdout_sha256": "14db9b15a79788dcef5fc158956f030a7dba0a6d60b6a98c28135ffd4508c0dc",
+        "stdout_bytes": 128529,
+        "stdout_captured_bytes": 128529,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "06dff9ffa41c438811d4f5c2a4c4515127b7dd6dcd9930bc64b250aad17d64ef",
+        "stderr_bytes": 7252,
+        "stderr_captured_bytes": 7252,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 72.625
+      },
+      "verdict": {
+        "run_id": "8bf16f1f-a200-4fa7-9ba8-a5f308f73033",
+        "attempt_id": "328c80d9-00ef-461b-9e6a-49b273cbbd7f",
+        "instance_id": "e6c02703-283d-498e-a651-f3e69d100dbd",
+        "stage": "development",
+        "generation": 1,
+        "source_sha": "35354bbb09113f7752f83b94f353c744d1eb5876",
+        "checkpoint_sha": "35354bbb09113f7752f83b94f353c744d1eb5876",
+        "input_sha256": "82a245a08e74818c4ebb41fbca5c3883b2cfc2750afa6332be64d6d771d405fc",
+        "version": 2,
+        "summary": "Approve bounded original-event inspection development only. Verified pinned instruction and candidate hashes, reviewed provenance validation, immutable journal mapping, separate live markers, fixed diagnostic actions and metadata CLI integration. Independently ran 24 pure GitHub reader tests successfully; inspected Root's unchanged-source 43-test regression receipt. No blocking defects found. Recovery execution, baseline acceptance, effects, pilot and whole-Issue acceptance remain outside this verdict.",
+        "verdict": "approve",
+        "return_stage": null,
+        "findings": []
+      },
+      "validation_error": null,
+      "runner_sha256": "9a914c5e2def65ace3d64f0ee4e42cec084e01a15f46d415aef83b4e5880d5ff"
+    },
+    {
+      "capture": "pr17-recovery-inspection-native-test-review",
+      "qualified_current_review": true,
+      "source_unchanged": true,
+      "binary_unchanged": true,
+      "result": {
+        "status": "passed",
+        "exit_code": 0,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 226436,
+        "stdout_sha256": "ae04f3b3ef8e983593e9bf21e05e830d108a609d43793f581b1499c91e005aa0",
+        "stdout_bytes": 269252,
+        "stdout_captured_bytes": 269252,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "ae3c2d7e4e3c5e81d3a59853a77dad63409cd5dbfcfe2acb399b178715d53ab2",
+        "stderr_bytes": 9532,
+        "stderr_captured_bytes": 9532,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 120.187
+      },
+      "verdict": {
+        "run_id": "8765b25e-7e1a-4996-8556-57859ea44431",
+        "attempt_id": "f96c05c6-db06-43db-9b73-ed57eb8fceda",
+        "instance_id": "6bb86505-375f-43ae-9c80-dd290f8725fb",
+        "stage": "test",
+        "generation": 1,
+        "source_sha": "35354bbb09113f7752f83b94f353c744d1eb5876",
+        "checkpoint_sha": "35354bbb09113f7752f83b94f353c744d1eb5876",
+        "input_sha256": "82a245a08e74818c4ebb41fbca5c3883b2cfc2750afa6332be64d6d771d405fc",
+        "version": 2,
+        "summary": "Approve bounded inspection test acceptance. Verified all instruction/candidate hashes, meaningful RED/GREEN receipts and actual 43-test CLI integration capture. Independently ran 24 pure reader tests successfully. Regression source matches current executable/test files; only documentation changed. Audited provenance, canonical types, archive/live separation, nonmutation and metadata compatibility. No blocking defects found. Recovery execution, effects, baseline acceptance, pilot and whole-Issue acceptance remain excluded.",
+        "verdict": "approve",
+        "return_stage": null,
+        "findings": []
+      },
+      "validation_error": null,
+      "runner_sha256": "cfefefbd3c95f84376ddf3b65324b1906d3f471397ba8e8fd1efd66879987c2a"
+    }
+  ]
+}

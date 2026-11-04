@@ -236,10 +236,29 @@ class MainPreparationTests(publication._PublicationFixture,unittest.TestCase):
         self.assertEqual(issue['state'],'closed');self.assertEqual(issue['state_reason'],'completed')
         self.assertIsNone(self.pr.barrier(repository))
         self.assertEqual(self.pr.get(repository,number)['postmerge_attempts'],1)
+        if getattr(self,'inspect_original_event',False):
+            from task_tower.pr_worker_cli import main
+            from contextlib import redirect_stdout
+            output=io.StringIO();inputs=self.ctx._inputs
+            before=self.pr.path.read_bytes()
+            argv=['reconcile','--inspect','--connections',str(inputs.connections_path),
+                '--config',str(inputs.policy_path),'--journal',str(inputs.journal_path),
+                '--repository',repository,'--pr',str(number)]
+            with patch('task_tower.github_source._http_get',side_effect=main_http),patch('task_tower.github_source.resolve_token',return_value=None),redirect_stdout(output):
+                code=main(argv)
+            self.assertEqual(code,0)
+            inspected=json.loads(output.getvalue())
+            self.assertEqual(inspected['recovery']['required_action'],'fresh_acceptance_required')
+            self.assertEqual(len(inspected['recovery']['events']),3)
+            self.assertEqual(before,self.pr.path.read_bytes())
 
 
 class ChangedCriteriaMainTests(MainPreparationTests):
     changed_criteria=True
+
+
+class OriginalEventInspectionMainTests(MainPreparationTests):
+    inspect_original_event=True
 
 
 class CommentIntentRevocationMainTests(MainPreparationTests):

@@ -1,0 +1,149 @@
+{
+  "captures": [
+    {
+      "capture": "pr17-original-event-inspection-red",
+      "source_unchanged": true,
+      "verified_success": false,
+      "result": {
+        "status": "failed",
+        "exit_code": 1,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 230428,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 0,
+        "stdout_captured_bytes": 0,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "e0493a2f5f622786b67e4a02ab377ff7b3fd49a1f42bdaa43f132323aa6d69cd",
+        "stderr_bytes": 6296,
+        "stderr_captured_bytes": 6296,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 0.406
+      },
+      "runner_sha256": "e3dcbbf73c4f3fe05adb153f04cd0e296bc6217924bdce7aeb8843e590636eb4"
+    },
+    {
+      "capture": "pr17-original-event-inspection-green",
+      "source_unchanged": true,
+      "verified_success": true,
+      "result": {
+        "status": "passed",
+        "exit_code": 0,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 229580,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 0,
+        "stdout_captured_bytes": 0,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "b963d0f940af630ac25e179f5aa5eddad90ec26b16b00d80a5f6d52a19755566",
+        "stderr_bytes": 4762,
+        "stderr_captured_bytes": 4762,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 0.469
+      },
+      "runner_sha256": "e3dcbbf73c4f3fe05adb153f04cd0e296bc6217924bdce7aeb8843e590636eb4"
+    },
+    {
+      "capture": "pr17-original-event-boolean-red",
+      "source_unchanged": true,
+      "verified_success": false,
+      "result": {
+        "status": "failed",
+        "exit_code": 1,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 230620,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 0,
+        "stdout_captured_bytes": 0,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "65ce658ad6e9d3e06a8ef8222dbcf23952e6f2a35bdae1e2eb0853c8c118007e",
+        "stderr_bytes": 1914,
+        "stderr_captured_bytes": 1914,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 0.485
+      },
+      "runner_sha256": "e3dcbbf73c4f3fe05adb153f04cd0e296bc6217924bdce7aeb8843e590636eb4"
+    },
+    {
+      "capture": "pr17-original-event-strict-green",
+      "source_unchanged": true,
+      "verified_success": true,
+      "result": {
+        "status": "passed",
+        "exit_code": 0,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 230056,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 0,
+        "stdout_captured_bytes": 0,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "aba2370f4fe3cb3f812f15f4d357c3b96f0443c733677372a6fff2405dca0944",
+        "stderr_bytes": 5255,
+        "stderr_captured_bytes": 5255,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 1.875
+      },
+      "runner_sha256": "e3dcbbf73c4f3fe05adb153f04cd0e296bc6217924bdce7aeb8843e590636eb4"
+    },
+    {
+      "capture": "pr17-original-event-cli-red",
+      "source_unchanged": true,
+      "verified_success": false,
+      "result": {
+        "status": "failed",
+        "exit_code": 1,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 230508,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 0,
+        "stdout_captured_bytes": 0,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "d6f0c8dd1e7fd72297a86564c495cf7b21c2ab580a7783bd08d1c8b9dc02a0aa",
+        "stderr_bytes": 1050,
+        "stderr_captured_bytes": 1050,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 210.625
+      },
+      "runner_sha256": "e3dcbbf73c4f3fe05adb153f04cd0e296bc6217924bdce7aeb8843e590636eb4"
+    },
+    {
+      "capture": "pr17-original-event-cli-green",
+      "source_unchanged": true,
+      "verified_success": true,
+      "result": {
+        "status": "passed",
+        "exit_code": 0,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 230792,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 0,
+        "stdout_captured_bytes": 0,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "735496f27e4fff7ad1b785b0978f259f648e546edcdfb6d5585801f1444ee4a6",
+        "stderr_bytes": 6623,
+        "stderr_captured_bytes": 6623,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 216.625
+      },
+      "runner_sha256": "e3dcbbf73c4f3fe05adb153f04cd0e296bc6217924bdce7aeb8843e590636eb4"
+    }
+  ],
+  "qualification": "Initial import-based regression accidentally included five imported tests; final43-test capture avoids that duplicate discovery and matches accepted code."
+}

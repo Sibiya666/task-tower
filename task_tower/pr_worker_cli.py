@@ -57,6 +57,13 @@ def main(argv=None):
                 barrier=journal.barrier(repository)
                 report['barrier']=None if barrier is None else dict(repository=barrier['repository'],
                     pr_number=barrier['pr_number'],completed=barrier['completed'],input_sha256=barrier['input_sha256'])
+                if row['merge_commit'] is not None:
+                    from .github_source import GitHubSource,resolve_token
+                    from .pr_recovery import inspect_recovery
+                    matches=[c for c in connections if c.repository.casefold()==repository]
+                    if len(matches)!=1:raise ValueError('Unknown recovery connection')
+                    report['recovery']=inspect_recovery(row,journal,
+                        GitHubSource(matches[0].repository,token=resolve_token()))
         print(json.dumps(report,sort_keys=True));return 0
     except (OSError,ValueError):
         reason='pr_execution_unverified' if args.operation in ('watch','work') else 'pr_metadata_unverified'
