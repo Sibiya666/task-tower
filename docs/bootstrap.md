@@ -57,6 +57,10 @@ python3 bootstrap.py --launch
 
 ## Первая проектная задача
 
+Для экспериментального общего GitHub-бэклога предусмотрен отдельный [shared-worker](shared-conveyor.md).
+Он использует подключённый Project и приватный профиль, атомарный захват и установленный Superpowers.
+Обычный интерактивный bootstrap не включает его автоматически; полный PR/main цикл ещё проходит разработку.
+
 [TT-BOOTSTRAP-001](tasks/TT-BOOTSTRAP-001.json) — пилот собственной карточки Task Tower:
 
 ```sh
@@ -70,6 +74,6 @@ python -m task_tower task accept docs/tasks/TT-BOOTSTRAP-001.json --stage spec -
 
 ## Проверки
 
-`python -m unittest discover -s tests -v`. Fixture harness действительно запускается отдельным процессом, получает cwd и context и возвращает код выхода без модели или расходов. Добавлена CI-матрица Windows/macOS/Ubuntu; наличие workflow не считается доказательством прохождения платформ, пока jobs фактически не выполнились.
+`python -m unittest discover -s tests -v`. Fixture harness действительно запускается отдельным процессом, получает cwd и context и возвращает код выхода без модели или расходов. Текущая CI/postmerge-проверка выполняется только на Windows по решению пользователя от 2026-11-04; macOS/Linux отложены в следующую версию. Наличие workflow не считается доказательством успешной проверки до завершения job.
 
 CLI источники: [Claude](https://code.claude.com/docs/en/cli-reference), [OpenCode](https://opencode.ai/docs/cli/), [Codex](https://learn.chatgpt.com/docs/non-interactive-mode).

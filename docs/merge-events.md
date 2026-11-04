@@ -1,6 +1,6 @@
 # Слияние PR как событие Task Tower
 
-Workflow [Task Tower postmerge](../.github/workflows/postmerge.yml) слушает `pull_request.closed` для main и выполняет работу только при `merged=true`. Проверяет точный merge commit на Windows/macOS/Linux и публикует по одному JSON artifact для каждой платформы. Тестовый провал публикуется как failed и оставляет job красным.
+Workflow [Task Tower postmerge](../.github/workflows/postmerge.yml) слушает `pull_request.closed` для main и выполняет работу только при `merged=true`. По решению пользователя от 2026-11-04 проверяет точный merge commit только на Windows и публикует Windows JSON artifact. Работа macOS/Linux отложена в следующую версию (#58); переносимые схемы и исторические artifacts сохраняются. Тестовый провал публикуется как failed и оставляет job красным.
 
 Связь задаётся в описании PR отдельной строкой:
 

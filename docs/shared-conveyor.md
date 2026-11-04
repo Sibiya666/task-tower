@@ -1,0 +1,99 @@
+# Общая очередь GitHub
+
+Экспериментальная реализация в ветке `feat/shared-conveyor`, задача [#19](https://github.com/Sibiya666/task-tower/issues/19).
+Она ещё не прошла полный цикл PR → main → независимая приёмка → автоматическое закрытие.
+Существующий bootstrap запускает обычную интерактивную сессию; этот воркер настраивается отдельно.
+
+Каждый проект использует свои Issues и Project. Сначала выполните [подключение Project](github-setup.md).
+Приватные connections и профиль воркера храните вне checkout; credentials в JSON не записываются.
+Используется существующая авторизация GitHub CLI. Ни установка harness, ни смена модели или аккаунта не выполняются.
+
+## Запуск
+
+Из checkout Task Tower с Python 3.11+:
+
+```sh
+python -m task_tower shared-worker status --connections /private/connections.json --config /private/worker.json
+python -m task_tower shared-worker run --connections /private/connections.json --config /private/worker.json
+```
+
+`--once` делает один проход; `--max-tasks N` останавливает процесс после N полученных результатов.
+Без этих флагов воркер опрашивает очередь и после выполнения берёт следующую задачу.
+Это foreground-процесс, не установленная служба. Для второго процесса нужны отдельные `worker_id`, `worker_name` и `workspace_root`.
+Нативный `run` пока разрешён только в Windows; на macOS/Linux он возвращает `unsupported_platform`
+до чтения подключений, создания рабочих каталогов и обращения к GitHub. Команда `status` переносима.
+Число процессов определяет оператор по ресурсам и бюджету; общего лимита «два» здесь нет.
+
+Пример структуры приватного профиля (замените пути, UUID, номера и task ID реальными разрешёнными значениями):
+
+```json
+{
+  "version": 1,
+  "repository": "owner/repository",
+  "worker_id": "21fa8457-1c54-499d-aafa-91ce0bc27049",
+  "worker_name": "desktop-1",
+  "assignee": "github-login",
+  "workspace_root": "/private/task-tower/workers/desktop-1",
+  "superpowers_root": "/installed/superpowers/skills",
+  "interval_seconds": 10,
+  "harness": {
+    "kind": "codex",
+    "argv": ["/installed/codex"],
+    "timeout_seconds": 1800,
+    "log_max_bytes": 1048576
+  },
+  "allowlist": [{"repository": "owner/repository", "issue": 123, "task_id": "TT-EXAMPLE-001"}],
+  "plans": {"123": "docs/superpowers/plans/example.md"}
+}
+```
+
+В Windows используйте абсолютные пути с `/` или экранируйте `\\` в JSON.
+План должен существовать в коммите main, выбранном при захвате; локальная исходная копия должна содержать этот коммит.
+Нужен установленный Superpowers. Встроенный адаптер поддерживает Codex; для своего harness используйте
+`kind: custom`, `trusted: true` и фиксированный `argv`. Адаптер получает `--request FILE --result FILE`.
+Issue не может задавать исполняемую команду. Claude/OpenCode требуют явно настроенного собственного адаптера;
+готовность их нативного выполнения этим модулем не подтверждена.
+
+## Владение и приёмка
+
+Уже назначенные Issues пропускаются. Победитель атомарного создания служебного Git ref
+`task-tower/claims/issue-<immutable-id>` назначает настроенный GitHub assignee и проверяет результат.
+Покажите поле Assignees на Project: оно отображает тот же аккаунт. При общем аккаунте
+конкретного воркера различает worker/session ID в записи захвата, а не имя assignee.
+Публикация assignee не заменяет блокировку; два процесса не получают право исполнения из одной свободной карточки.
+
+Перед запуском фиксируется и подтверждается намерение исполнения. Потерянный ответ запуска,
+перезапуск или снятие assignee не разрешают повторный запуск. Автоматического удаления, TTL и
+перехвата захватов нет. Сохраняйте служебные refs и приватные протоколы для диагностики.
+Служебные claim-ветки исключены из push-триггера Portable CLI; кодовые ветки и PR сохраняют CI.
+До попадания этого исключения в main не проводите массовый пилот захватов: прежний workflow запускает CI на каждом ref.
+
+Каждая работа использует отдельный Git worktree в собственной приватной копии репозитория.
+Хост сохраняет фактические сведения процесса и проверяет служебные настройки Git перед чтением результата.
+Приватные Git-настройки проверяются в памяти; их содержимое не копируется в логи.
+Унаследованные `GIT_*` удаляются из окружения harness. Перед вызовом сохраняется приватный
+`execution-fence.json`: пока остановка всего дерева процессов не подтверждена, этот воркер
+не получает следующую задачу, в том числе после перезапуска. Не удаляйте fence ради повторного запуска.
+То же правило действует для каждого служебного Git-процесса до и после harness;
+его фактический результат сохраняется отдельно перед проверкой cleanup.
+`execution_completed` от harness переводит работу только в `awaiting_acceptance`; задача остаётся открытой.
+Независимая приёмка и подтверждённый main обязательны. Передача в существующий PR/main consumer ещё не закончена.
+
+Сейчас автоматически допускаются только явно разрешённые открытые autonomous-задачи без зависимостей;
+задачи с зависимостями блокируются до подключения проверяемого selector. Не снимайте зависимости ради запуска.
+Ошибки конфигурации/транспорта останавливают foreground-процесс с `needs_input`; supervisor/revoke/recovery требуют дальнейшей реализации.
+
+## Проверенные границы
+
+Два независимых Windows-процесса через общий HTTP fixture подтвердили единственный запуск,
+назначение assignee, перекрытие работ и заполнение свободного места третьей задачей.
+Использованы настоящие скрипты Superpowers и детерминированный harness.
+Это не реальный GitHub/LLM, не две машины и не доказательство ночной готовности.
+Переносимая логика сохраняется; нативная квалификация macOS/Linux остаётся следующей версией.
+
+Отдельный [реальный GitHub-пилот владения #69 и исправление Windows handles](shared-conveyor-evidence.md)
+проверяют серверную гонку и отказ повторного захвата. Его первоначальный cleanup failure сохранён;
+эта проверка не заменяет полный запуск модели, приёмку main или автоматическое закрытие.
+
+
+Scope amendment, explicit user decision 2026-11-04: all macOS/Linux actions, including CI, native/manual diagnostics and postmerge execution, are deferred to #58–#62. Current release execution and acceptance are Windows-only. Preserve portable code and historical receipts. Fresh Windows profiles must explicitly require windows; do not rewrite accepted history or treat old all-platform receipts as a new Windows acceptance.

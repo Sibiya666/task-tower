@@ -41,6 +41,10 @@ class _ProcessInfo(C.Structure):
                 ("pid", W.DWORD), ("tid", W.DWORD)]
 
 
+class _StartupInfoEx(C.Structure):
+    _fields_ = [("startup", _StartupInfo), ("attributes", C.c_void_p)]
+
+
 def _kernel():
     kernel = C.WinDLL("kernel32", use_last_error=True)
     declarations = {
@@ -56,6 +60,9 @@ def _kernel():
         "TerminateProcess": ([W.HANDLE, W.UINT], W.BOOL),
         "TerminateJobObject": ([W.HANDLE, W.UINT], W.BOOL),
         "CloseHandle": ([W.HANDLE], W.BOOL),
+        "InitializeProcThreadAttributeList": ([C.c_void_p, W.DWORD, W.DWORD, C.POINTER(C.c_size_t)], W.BOOL),
+        "UpdateProcThreadAttribute": ([C.c_void_p, W.DWORD, C.c_size_t, C.c_void_p, C.c_size_t, C.c_void_p, C.c_void_p], W.BOOL),
+        "DeleteProcThreadAttributeList": ([C.c_void_p], None),
     }
     for name, (args, result) in declarations.items():
         function = getattr(kernel, name)
@@ -79,10 +86,24 @@ class WindowsJobProcess:
                 files = [stdin, stdout, stderr]
                 handles = [msvcrt.get_osfhandle(file.fileno()) for file in files]
                 old_inheritance = [os.get_handle_inheritable(handle) for handle in handles]
-                startup = _StartupInfo()
-                startup.cb, startup.flags = C.sizeof(startup), 0x100
-                startup.stdin, startup.stdout, startup.stderr = handles
+                startup = _StartupInfoEx()
+                startup.startup.cb, startup.startup.flags = C.sizeof(startup), 0x100
+                startup.startup.stdin, startup.startup.stdout, startup.startup.stderr = handles
+                size = C.c_size_t()
+                kernel.InitializeProcThreadAttributeList(None, 1, 0, C.byref(size))
+                if not size.value:
+                    raise C.WinError(C.get_last_error())
+                attributes = C.create_string_buffer(size.value)
+                if not kernel.InitializeProcThreadAttributeList(attributes, 1, 0, C.byref(size)):
+                    raise C.WinError(C.get_last_error())
+                startup.attributes = C.cast(attributes, C.c_void_p)
                 try:
+                    # Restrict inheritance to these three streams. Other workers
+                    # may have temporarily inheritable handles in this process.
+                    inherited = (W.HANDLE * len(handles))(*handles)
+                    if not kernel.UpdateProcThreadAttribute(startup.attributes, 0, 0x00020002,
+                            inherited, C.sizeof(inherited), None, None):
+                        raise C.WinError(C.get_last_error())
                     for handle in handles:
                         os.set_handle_inheritable(handle, True)
                     command = C.create_unicode_buffer(subprocess.list2cmdline(argv))
@@ -90,12 +111,13 @@ class WindowsJobProcess:
                         key + "=" + value for key, value in sorted(env.items(), key=lambda item: item[0].upper())) + "\0\0")
                     # No command runs before successful assignment to the job.
                     if not kernel.CreateProcessW(argv[0], command, None, None, True,
-                                                 0x08000404, environment, str(cwd),
-                                                 C.byref(startup), C.byref(self.info)):
+                                                 0x08080404, environment, str(cwd),
+                                                 C.cast(C.byref(startup), C.POINTER(_StartupInfo)), C.byref(self.info)):
                         raise C.WinError(C.get_last_error())
                 finally:
                     for handle, old in zip(handles, old_inheritance):
                         os.set_handle_inheritable(handle, old)
+                    kernel.DeleteProcThreadAttributeList(startup.attributes)
             if not kernel.AssignProcessToJobObject(self.job, self.info.process):
                 raise C.WinError(C.get_last_error())
             if kernel.ResumeThread(self.info.thread) == 0xFFFFFFFF:
