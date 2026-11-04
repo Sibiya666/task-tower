@@ -1,27 +1,39 @@
 # Task Tower — Башня агентов
 
-В этой ветке добавляется [общий GitHub-конвейер](docs/shared-conveyor.md): независимые воркеры атомарно берут Issues, назначают исполнителя, запускают подготовленные планы через Superpowers и получают следующие задачи. Локальная проверка двух процессов пройдена; реальный GitHub-пилот и полный цикл независимой приёмки ещё не завершены.
+Task Tower показывает проекты, сессии и агентов в прозрачном Windows-оверлее. **Текущий движок задач — Beads/Dolt**: задачи, зависимости, исполнители и история хранятся в Beads, а книжки Task Tower читают их через локальный адаптер. Процесс разработки остаётся основанным на **Superpowers**.
 
-Postmerge worker получает свежий `main` с отдельным сетевым лимитом fetch 60 секунд; локальные проверки Git ограничены 10 секундами. Ошибка fetch не разрешает приёмку или закрытие Issue. [Запуск и диагностика worker](docs/postmerge-worker.md).
+## Текущая архитектура
 
-Границы текущего релиза: новые нативные pipeline, группы и OpenCode квалифицируются для Windows. Нативные Linux/macOS вынесены в [следующую версию #58](https://github.com/Sibiya666/task-tower/issues/58); переносимый код сохраняется, но все проверки и работы macOS/Linux, включая CI/postmerge, отложены; текущий релиз проверяется только на Windows. [Матрица поддержки и задачи](docs/platform-support.md).
+| Компонент | Ответственность |
+| --- | --- |
+| Beads / Dolt | Задачи, эпики, зависимости, захват исполнителем и журнал изменений |
+| Superpowers | Обсуждение, спека, план, реализация, тестирование и независимая приёмка |
+| Task Tower | Оверлей, книжки, отображение исполнителей и интеграция с источниками / harness |
+| GitHub | Код, PR, CI и принятый результат в main; прежние Issues сохраняют историю |
+| Markdown проекта | Идеи, спеки, исследования, решения и отчёты со ссылками из задач |
 
-Один проект для организации агентной разработки и её визуализации. Проекты представлены фэнтезийными башнями, сессии — этажами, агенты — сотрудниками внутри помещений.
+Первый этап работает **на одной Windows-машине с embedded Beads**. В main добавлен read-only источник книжек: задачи и их хронология, иерархия, зависимости и исполнители. Настройка opt-in; по умолчанию Beads не устанавливается, существующие проекты и настройки не мигрируются. [Подключение локального Beads](docs/local-beads-books.md).
 
-Сейчас работают **прозрачный Windows-оверлей** с локальными данными Codex, **CLI аудита готовности проектов**, bootstrap установленного harness и независимая приёмка после слияния. Подключения GitHub-проектов, три книги в CLI/HTML и очередь приёмки для self-hosted runners настраиваются отдельно; доступен [foreground-исполнитель Codex/custom](docs/executor.md) с устойчивой локальной очередью; локальный pipeline автоматических этапов реализован в этой ветке и проходит приёмку; автоматическое слияние остаётся в #17. Оверлей наблюдает за работой и сам не запускает агентов.
+Это ещё не постоянный пул агентов: адаптер книжек не запускает модели, не выполняет автоматический merge и не закрывает задачи. Настоящие процессы, CI и приёмка проверяются отдельно; `closed` в источнике не является доказательством принятого кода. Embedded-режим допускает одного писателя за раз. VPS, HTTP/server, несколько машин и Linux/macOS — отдельные будущие этапы, без текущего развёртывания.
 
-У каждого подключённого проекта свои Issues, GitHub Project и Markdown-артефакты. Приватный список подключений принадлежит установке, а не репозиторию продукта. [Подключения и книги](docs/github-books.md), [распределённая приёмка и установка runners](docs/github-projects.md).
+## Подключение задач к книжкам
 
-[Процесс непрерывной и параллельной разработки](docs/development-process.md): после явной авторизации бэклога координатор запускает готовые независимые задачи по доступной ёмкости исполнителей, ресурсам и явным бюджетам, без фиксированного потолка «две задачи», и сам заполняет свободную ёмкость. Рабочие копии и приёмка раздельны; слияние и проверка main последовательны в каждом репозитории. Локальный исполнитель описан в [инструкции](docs/executor.md), pipeline этапов — в [операторском руководстве](docs/pipeline.md). Текущий runtime v1 сохраняет первоначальный предел в два слота; перенос ресурсной политики в runtime выполняется в #18. Третий установленный Codex-пилот прошёл шесть настоящих ролей, три одобрения и host-check до ready_for_pr; независимый аудит относится к source8981c6d и тестовому GitHub-транспорту. Свежие проверки ветки и main остаются обязательными. Группы и распределённое владение развиваются в #18/#19.
+Используйте существующий проект Beads и включите журнал до работы: `bd config set events-journal true`. Создайте приватный конфиг с абсолютными путями к `bd.exe` и каталогу проекта по [инструкции](docs/local-beads-books.md), затем запустите оверлей:
 
+```powershell
+$env:TASK_TOWER_BEADS = 'C:/Private/task-tower-beads.json'
+& ./overlay/overlay.ps1
+```
 
-Книжная полка: «Идеи» хранит предложения, «Задачи» — этапы Milestone, крупные фичи в родительских Issues и их подзадачи, «Библиотека проекта» — связанные спеки, исследования и результаты. Этап и фича — отдельные связи: фича может проходить через несколько этапов. CLI/HTML сохраняет плоский список; оверлей добавляет иерархические книги через контекстное меню или Ctrl+B. Перед запуском задайте `TASK_TOWER_CONNECTIONS` с путём к личным подключениям: [инструкция](overlay/README.md#книги-проекта). Native-приёмка этой интеграции #23 фиксируется отдельно от браузерных тестов.
+Ctrl+B открывает книжки. «Задачи» показывают данные Beads; в деталях находится «Хронология Beads». Пути к исполняемому файлу и базе остаются в native host. Пустая, выключенная или неполная история помечается явно, без выдуманных событий. «Идеи» и «Библиотека проекта» остаются отдельными контейнерами; локальное сканирование Markdown этот первый Beads-адаптер ещё не добавляет. Старые GitHub-источники других репозиториев продолжают работать; автоматического переноса бэклога нет.
 
-Для нового подключения сначала настройте GitHub CLI и создайте/подключите Project, затем импортируйте Issues: [пошаговая настройка с чистого clone](docs/github-setup.md). Bootstrap принимает явные GitHub-флаги и останавливает запуск при отказе Projects; локальный запуск без них не доказывает GitHub-готовность. [Roadmap и реальные Issues 13–28](docs/roadmap.md): фундамент #24, #14, #22, #15 и книги #23 прошли exact-main приёмку и автоматическое закрытие к main56f8ab1. Актуальные фазы и зависимости смотрите в [Issues](https://github.com/Sibiya666/task-tower/issues) и [Project](https://github.com/users/Sibiya666/projects/2). Исполнитель запускается явно через `executor work --once`; pipeline `work --once`/`watch` описан отдельно. Наличие команды не доказывает готовность без присмотра.
+## Переход с прежнего конвейера
 
-Работающий локальный watcher также может [публиковать успешную приёмку и закрывать связанную Issue](docs/github-publication.md). Для этого в приватной конфигурации явно задаются сопоставления задач и доверенный аккаунт; установка self-hosted runner для этого режима не требуется.
+Разработка собственной GitHub-очереди, графа этапов и группового SQLite runtime остановлена по решению владельца. Старые варианты реализации и пилоты архивируются как `not_planned`, **не как выполненная работа**. Черновики PR #43, #67 и #68 закрыты без слияния. Старые карточки #13, #17, #18, #20, #21, #65, #69, #71 и #73 отменены как `not_planned`. Исследования, общие будущие требования и платформенный бэклог сохранены; #66 остаётся задачей следующей версии. Исходные ветки, WIP, claims/fences, журналы и доказательства сохраняются; неизвестные запуски не повторяются.
 
-Windows shared workers can hand task identities to the existing local pipeline before model execution: [operator profile and safety boundaries](docs/shared-conveyor.md#windows-pipeline-handoff). The pipeline creates its own independent stage evidence. This handoff does not establish real GitHub/model/multi-machine readiness, accepted main or automatic closure.
+[Прежняя архитектура](docs/superpowers/specs/2026-11-01-agent-development-architecture-design.md), [GitHub-конвейер](docs/shared-conveyor.md), [dispatcher](docs/dispatcher.md), [pipeline](docs/pipeline.md) и [группы](docs/development-process.md) остаются историческими/совместимыми компонентами, а не активным планом нового движка. Не возобновляйте их реализацию только по старому Issue или плану. Сохраняемые исследования и будущие платформенные требования нужно оценивать относительно Beads; закрытие старой реализации не означает готовность ночного или многомашинного режима.
+
+Новая задача считается завершённой после принятого результата в main, требуемого CI и независимой проверки. Слияния проекта сериализуются; PR-приёмка привязана к точным head/base. Разрешения на репозитории, аккаунты и настройки не расширяются сменой движка. Оверлей сам по себе не запускает агентов.
 
 ## Скриншоты
 
@@ -97,7 +109,7 @@ Windows, Windows PowerShell 5.1 с WPF, WebView2 Runtime и Python 3.11+.
 ## Структура
 
 ```text
-task_tower/       CLI аудита готовности (Python standard library)
+task_tower/       CLI готовности, источники книжек и исторические интеграции (Python standard library)
 tests/           тесты CLI
 examples/        манифесты проектов
 overlay/         Windows-хост, сборщик, UI, графика и тесты оверлея
@@ -109,7 +121,7 @@ docs/            архитектура, планы, отчёты, скринш�
 
 ## CLI готовности
 
-Получение merge-событий, отдельный агент-приёмщик и обновление карточек: [postmerge worker](docs/postmerge-worker.md).
+CLI аудита готовности сохранён как отдельный инструмент; он не становится исполнителем задач Beads. Историческая обработка GitHub merge-событий описана в [postmerge worker](docs/postmerge-worker.md).
 
 ```powershell
 python -m task_tower audit --project C:/path/to/project --manifest examples/dialoid.project.json --output ../runtime/readiness.json
@@ -123,27 +135,21 @@ python -m task_tower audit --project C:/path/to/project --manifest examples/dial
 python -m unittest discover -s tests -v
 Push-Location overlay
 python -m unittest -v
-node --test test-web.cjs test-room-skins.cjs test-presence.cjs test-presence-browser.cjs test-scene-position.cjs test-session-light.cjs test-tower-arrivals.cjs test-world-policy.cjs test-world-browser.cjs test-visual-audit.cjs
+node --test test-books-policy.cjs test-books-host.cjs test-books-browser.cjs test-web.cjs test-room-skins.cjs test-presence.cjs test-presence-browser.cjs test-scene-position.cjs test-session-light.cjs test-tower-arrivals.cjs test-world-policy.cjs test-world-browser.cjs test-visual-audit.cjs
 powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File overlay.ps1 -SmokeTest
 Pop-Location
 ```
 
-Браузерным тестам нужны Playwright, Sharp и установленный Edge. Пути к bundled Node-модулям Codex сейчас машинно-зависимы. Нативная проверка использует реальные данные, сохраняет PNG в игнорируемую `overlay/runtime/` и закрывает тестовое окно.
+Браузерным тестам нужны Playwright, Sharp и установленный Edge. Пути к bundled Node-модулям Codex сейчас машинно-зависимы. Нативный smoke проверяет host и включает детерминированные Books-фикстуры; живой источник данных проверяется отдельно. Он сохраняет PNG в игнорируемую `overlay/runtime/` и закрывает тестовое окно; синтетический ввод не заменяет проверку настоящей клавиатуры.
 
 ## Разработка
 
-См. [AGENTS.md](AGENTS.md), [архитектуру](docs/superpowers/specs/2026-11-01-agent-development-architecture-design.md) и [устройство оверлея](overlay/README.md). Не выдавайте планы оркестрации за реализованные возможности.
+См. [AGENTS.md](AGENTS.md), [текущий локальный Beads-источник](docs/local-beads-books.md) и [устройство оверлея](overlay/README.md). Прежняя архитектурная спека сохранена как история; не выдавайте планы оркестрации за реализованные возможности.
 
 Графика создана через imagegen; исходники и промпты находятся в `overlay/assets/`. Эффекты PixelFX имеют MIT license и дополнительные атрибуции в `overlay/vendor/pixelfx/`. Условия WebView2 SDK сохранены в `overlay/vendor/webview2/sdk/`. Лицензия всего проекта отдельно не назначена.
 
-## Foreground Issue dispatcher
+## Исторические интеграции
 
-`python -m task_tower dispatcher --connections PRIVATE_CONNECTIONS --config PRIVATE_CONFIG --journal PRIVATE_JOURNAL --once` delivers authorized ready identities to a trusted custom adapter. See [configuration, recovery and limits](docs/dispatcher.md). The default dispatcher polls in the foreground; delivery is not development execution or accepted task completion. Current task phases and integration receipts belong in repository Issues and the linked Project. The local [stage pipeline](docs/pipeline.md) coordinates bounded independently reviewed stages. Its third installed Codex pilot reached ready_for_pr after six real roles, three approvals and a host check at source8981c6d with fixture GitHub transport; every release still requires its own current CI and integration acceptance. Two slots overlap across different repositories while same-repository actions serialize. Explicit publication may create a PR; this pipeline never merges or closes an Issue.
+Существующие [GitHub-книги](docs/github-books.md), [Project-first setup](docs/github-setup.md), [postmerge worker](docs/postmerge-worker.md), [executor](docs/executor.md) и [захват сессий](docs/session-capture.md) сохраняются для совместимости и аудита. Их инструкции не делают GitHub Issues каноническим источником новых Beads-задач и не разрешают автоматически восстанавливать старое исполнение.
 
-Active-chat authorization continues to the next eligible backlog task after every main/postmerge/Issue-closure cycle without another continue. It does not establish a background development daemon.
-
-## Explicit session capture
-
-[Capture, idea promotion and legacy migration](docs/session-capture.md) use explicit input and the selected project. Original text/session provenance and native parent/milestone links are retained. Ideas do not execute implicitly; migration keeps the original card/evidence bytes and exposes drift while GitHub remains canonical. No all-chat scraping or Codex database writes are involved.
-
-Local Beads tasks and chronology can feed the desktop Books without GitHub task polling. Configure the read-only Windows source through [local Beads setup](docs/local-beads-books.md); closed source cards do not grant code/main acceptance.
+Superpowers остаётся обязательной основой; [AGENTS.md](AGENTS.md) задаёт текущие границы работы агента. Сначала прочитайте актуальную задачу Beads и связанную спеку, затем используйте изолированную рабочую копию и независимую приёмку. Статусы в книжках, зелёный отдельный тест и ответ модели не заменяют проверяемый результат.
