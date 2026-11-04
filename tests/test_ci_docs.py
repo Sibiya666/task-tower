@@ -64,7 +64,14 @@ class DocsTests(unittest.TestCase):
         head = self.merge()
         api = self.api()
         self.assertEqual(api.classify(self.repo)['mode'], 'docs')
-        self.assertEqual(api.classify(os.path.relpath(self.repo))['mode'], 'docs')
+        original_cwd = Path.cwd()
+        try:
+            # The checkout and Windows temp directory can use different drives.
+            # Establish a parent on the fixture's drive before using a relative path.
+            os.chdir(self.repo.parent)
+            self.assertEqual(api.classify(self.repo.name)['mode'], 'docs')
+        finally:
+            os.chdir(original_cwd)
         report = self.validate()
         self.assertEqual((report['head'], report['base']), (head, self.base))
         self.assertEqual((report['kind'], report['runtime_tests']), ('documentation.validation', 'not_run'))
