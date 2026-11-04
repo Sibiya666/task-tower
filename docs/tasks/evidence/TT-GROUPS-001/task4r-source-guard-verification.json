@@ -1,0 +1,262 @@
+{
+  "candidate": {
+    "base": "b39091b97ee2cd38a757a4e40ecc184ae0850b3b",
+    "files": {
+      "task_tower/group_supervision.py": "7502aa51aba7296b5e733f951d23e3c7211eb83cdc2008d208e3f4a066a582de",
+      "task_tower/_group_source.py": "c76ade30ecd3e423f69e0277f9a988b6d4598b2db124aa0dd42a85f034a7cb11",
+      "task_tower/processes.py": "a1cf4933a891a7f2f041405340892005388eebbd973689b9cba8ae7db0896f7e",
+      "task_tower/source_deadline.py": "15d3aa68d984437271c74a635248ad78feb7ebb4b3bbf8f27a4aa7c041efa265",
+      "task_tower/github_source.py": "d6e8a77bad7b62e72e36d57382fe7a4762caaceb0670577168a6a15594b7c67b",
+      "task_tower/github_tasks.py": "7d081dd0c1449112f351c1dc42c7d9e1116ebb03dfba68f652ac38639ec666a0",
+      "task_tower/executor_worker.py": "28e6850a471c675e825fab806262d775a618178c3d8f02df131b14b8a935536d",
+      "task_tower/group_preparation.py": "0a243d56bcc9274c241a975689fcc4774a1580ac133df759b0a94ccb306b3627",
+      "tests/test_group_supervision.py": "7d824d709582d01f00df5e63139b6223f4c4e65b10305b722de12abacd02659a",
+      "tests/test_source_deadline.py": "56304049193e358cd517af15f347d31c074a212bbc626cbc43f5fa7cdfcec483",
+      "tests/test_group_preparation.py": "7d167ca479508df4a913f0dfc5e150b1ed6e8301ceb94cd5b4eb7dce813b5822",
+      "docs/superpowers/specs/2026-11-04-group-source-supervision-contract.md": "26642424e196c8b1064d5955e94d9b31914ede53d63b90131d1db8878ab050dc",
+      "docs/superpowers/specs/2026-11-03-group-initial-claim-workspace-contract.md": "eb88d9264367103d280b9cd21bdde85f31a7dc65ae340476f98cc36b8e27e226"
+    }
+  },
+  "checks": {
+    "groups18-supervision-parser-red": {
+      "argv": [
+        "C:\\Users\\sibiya666\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.test_group_supervision",
+        "-v"
+      ],
+      "runner_release": "7586df4ac2e59316521463b7526089c8314024e4",
+      "source_unchanged": true,
+      "verified_success": false,
+      "result": {
+        "status": "failed",
+        "exit_code": 1,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 216964,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 0,
+        "stdout_captured_bytes": 0,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "099297179a5ee3fcf11dfdd19a173492c1b5dfc63f835d6892f148a84d93ed03",
+        "stderr_bytes": 3375,
+        "stderr_captured_bytes": 3375,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 0.328
+      },
+      "runner_sha256": "cf4f2e5732a7b089f69a0eb96b853056aaac8b9409f13a9c302ca0908243c488"
+    },
+    "groups18-supervision-native-source-red": {
+      "argv": [
+        "C:\\Users\\sibiya666\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.test_group_supervision.GroupSupervisionTests.test_actual_source_child_and_descendant_are_killed_at_original_phase_deadline",
+        "-v"
+      ],
+      "runner_release": "7586df4ac2e59316521463b7526089c8314024e4",
+      "source_unchanged": true,
+      "verified_success": false,
+      "result": {
+        "status": "failed",
+        "exit_code": 1,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 218756,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 0,
+        "stdout_captured_bytes": 0,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "71bd49a8844a90953258b903cce8032fcaab088008186a07a2744dcfd39af6a7",
+        "stderr_bytes": 1149,
+        "stderr_captured_bytes": 1149,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 1.359
+      },
+      "runner_sha256": "cf4f2e5732a7b089f69a0eb96b853056aaac8b9409f13a9c302ca0908243c488"
+    },
+    "groups18-supervision-native-source-green": {
+      "argv": [
+        "C:\\Users\\sibiya666\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.test_group_supervision",
+        "tests.test_processes",
+        "tests.test_executor_processes",
+        "tests.test_process_pid",
+        "-v"
+      ],
+      "runner_release": "7586df4ac2e59316521463b7526089c8314024e4",
+      "source_unchanged": true,
+      "verified_success": true,
+      "result": {
+        "status": "passed",
+        "exit_code": 0,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 218468,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 0,
+        "stdout_captured_bytes": 0,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "b3dd85c094724ce41d70a1cce1dad3ee24b3d7e0d3c2f81fad82f46dbccd6f1d",
+        "stderr_bytes": 5083,
+        "stderr_captured_bytes": 5083,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 16.125
+      },
+      "runner_sha256": "cf4f2e5732a7b089f69a0eb96b853056aaac8b9409f13a9c302ca0908243c488"
+    },
+    "groups18-supervision-mandatory-deadline-red": {
+      "argv": [
+        "C:\\Users\\sibiya666\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.test_group_supervision.GroupSupervisionTests.test_actual_source_child_and_descendant_are_killed_at_original_phase_deadline",
+        "-v"
+      ],
+      "runner_release": "7586df4ac2e59316521463b7526089c8314024e4",
+      "source_unchanged": true,
+      "verified_success": false,
+      "result": {
+        "status": "failed",
+        "exit_code": 1,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 211576,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 0,
+        "stdout_captured_bytes": 0,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "7bdcb9630389f4474cf8119f9832d9fe8bd799dec65dd3f9421f8ce4e680e3e8",
+        "stderr_bytes": 1602,
+        "stderr_captured_bytes": 1602,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 4.438
+      },
+      "runner_sha256": "cf4f2e5732a7b089f69a0eb96b853056aaac8b9409f13a9c302ca0908243c488"
+    },
+    "groups18-supervision-mandatory-deadline-green": {
+      "argv": [
+        "C:\\Users\\sibiya666\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.test_group_supervision",
+        "tests.test_processes",
+        "tests.test_executor_processes",
+        "tests.test_process_pid",
+        "tests.test_source_deadline",
+        "-v"
+      ],
+      "runner_release": "7586df4ac2e59316521463b7526089c8314024e4",
+      "source_unchanged": true,
+      "verified_success": true,
+      "result": {
+        "status": "passed",
+        "exit_code": 0,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 219152,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 0,
+        "stdout_captured_bytes": 0,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "5fd7b017d79e7af45d57bcb6527bd34a7fd3a17ab842477878108ff0c2cd93d1",
+        "stderr_bytes": 5395,
+        "stderr_captured_bytes": 5395,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 16.078
+      },
+      "runner_sha256": "cf4f2e5732a7b089f69a0eb96b853056aaac8b9409f13a9c302ca0908243c488"
+    },
+    "groups18-fixed-source-helper-red": {
+      "argv": [
+        "C:\\Users\\sibiya666\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.test_group_supervision.GroupSupervisionTests.test_actual_fixed_source_helper_reads_registered_empty_queue_without_journal_writes",
+        "-v"
+      ],
+      "runner_release": "7586df4ac2e59316521463b7526089c8314024e4",
+      "source_unchanged": true,
+      "verified_success": false,
+      "result": {
+        "status": "failed",
+        "exit_code": 1,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 221068,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 0,
+        "stdout_captured_bytes": 0,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "016cc59c012fbdcd054e277ae4eb60845e511c18c001e2ddce76b94be24a2251",
+        "stderr_bytes": 1223,
+        "stderr_captured_bytes": 1223,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 0.297
+      },
+      "runner_sha256": "cf4f2e5732a7b089f69a0eb96b853056aaac8b9409f13a9c302ca0908243c488"
+    },
+    "groups18-source-guard-final-green": {
+      "argv": [
+        "C:\\Users\\sibiya666\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe",
+        "-B",
+        "-m",
+        "unittest",
+        "tests.test_group_supervision",
+        "tests.test_group_preparation",
+        "tests.test_source_deadline",
+        "tests.test_processes",
+        "tests.test_executor_processes",
+        "tests.test_process_pid",
+        "tests.test_group_registration",
+        "tests.test_group_queued_admission",
+        "tests.test_github_source",
+        "tests.test_group_graph",
+        "-v"
+      ],
+      "runner_release": "7586df4ac2e59316521463b7526089c8314024e4",
+      "source_unchanged": true,
+      "verified_success": true,
+      "result": {
+        "status": "passed",
+        "exit_code": 0,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 221140,
+        "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_bytes": 0,
+        "stdout_captured_bytes": 0,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "5cb88487b1cdbce1b197684bb8d88a0ba7cfba3bba79964ddbcdc6b7c4a4df26",
+        "stderr_bytes": 20413,
+        "stderr_captured_bytes": 20413,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 67.594
+      },
+      "runner_sha256": "cf4f2e5732a7b089f69a0eb96b853056aaac8b9409f13a9c302ca0908243c488"
+    }
+  }
+}

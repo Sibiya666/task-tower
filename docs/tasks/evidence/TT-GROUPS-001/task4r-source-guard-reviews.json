@@ -1,0 +1,282 @@
+{
+  "groups18-preparation-native-review": {
+    "host_only_capture_limit_bytes": 1048576,
+    "qualified_current_review": true,
+    "source_unchanged": true,
+    "binary_unchanged": true,
+    "result": {
+      "status": "passed",
+      "exit_code": 0,
+      "started": true,
+      "cleanup_confirmed": true,
+      "pid": 211388,
+      "stdout_sha256": "b13ee73eb3a69c433b1c10f01948bcfd33874c1bde08696428c54ffe46ab8dea",
+      "stdout_bytes": 219682,
+      "stdout_captured_bytes": 219682,
+      "stdout_tail_unknown": false,
+      "stdout_truncated": false,
+      "stderr_sha256": "cf4bb7681078c4b1cd6a0b889715ca26b26dcbf686ed8cfc0606748037871d9e",
+      "stderr_bytes": 9893,
+      "stderr_captured_bytes": 9893,
+      "stderr_tail_unknown": false,
+      "stderr_truncated": false,
+      "duration_seconds": 75.688
+    },
+    "verdict": {
+      "run_id": "ecbdbb42-58d3-466d-99d8-53521c835c01",
+      "attempt_id": "58fc3a0d-0870-4bea-b7b8-e198895e3072",
+      "instance_id": "cf990bf9-3998-4c7f-9448-9eb41c2fc60d",
+      "stage": "development",
+      "generation": 1,
+      "source_sha": "b39091b97ee2cd38a757a4e40ecc184ae0850b3b",
+      "checkpoint_sha": "b39091b97ee2cd38a757a4e40ecc184ae0850b3b",
+      "input_sha256": "099f8a9e4851845b9f650ca53fd630b0babe6c4d1add787c3c74d484df871475",
+      "version": 2,
+      "summary": "Reject bounded preparation: source collection does not preserve the original operation deadline. collect_snapshot, native relationship pagination and observe_results receive no remaining-time budget; their repeated HTTP calls use independent 30-second timeouts. Registration revalidation detects expiry only after those calls return, so collection can substantially exceed its 60-second deadline. Propagate and enforce the remaining deadline through production source readers and test exhaustion during collection. Candidate and pinned instruction hashes match; inspected capture records 60 passing tests with unchanged inputs, but lacks deadline coverage. Claims/workspace/execution remain outside this bounded review.",
+      "verdict": "reject",
+      "return_stage": "development",
+      "findings": [
+        {
+          "code": "criteria_unmet",
+          "path": "task_tower/group_preparation.py",
+          "line": 56
+        }
+      ]
+    },
+    "validation_error": null,
+    "runner_sha256": "d6ebadcbabca155cbb6775b2c8cb94c0235c237cedc8719be039f498ff3e10b4"
+  },
+  "groups18-source-supervision-contract-native-review": {
+    "host_only_capture_limit_bytes": 1048576,
+    "qualified_current_review": true,
+    "source_unchanged": true,
+    "binary_unchanged": true,
+    "result": {
+      "status": "passed",
+      "exit_code": 0,
+      "started": true,
+      "cleanup_confirmed": true,
+      "pid": 218532,
+      "stdout_sha256": "d2a09487de205946ad8c768565abff5260011a06d27d1c1e98e7681192a16106",
+      "stdout_bytes": 116887,
+      "stdout_captured_bytes": 116887,
+      "stdout_tail_unknown": false,
+      "stdout_truncated": false,
+      "stderr_sha256": "32ac112776ac8ab4b4c24f45e3657fdc234443659634efbd7a38163042d10292",
+      "stderr_bytes": 6891,
+      "stderr_captured_bytes": 6891,
+      "stderr_tail_unknown": false,
+      "stderr_truncated": false,
+      "duration_seconds": 44.922
+    },
+    "verdict": {
+      "run_id": "49c66ebc-2665-475c-b46e-b2823674a17a",
+      "attempt_id": "959d8c76-a7f2-42a6-a0ec-b9e45e181037",
+      "instance_id": "0e83e3fa-d5b8-448f-976d-1935ddc7ee65",
+      "stage": "spec",
+      "generation": 1,
+      "source_sha": "b39091b97ee2cd38a757a4e40ecc184ae0850b3b",
+      "checkpoint_sha": "b39091b97ee2cd38a757a4e40ecc184ae0850b3b",
+      "input_sha256": "fbe898d82cc99c6683fd85fadb2d37d57f7b24b9a452b93fb9acd6857177b9e2",
+      "version": 2,
+      "summary": "Reject spec only. The genuine persistent child boundary addresses blocking source calls and preserves child ownership, but two supervision contracts remain incomplete. At line 15, frames lack a defined task identity and original deadline/budget binding: specify how the parent learns and retains the actual unchanged task deadline, validates phase membership, and prevents later action/phase UUIDs from replacing it without journal access. At line 21, startup is merely described as bounded and supervision after a phase end is undefined: specify finite startup and interphase bounds, explicit legitimate idle states, unexpected EOF/child-exit handling, and cancellation coverage throughout transitions. Add fault tests for missing next frames, silent live children after phase end, and deadline preservation across task/action transitions. No implementation or readiness approval is granted.",
+      "verdict": "reject",
+      "return_stage": "spec",
+      "findings": [
+        {
+          "code": "plan_incomplete",
+          "path": "docs/superpowers/specs/2026-11-04-group-source-supervision-contract.md",
+          "line": 15
+        },
+        {
+          "code": "plan_incomplete",
+          "path": "docs/superpowers/specs/2026-11-04-group-source-supervision-contract.md",
+          "line": 21
+        }
+      ]
+    },
+    "validation_error": null,
+    "runner_sha256": "3db9a92115414bee505c2d64425ace9a94d5d7f058d74db693d243908ecbcc7b"
+  },
+  "groups18-source-supervision-contract-fix1-native-review": {
+    "host_only_capture_limit_bytes": 1048576,
+    "qualified_current_review": true,
+    "source_unchanged": true,
+    "binary_unchanged": true,
+    "result": {
+      "status": "passed",
+      "exit_code": 0,
+      "started": true,
+      "cleanup_confirmed": true,
+      "pid": 213628,
+      "stdout_sha256": "95baef0418fc2544e91fef235ee72c6a477126796fd1f4b6fa67c0db8053407e",
+      "stdout_bytes": 70291,
+      "stdout_captured_bytes": 70291,
+      "stdout_tail_unknown": false,
+      "stdout_truncated": false,
+      "stderr_sha256": "af45b94398f72048e4e3dbc9a64bb60755c645f467b57275bcd057ecc1ab4840",
+      "stderr_bytes": 6169,
+      "stderr_captured_bytes": 6169,
+      "stderr_tail_unknown": false,
+      "stderr_truncated": false,
+      "duration_seconds": 47.828
+    },
+    "verdict": {
+      "run_id": "31d2cd40-7214-45cd-8c5f-f34cb684960d",
+      "attempt_id": "007de8fa-880e-4ec6-ade9-ec129f8e43e6",
+      "instance_id": "89597202-f59b-4633-a0d2-5c06d23fe6c0",
+      "stage": "spec",
+      "generation": 1,
+      "source_sha": "b39091b97ee2cd38a757a4e40ecc184ae0850b3b",
+      "checkpoint_sha": "b39091b97ee2cd38a757a4e40ecc184ae0850b3b",
+      "input_sha256": "45dd68bdef705884a3311ca5b98ecb2d8441767808ef6c112865c1bc700e01b8",
+      "version": 2,
+      "summary": "Reject specification only. The closed phase_start shape identifies only phase_kind and run_id; it lacks the role/check/action identity needed to select and enforce the corresponding unchanged parent-held profile/action limit. Define that binding and mismatch tests, or an explicit conservative limit valid for every possible member. Channel frame/parser/phase-retention bounds are also asserted but never specified; define concrete caps and overflow behavior. Startup, interphase, EOF and original-task deadline supervision otherwise address the prior architectural objections. No implementation acceptance is granted.",
+      "verdict": "reject",
+      "return_stage": "spec",
+      "findings": [
+        {
+          "code": "plan_incomplete",
+          "path": "docs/superpowers/specs/2026-11-04-group-source-supervision-contract.md",
+          "line": 30
+        },
+        {
+          "code": "plan_incomplete",
+          "path": "docs/superpowers/specs/2026-11-04-group-source-supervision-contract.md",
+          "line": 15
+        }
+      ]
+    },
+    "validation_error": null,
+    "runner_sha256": "2d3ab95912edc7d5698c434c85650e592c6f66a9e88a3f7a64f20ca23d31a0b8"
+  },
+  "groups18-source-supervision-contract-fix2-native-review": {
+    "host_only_capture_limit_bytes": 1048576,
+    "qualified_current_review": true,
+    "source_unchanged": true,
+    "binary_unchanged": true,
+    "result": {
+      "status": "passed",
+      "exit_code": 0,
+      "started": true,
+      "cleanup_confirmed": true,
+      "pid": 212012,
+      "stdout_sha256": "ecdf8134ca8a3a493c6fabfa5cd9bd58d8e4df63d28dbc4fb35349fbf471765b",
+      "stdout_bytes": 101735,
+      "stdout_captured_bytes": 101735,
+      "stdout_tail_unknown": false,
+      "stdout_truncated": false,
+      "stderr_sha256": "13f95d44c99d41f7a15835d2d0676328d68c81a134e5dec590a15c17c25b6a8f",
+      "stderr_bytes": 8622,
+      "stderr_captured_bytes": 8622,
+      "stderr_tail_unknown": false,
+      "stderr_truncated": false,
+      "duration_seconds": 57.219
+    },
+    "verdict": {
+      "run_id": "11c18560-5fa7-4ec8-8cfd-84c5a26a8906",
+      "attempt_id": "9fdb5c65-3ee7-4bbd-a5af-0c8ebf6c7d3a",
+      "instance_id": "1b31f7de-61f8-4929-b116-d3e71c67e3a7",
+      "stage": "spec",
+      "generation": 1,
+      "source_sha": "b39091b97ee2cd38a757a4e40ecc184ae0850b3b",
+      "checkpoint_sha": "b39091b97ee2cd38a757a4e40ecc184ae0850b3b",
+      "input_sha256": "2b81000d58bce56726ca411eb568c70b93d00268511433fbf9b8e397cb16d1c4",
+      "version": 2,
+      "summary": "Verified candidate hash and HEAD. Containment, original task binding and bounded channel substantially address prior objections, but the closed wire contract remains incomplete: lines 30\u201334 explicitly permit claimed-task source refresh, while line 45 defines action_id/member/member_sha256/profile_sha256 only for UNCLAIMED source phases. Specify the exact claimed-source identity fields, parent-held lookup and deadline cap, with positive refresh and mismatch tests; otherwise implementations must invent an acceptance rule or reject a required lifecycle transition. Spec review only; implementation and readiness remain unapproved.",
+      "verdict": "reject",
+      "return_stage": "spec",
+      "findings": [
+        {
+          "code": "plan_incomplete",
+          "path": "docs/superpowers/specs/2026-11-04-group-source-supervision-contract.md",
+          "line": 45
+        }
+      ]
+    },
+    "validation_error": null,
+    "runner_sha256": "1783e59719a760a40a1ac189a2cdaefa5966daade80c2b40a2c907c66bc766d0"
+  },
+  "groups18-source-supervision-contract-fix3-native-review": {
+    "host_only_capture_limit_bytes": 1048576,
+    "qualified_current_review": true,
+    "source_unchanged": true,
+    "binary_unchanged": true,
+    "result": {
+      "status": "passed",
+      "exit_code": 0,
+      "started": true,
+      "cleanup_confirmed": true,
+      "pid": 218120,
+      "stdout_sha256": "8ba906ffcb77537d3887a569a1079bcf881cccd960616d80274ac4888acf809e",
+      "stdout_bytes": 90494,
+      "stdout_captured_bytes": 90494,
+      "stdout_tail_unknown": false,
+      "stdout_truncated": false,
+      "stderr_sha256": "3f1a00e26a3069fcc8de9162c042a4b80a84a7ecafdcbe5343c54ceceb5da810",
+      "stderr_bytes": 8449,
+      "stderr_captured_bytes": 8449,
+      "stderr_tail_unknown": false,
+      "stderr_truncated": false,
+      "duration_seconds": 53.219
+    },
+    "verdict": {
+      "run_id": "2fd61432-ab78-434f-b721-e33db2c985ce",
+      "attempt_id": "89e4502c-24cf-433b-b0be-ffe65f93bfe6",
+      "instance_id": "2f22a8e4-146f-4404-8ea5-fe169014dcac",
+      "stage": "spec",
+      "generation": 1,
+      "source_sha": "b39091b97ee2cd38a757a4e40ecc184ae0850b3b",
+      "checkpoint_sha": "b39091b97ee2cd38a757a4e40ecc184ae0850b3b",
+      "input_sha256": "09fc894023accee52458ab0349e341ba0bcd4289d5814291057531333a496a8d",
+      "version": 2,
+      "summary": "Approve specification only. Verified candidate hash, source HEAD and all 60 pinned instruction hashes. The full contract defines bounded channel parsing, lifecycle supervision, original task/member/deadline binding, claimed-source refresh and conservative teardown without transferring ownership or granting execution authority. No blocking specification omissions found. Implementation, fault-test evidence, installed execution and release acceptance remain outside this approval; prior development rejection remains open.",
+      "verdict": "approve",
+      "return_stage": null,
+      "findings": []
+    },
+    "validation_error": null,
+    "runner_sha256": "bc29831968775319b855c55c57f6b422830dfb9ecf0b616aa745bc22bb605cd1"
+  },
+  "groups18-source-guard-native-review": {
+    "host_only_capture_limit_bytes": 1048576,
+    "qualified_current_review": true,
+    "source_unchanged": true,
+    "binary_unchanged": true,
+    "result": {
+      "status": "passed",
+      "exit_code": 0,
+      "started": true,
+      "cleanup_confirmed": true,
+      "pid": 217408,
+      "stdout_sha256": "daf5f4e58db51252aea0e374169223311fd7e74c34c3bbbbaf8a82fc8c053bbc",
+      "stdout_bytes": 240685,
+      "stdout_captured_bytes": 240685,
+      "stdout_tail_unknown": false,
+      "stdout_truncated": false,
+      "stderr_sha256": "7ef5dd6ccb4a3f5697c6459231cf376bd5eaecdf6d0d42dc241b11f0ba53b342",
+      "stderr_bytes": 13582,
+      "stderr_captured_bytes": 13582,
+      "stderr_tail_unknown": false,
+      "stderr_truncated": false,
+      "duration_seconds": 95.5
+    },
+    "verdict": {
+      "run_id": "10aca52b-3f1c-4223-b3f1-ffafb7155f4d",
+      "attempt_id": "be83c8e7-d8a6-4c9c-8bf8-fd2c56ca0a17",
+      "instance_id": "450db25b-c0c1-489a-b7c6-15a9951f2842",
+      "stage": "development",
+      "generation": 1,
+      "source_sha": "b39091b97ee2cd38a757a4e40ecc184ae0850b3b",
+      "checkpoint_sha": "b39091b97ee2cd38a757a4e40ecc184ae0850b3b",
+      "input_sha256": "fe78cf5aeb00e69a08f1dbe2a8caa75f7f567f9c5b980dfeaa8aadbb649d16e9",
+      "version": 2,
+      "summary": "Approve bounded source-only foundation. Verified candidate and pinned instruction hashes; inspected containment, channel parsing, original deadlines, genuine collector and admission projection. Two pure deadline tests passed independently; inspected matching 125-test receipt (one skip), including native teardown coverage. No concrete blocking defect found. Claims, task/role supervision, persistent execution, CLI activation, pilot and Issue18/PR/main readiness remain outside this acceptance; full suite was not rerun in this read-only review.",
+      "verdict": "approve",
+      "return_stage": null,
+      "findings": []
+    },
+    "validation_error": null,
+    "runner_sha256": "e24ca7559845cf3c3e803c9b088d336df1bc28493995aef2d101602592d45cea"
+  }
+}

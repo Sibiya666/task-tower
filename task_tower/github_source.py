@@ -33,10 +33,12 @@ class _Redirect(urllib.request.HTTPRedirectHandler):
 
 
 def _http_get(url, headers, limit):
+    from .source_deadline import remaining
     try:
         request = urllib.request.Request(url, headers=headers, method='GET')
-        with urllib.request.build_opener(_Redirect()).open(request, timeout=30) as response:
+        with urllib.request.build_opener(_Redirect()).open(request, timeout=remaining(30)) as response:
             data = response.read(limit + 1)
+        remaining(30)
         if len(data) > limit:
             raise GitHubSourceError('response exceeds size limit')
         return data
@@ -45,6 +47,7 @@ def _http_get(url, headers, limit):
 
 
 def resolve_token():
+    from .source_deadline import remaining
     """Use existing credentials only, without saving credentials or prompting."""
     token = os.environ.get('GH_TOKEN') or os.environ.get('GITHUB_TOKEN')
     if token:
@@ -53,7 +56,8 @@ def resolve_token():
     for argv, request in [(['gh', 'auth', 'token', '--hostname', 'github.com'], None),
                           (['git', '-c', 'credential.interactive=false', 'credential', 'fill'], 'protocol=https\nhost=github.com\n\n')]:
         try:
-            result = subprocess.run(argv, input=request, text=True, capture_output=True, timeout=10, env=env)
+            result = subprocess.run(argv, input=request, text=True, capture_output=True, timeout=remaining(10), env=env)
+            remaining(10)
             if result.returncode == 0:
                 if argv[0] == 'gh':
                     return result.stdout.strip() or None
@@ -77,8 +81,11 @@ class GitHubSource:
             self.headers['Authorization'] = 'Bearer ' + token
 
     def _get(self, path, raw=False):
+        from .source_deadline import remaining
         try:
+            remaining(30)
             data = self.transport('https://api.github.com/repos/' + self.repository + path, dict(self.headers), MAX_BYTES)
+            remaining(30)
             if not isinstance(data, bytes) or len(data) > MAX_BYTES:
                 raise ValueError()
             return data if raw else json.loads(data)

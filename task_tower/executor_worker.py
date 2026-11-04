@@ -15,7 +15,9 @@ from .processes import run_command
 from .project_connections import safe_config_path
 
 def _git(checkout,*args):
-    result=subprocess.run(['git',*args],cwd=checkout,env=child_environment(os.environ),stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=30)
+    from .source_deadline import remaining
+    result=subprocess.run(['git',*args],cwd=checkout,env=child_environment(os.environ),stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=remaining(30))
+    remaining(30)
     if result.returncode: raise ValueError('Git preparation failed')
     return result.stdout.decode('utf-8').strip()
 

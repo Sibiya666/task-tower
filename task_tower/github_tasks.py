@@ -81,10 +81,12 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 def _transport(method, url, headers, payload, limit):
+    from .source_deadline import remaining
     data = None if payload is None else json.dumps(payload).encode()
     request = urllib.request.Request(url, data=data, headers=headers, method=method)
-    with urllib.request.build_opener(_NoRedirect()).open(request, timeout=30) as response:
+    with urllib.request.build_opener(_NoRedirect()).open(request, timeout=remaining(30)) as response:
         content = response.read(limit + 1)
+    remaining(30)
     if len(content) > limit: raise GitHubSourceError('GitHub response too large')
     return content
 
@@ -99,10 +101,13 @@ class GitHubTasks:
         if token: self.headers['Authorization'] = 'Bearer ' + token
 
     def request(self, method, path, payload=None):
+        from .source_deadline import remaining
         if method not in ('GET', 'POST', 'PATCH', 'PUT') or not path.startswith('/') or ('..' in path and not re.fullmatch(r'/compare/[0-9a-f]{40}\.\.\.main', path)) or '://' in path or '#' in path:
             raise ValueError('Invalid GitHub request')
         try:
+            remaining(30)
             raw = self.transport(method, 'https://api.github.com/repos/' + self.repository + ('' if path == '/' else path), dict(self.headers), payload, MAX_BYTES)
+            remaining(30)
             if not isinstance(raw, bytes) or len(raw) > MAX_BYTES: raise ValueError()
             return json.loads(raw) if raw else None
         except urllib.error.HTTPError as error:
