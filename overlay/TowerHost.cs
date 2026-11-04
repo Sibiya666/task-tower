@@ -87,7 +87,7 @@ public sealed class TowerHost : Window
     TowerHost(string folder,string python,bool smoke)
     {
         this.folder=folder;this.smoke=smoke;booksPython=python;
-        books=BooksBridge.FromConfiguration(Environment.GetEnvironmentVariable("TASK_TOWER_CONNECTIONS"));
+        books=BooksBridge.FromConfiguration(Environment.GetEnvironmentVariable("TASK_TOWER_CONNECTIONS"),Environment.GetEnvironmentVariable("TASK_TOWER_BEADS"));
         snapshotPath=Path.Combine(folder,"runtime/snapshot-"+Process.GetCurrentProcess().Id+".json");
         Title=WindowTitle;Width=650;MinWidth=470;MaxWidth=1000;
         Height=560;MinHeight=560;MaxHeight=560;

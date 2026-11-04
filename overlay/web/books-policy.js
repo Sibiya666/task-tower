@@ -8,7 +8,7 @@ function text(v,max=32768,nullable=false){if(nullable&&v===null)return null;if(t
 function copyFields(v,fields){const result={};for(const k of fields)if(own(v,k))result[k]=JSON.parse(JSON.stringify(v[k]));return result;}
 // Public provenance remains inert data. Unknown metadata never crosses this projection.
 const provenanceKeys=new Set(['original_text','session','provider','id','url','event_id','intent','original_kind','requested_relations','parent','sub_issues','milestone','promotion','previous_kind','at','status','remote_attempt','attempt_id','run_id','run_attempt','workflow','repository','issue','number','head','base','head_sha','base_sha','commit','source','evidence','spec','development','test','postmerge','reviewer','verdict','result','phase','stages','name','accepted','pending','project','issue_url','original_source','canonical_source','version']);
-for(const k of ['kind','publication_id','ci_run','review','sources','source_sha256'])provenanceKeys.add(k);
+for(const k of ['actor','operation','kind','publication_id','ci_run','review','sources','source_sha256'])provenanceKeys.add(k);
 const provenanceObjects=new Set(['session','requested_relations','promotion','remote_attempt','review','stages','spec','development','test','postmerge','parent','milestone','evidence']);
 const provenanceLists=new Set(['sub_issues']);
 function provenance(v){
@@ -41,7 +41,8 @@ function provenance(v){
 const issueId=/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+#[1-9]\d*$/;
 function positive(v){if(!Number.isSafeInteger(v)||v<1)fail();return v;}
 const repositoryId=/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
-function qualified(v){text(v,2048);if(!issueId.test(v)||!Number.isSafeInteger(Number(v.slice(v.lastIndexOf('#')+1))))fail();return v;}
+const beadIdentity=/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+:beads:[A-Za-z0-9][A-Za-z0-9_.-]{0,99}:[A-Za-z0-9][A-Za-z0-9_.-]{0,199}$/;
+function qualified(v){text(v,2048);if(beadIdentity.test(v))return v;if(!issueId.test(v)||!Number.isSafeInteger(Number(v.slice(v.lastIndexOf('#')+1))))fail();return v;}
 function relation(v,type){
  if(v===undefined)return {status:'unavailable'};
  if(v===null){if(type==='child')fail();return null;}
@@ -61,7 +62,7 @@ function entry(v){
  const e={id:text(v.id,2048),project:text(v.project,2048),book:text(v.book,32),repository:text(v.repository,2048)};
  if(!repositoryId.test(e.repository)||!['ideas','tasks','library'].includes(e.book))fail();
  // Every copied scalar is validated before assignment; structured fields use dedicated projections.
- for(const k of ['title','status','source','created_at','updated_at'])if(own(v,k))e[k]=text(v[k],8192,k==='source'&&v.book==='library'&&v.available===false);
+ for(const k of ['title','status','source','created_at','updated_at'])if(own(v,k))e[k]=text(v[k],8192,k==='source'&&(v.source_kind==='beads'||(v.book==='library'&&v.available===false)));
  if(e.book==='library'){
   e.path=text(v.path,8192);e.commit=text(v.commit,40);e.artifact_state=text(v.artifact_state,32);
   if(!/^[a-f0-9]{40}$/.test(e.commit)||e.id!==e.repository+':'+e.path+'@'+e.commit||!e.path.toLowerCase().endsWith('.md')||e.path.split('/').some(p=>!p||p==='.'||p==='..')||/[\\\x00-\x1f\x7f-\x9f]/.test(e.path)||!['working','accepted','superseded','unknown'].includes(e.artifact_state)||typeof v.available!=='boolean')fail();
@@ -70,7 +71,11 @@ function entry(v){
   if(own(v,'issues')){if(!Array.isArray(v.issues)||v.issues.length>10000)fail();e.issues=v.issues.map(qualified);}
   if(own(v,'milestone')){if(v.milestone===null)e.milestone=null;else{if(!plain(v.milestone))fail();const repository=text(v.milestone.repository,2048);if(!repositoryId.test(repository))fail();e.milestone={repository,number:positive(v.milestone.number)};}}
  }else{
-  qualified(e.id);e.number=positive(v.number);if(e.id!==e.repository+'#'+e.number)fail();
+  if(v.source_kind==='beads'){
+   e.source_kind='beads';e.bead_id=text(v.bead_id,200);
+   if(e.book!=='tasks'||e.source!==null||!beadIdentity.test(e.id)||e.id!==e.repository+':beads:'+e.project+':'+e.bead_id||v.verification!=='not_required'||e.status==='done')fail();
+   if(own(v,'assignee'))e.assignee=text(v.assignee,256);
+  }else{qualified(e.id);e.number=positive(v.number);if(e.id!==e.repository+'#'+e.number)fail();}
   e.verification=text(v.verification,32);if(!['pending','verified','unverified','not_required'].includes(e.verification))fail();
   if(own(v,'remote_state'))e.remote_state=text(v.remote_state,32,true);
   if(own(v,'description'))e.description=text(v.description,32768);
@@ -93,7 +98,7 @@ function entry(v){
  return e;
 }
 function isStale(e,nowMs=Date.now()){const time=Date.parse(e?.fetched_at);return e?.stale===true||['loading','unavailable','unconfigured'].includes(e?.state)||!Number.isFinite(time)||time>nowMs||nowMs-time>=300000;}
-function normalizeEnvelope(v,nowMs=Date.now()){inspect(v);if(!plain(v)||bytes(JSON.stringify(v))>8*1024*1024||v.kind!=='books'||v.version!==1||!Number.isSafeInteger(v.sequence)||v.sequence<1||typeof v.final!=='boolean'||!['ready','partial','unavailable','unconfigured','loading'].includes(v.state)||!Array.isArray(v.entries)||v.entries.length>10000||!Array.isArray(v.errors)||v.errors.length>10000||(v.fetched_at!==null&&typeof v.fetched_at!=='string'))fail();const e=copyFields(v,['kind','version','sequence','final','state','fetched_at']);e.errors=v.errors.map(x=>{if(!plain(x))fail();return {project:text(x.project,2048),source:text(x.source,8192),error:text(x.error,8192)};});e.entries=v.entries.map(entry);if(['loading','unavailable'].includes(e.state))for(const x of e.entries)if(x.book!=='library'){x.verification='pending';if(x.status==='done')x.status='unknown';}e.stale=isStale(v,nowMs);return e;}
+function normalizeEnvelope(v,nowMs=Date.now()){inspect(v);if(!plain(v)||bytes(JSON.stringify(v))>8*1024*1024||v.kind!=='books'||v.version!==1||!Number.isSafeInteger(v.sequence)||v.sequence<1||typeof v.final!=='boolean'||!['ready','partial','unavailable','unconfigured','loading'].includes(v.state)||!Array.isArray(v.entries)||v.entries.length>10000||!Array.isArray(v.errors)||v.errors.length>10000||(v.fetched_at!==null&&typeof v.fetched_at!=='string'))fail();const e=copyFields(v,['kind','version','sequence','final','state','fetched_at']);e.errors=v.errors.map(x=>{if(!plain(x))fail();return {project:text(x.project,2048),source:text(x.source,8192),error:text(x.error,8192)};});e.entries=v.entries.map(entry);if(['loading','unavailable'].includes(e.state))for(const x of e.entries)if(x.book!=='library'&&x.source_kind!=='beads'){x.verification='pending';if(x.status==='done')x.status='unknown';}e.stale=isStale(v,nowMs);return e;}
 function compare(a,b){const ai=a.id.match(/^(.*)#(\d+)$/),bi=b.id.match(/^(.*)#(\d+)$/);if(ai&&bi){const repo=ai[1].localeCompare(bi[1],'en');if(repo)return repo;return Number(ai[2])-Number(bi[2]);}return a.id.localeCompare(b.id,'en');}
 function buildRows(entries,options={}){
  const {book,project,status,grouping='stage',expanded=[]}=options;const expand=new Set(expanded);const all=new Map();for(const e of [...entries].sort(compare))if(!all.has(e.id))all.set(e.id,e);

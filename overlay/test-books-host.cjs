@@ -61,6 +61,8 @@ elif mode=='frames':
 elif mode=='totalcap':
  for i in range(10):
   value=frame(i+1,i==9);value['entries'][0]['description']='x'*(7*1024*1024);send(value)
+elif mode=='beads':
+ value=frame(1,True,'ready');value['entries']=[dict(id='owner/repo:beads:local:tt-a',repository='owner/repo',project='local',book='tasks',title='Beads task',source_kind='beads',bead_id='tt-a',source=None,status='closed',verification='not_required',history=[dict(at='2026-11-04T18:00:00Z',actor='worker',operation='close')])];send(value)
 elif mode=='ready': send(frame(1,True,'ready'))
 else:
  send(frame(1));send(frame(2,library=True))
@@ -86,6 +88,21 @@ public static class NativeBooksTest {
   File.WriteAllText(config,"{}");Check(configured.IsAllowedSource(root+"issues/1"),"allowlist immutable");
  }
  using(var invalid=BooksBridge.FromConfiguration(config))Check(!invalid.IsAllowedSource(root+"issues/1"),"invalid config fail closed");
+ string beadsConfig=Path.Combine(dir,"beads-config.json");
+ File.WriteAllText(beadsConfig,"{\"version\":1,\"executable\":\"bd.exe\",\"projects\":[{\"id\":\"local\",\"repository\":\"owner/repo\",\"directory\":\"private\"}]}");
+ using(var local=BooksBridge.FromConfiguration(null,beadsConfig)){
+  await local.RefreshAsync(Start("beads",Path.Combine(dir,"beads")),s=>{},5000);
+  Check(Parse(local.LatestJson)["state"].ToString()=="ready","configured local source accepted");
+  Check(!local.IsAllowedSource("file:///PRIVATE"),"no private file navigation");
+  await local.RefreshAsync(Start("malformed",Path.Combine(dir,"badlocal")),s=>{},5000);
+  var staleLocal=(Dictionary<string,object>)((object[])Parse(local.LatestJson)["entries"])[0];
+  Check(staleLocal["verification"].ToString()=="not_required","stale local state is not acceptance proof");
+ }
+ using(var foreign=new BooksBridge(new[]{"owner/repo"},new string[0])){
+  await foreign.RefreshAsync(Start("beads",Path.Combine(dir,"foreign")),s=>{},5000);
+  Check(foreign.LastSuccessUtc==null,"unconfigured local scope refused");
+ }
+
  using(var actualHelper=new BooksBridge(new string[0],new string[0])){
   var info=BooksBridge.HelperStartInfo(python,rootDir);info.EnvironmentVariables.Remove("TASK_TOWER_CONNECTIONS");
   Check(info.Arguments=="-m task_tower.overlay_books" && !info.UseShellExecute && info.WorkingDirectory==Path.GetFullPath(rootDir),"fixed canonical module invocation");

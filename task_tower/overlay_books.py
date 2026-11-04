@@ -13,7 +13,7 @@ FRAME_LIMIT = 8 * 1024 * 1024
 STREAM_LIMIT = 64 * 1024 * 1024
 FRAME_COUNT = 32
 ENTRY_LIMIT = 10000
-ENTRY_FIELDS = frozenset('id repository number project book title source status remote_state verification description phase blockers blocked_by results history relationships stages remote_attempt created_at updated_at capture path commit artifact_state declaration_source issues milestone available migrations'.split())
+ENTRY_FIELDS = frozenset('id repository number project book title source status remote_state verification description phase blockers blocked_by results history relationships stages remote_attempt created_at updated_at capture path commit artifact_state declaration_source issues milestone available migrations source_kind bead_id assignee'.split())
 
 
 def _migrations(value):
@@ -55,7 +55,43 @@ def _public(report):
     return value
 
 
-def snapshot(config_path: Path | None, *, on_update=None):
+def _beads_snapshot(config_path,beads_path,on_update):
+    from .beads_books import read_projects
+    local=dict(entries=[],errors=[],fetched_at=None,repositories=[])
+    remote=dict(entries=[],errors=[],fetched_at=None)
+    failures=[];latest=None
+    def combined():
+        return dict(entries=local['entries']+remote['entries'],errors=local['errors']+remote['errors']+failures,
+                    fetched_at=remote.get('fetched_at') or local.get('fetched_at'))
+    def publish():
+        nonlocal latest
+        latest=_public(combined());latest['state']='partial'
+        if on_update is not None: on_update(deepcopy(latest))
+    def local_update(value):
+        nonlocal local
+        local=value;publish()
+    def remote_update(value):
+        nonlocal remote
+        remote=value;publish()
+    try: local=read_projects(beads_path,on_update=local_update)
+    except Exception: failures.append(dict(project='',source='',error='Local Beads source unavailable or limit exceeded'))
+    try:
+        connections=load_connections(safe_config_path(config_path)) if config_path else []
+        connections=[c for c in connections if c.repository.casefold() not in local['repositories']]
+        if connections: remote=aggregate(connections,include_library=True,on_update=remote_update)
+    except Exception: failures.append(dict(project='',source='',error='GitHub Books source interrupted or unavailable'))
+    try: return _public(combined())
+    except Exception:
+        if latest is not None:
+            latest['state']='partial'
+            latest['errors'].append(dict(project='',source='',error='Books source interrupted or limit exceeded'))
+            if len(_encode(dict(latest,sequence=FRAME_COUNT,final=True)))<=FRAME_LIMIT:return latest
+        return _failure('Books source unavailable or limit exceeded')
+
+
+def snapshot(config_path: Path | None, *, on_update=None, beads_path=None):
+    if beads_path is not None:
+        return _beads_snapshot(config_path,beads_path,on_update)
     if config_path is None:
         return dict(kind='books', version=1, state='unconfigured', fetched_at=None, entries=[], errors=[])
     latest = None
@@ -98,7 +134,8 @@ def main(argv=None):
         count += 1; total += len(raw)
     path = os.environ.get('TASK_TOWER_CONNECTIONS')
     try:
-        value = snapshot(Path(path) if path else None, on_update=emit)
+        beads=os.environ.get('TASK_TOWER_BEADS')
+        value = snapshot(Path(path) if path else None, on_update=emit, **({'beads_path':Path(beads)} if beads else {}))
         emit(value, final=True)
     except Exception:
         value = _failure('Books stream limit exceeded')
