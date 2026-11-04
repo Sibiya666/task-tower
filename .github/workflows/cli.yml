@@ -5,15 +5,45 @@ concurrency:
   group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 jobs:
-  unittest:
+  shards:
+    name: unittest shard (windows-latest, ${{ matrix.shard }})
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest]
-    runs-on: ${{ matrix.os }}
+        shard: [0, 1, 2, 3]
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: python -m unittest discover -s tests -v
+      - run: python -m task_tower.ci_unittest --count 4 --index ${{ matrix.shard }} --manifest "${{ runner.temp }}/ci-unittest/shard-${{ matrix.shard }}.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ci-unittest-${{ github.run_id }}-${{ matrix.shard }}
+          path: ${{ runner.temp }}/ci-unittest/shard-${{ matrix.shard }}.json
+          include-hidden-files: true
+          if-no-files-found: error
+  unittest:
+    name: unittest (windows-latest)
+    needs: shards
+    if: always()
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v4
+        if: needs.shards.result == 'success'
+        with:
+          pattern: ci-unittest-${{ github.run_id }}-*
+          path: ${{ runner.temp }}/ci-unittest
+          merge-multiple: true
+      - name: Verify complete exact-source coverage
+        if: needs.shards.result == 'success'
+        run: python -m task_tower.ci_unittest --verify "${{ runner.temp }}/ci-unittest" --count 4
+      - name: Fail if any shard failed, skipped or was cancelled
+        if: always() && needs.shards.result != 'success'
+        run: python -c "raise SystemExit(1)"
