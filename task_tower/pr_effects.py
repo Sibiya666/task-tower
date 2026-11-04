@@ -236,8 +236,11 @@ def _remaining_feedback(snapshot,effects,binding,publisher):
     if canonical(statuses)!=canonical(snapshot['ci']['acceptance_statuses']):
         raise ValueError('Incoherent current acceptance statuses')
     for effect in effects:
+        same_input=all(type(effect['binding'][k]) is type(binding[k]) and effect['binding'][k]==binding[k] for k in BINDING)
+        prior_status=(effect['kind']=='acceptance_status' and all(type(effect['binding'][k]) is type(binding[k])
+            and effect['binding'][k]==binding[k] for k in ('repository','pr_number','issue','issue_id','task_id','head_sha')))
         if (effect['status']!='confirmed' or effect['kind'] not in ('acceptance_review','acceptance_status')
-                or any(type(effect['binding'][k]) is not type(binding[k]) or effect['binding'][k]!=binding[k] for k in BINDING)):
+                or not (same_input or prior_status)):
             continue
         payload=effect['payload']; observed=effect['observation']
         if observed['author'].casefold()!=publisher.casefold(): raise ValueError('Foreign confirmed publisher')

@@ -106,7 +106,8 @@ class Controller:
         if row['state'] in ('stale','rejected','needs_input'):
             if row['cancel_requested']:return _public(row,reason='cancelled'),False
             if any(e['kind']=='acceptance_status' and e['payload']['state']=='failure' and e['status']=='confirmed' for e in self._effects(row)):
-                return _public(row),False
+                prepared=prepare_admission(context,source,journal,task)
+                return (_public(row),False) if prepared is None else (_public(journal.get(task['repository'],task['pr_number']),action='prepared'),True)
             effect=effects.publish_failure()
             return _public(journal.get(task['repository'],task['pr_number']),action=effect['kind']),True
         if row['state'] in ('discovered','validating','reviewing'):
@@ -165,6 +166,10 @@ def step(config,journal,*,owner_id):
             if acted:return report
         except (ValueError,OSError,TypeError,KeyError,PRSourceError,GitHubSourceError):
             row=journal.get(repository,number)
+            if (row is not None and row['owner_id']==owner_id and row['state'] in ('reviewed','publishing_acceptance','accepted')
+                    and all(e['status'] in ('confirmed','failed') for e in controller._effects(row))):
+                try:row=controller._transition(row,'stale',reason='input_unverified')
+                except (ValueError,OSError):pass
             # An exception can follow a consumed role/write intent. Never
             # scan another PR in this tick after an uncertain outcome. The
             # already-advanced cursor preserves fairness on the next tick.

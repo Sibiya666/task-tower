@@ -1,0 +1,98 @@
+{
+  "base": "12c150ea248dfffbad46961d5eee6ea1ccb10587",
+  "candidate_files": {
+    "AGENTS.md": "72016d60e91cff56ff88fc26e53d58bafde25879cdd02cd603dfa49c76a77a4f",
+    "README.md": "b5a229ec97882fe5fb509c5176208037193a59d777e06ead7f21a98976193d17",
+    "docs/pr-worker.md": "b53ab515739a5e3965adea3ef300a383ac5ba6470afd7b51fd9aee74e1a29a67",
+    "task_tower/pr_effects.py": "6e0ff86b8ead5d64482ab478d68411a2f5e4af570f08d3ac03bb67978fdb5740",
+    "task_tower/pr_persistence.py": "cd22507ac84f6de2ec0f7143cb5fc283788caf4abd89038859af03d8dd599873",
+    "task_tower/pr_worker.py": "76c6a0898e4681f7f30a161affd4dbfa47137564bf82244a4a02038041cb699a",
+    "tests/test_pr_controller_revision.py": "5fd1ffb419f0b49d804e3562eb87cced2c6b3c1e31c88f24427af9cc6eeed554",
+    "tests/test_pr_recovery_inspection.py": "dca8d592bb0badf495d5f01bc58a6e03c3565a7e3a85e48e5c6f3ef938095064"
+  },
+  "scope": "Bounded same-owner genuine source revision and exact prior-status accounting; canonical macOS fixture path",
+  "reviews": [
+    {
+      "capture": "pr17-source-revision-native-review",
+      "qualified_current_review": true,
+      "source_unchanged": true,
+      "binary_unchanged": true,
+      "result": {
+        "status": "passed",
+        "exit_code": 0,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 231112,
+        "stdout_sha256": "8a527559ac9a9a774df741c125576be97f4d3a8cd4d93973ea2f3c15d239d9b2",
+        "stdout_bytes": 256507,
+        "stdout_captured_bytes": 256507,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "809ffc661dc0bf01035af00930e6df059058463ff3dba626378e1cfc8fbf45b7",
+        "stderr_bytes": 9171,
+        "stderr_captured_bytes": 9171,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 76.297
+      },
+      "verdict": {
+        "run_id": "4114722a-434e-4b3c-8577-3e0dbd32b27c",
+        "attempt_id": "46673124-895c-4d89-90b4-248cd9d6b3be",
+        "instance_id": "01e4ff99-fbdb-4672-a63d-3acea71c3964",
+        "stage": "development",
+        "generation": 1,
+        "source_sha": "12c150ea248dfffbad46961d5eee6ea1ccb10587",
+        "checkpoint_sha": "12c150ea248dfffbad46961d5eee6ea1ccb10587",
+        "input_sha256": "9e1a99a1cd8ae47af2e12a53c79c76135e3fcf927cbb9015180317e5e7267360",
+        "version": 2,
+        "summary": "Approve bounded development change. Reviewed complete candidate diff and retained ownership, deadline, counter, publication and no-replay gates. Candidate and pinned instruction hashes match; Python AST checks pass. Inspected Root's 17-test passing receipt, verified capture hash and unchanged input manifests; did not rerun mutating tests. No blocking findings. Recovery execution, installed pilot, fresh CI, full-suite and whole-PR/main acceptance remain outside this verdict.",
+        "verdict": "approve",
+        "return_stage": null,
+        "findings": []
+      },
+      "validation_error": null,
+      "runner_sha256": "a104a203e66c9801518571156298ca1a98b2ca49b4bd64e4ddcf00a3fbc4848e"
+    },
+    {
+      "capture": "pr17-source-revision-native-test-review",
+      "qualified_current_review": true,
+      "source_unchanged": true,
+      "binary_unchanged": true,
+      "result": {
+        "status": "passed",
+        "exit_code": 0,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 232324,
+        "stdout_sha256": "630022f0e9ae2310bb89277b2ad2a6fc4e669ccb8fef7af1813ac5f11dcc04a4",
+        "stdout_bytes": 170550,
+        "stdout_captured_bytes": 170550,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "4030da0632020a4fac62a122f0a2472d30525545f47731133942864b1119a4de",
+        "stderr_bytes": 9044,
+        "stderr_captured_bytes": 9044,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 95.641
+      },
+      "verdict": {
+        "run_id": "4dcd3455-d8ac-4025-9284-d077126cdb82",
+        "attempt_id": "4447af89-b4cf-440d-bd98-caf8e8f6a129",
+        "instance_id": "021fef45-42f3-486d-b2ef-d35184224871",
+        "stage": "test",
+        "generation": 1,
+        "source_sha": "12c150ea248dfffbad46961d5eee6ea1ccb10587",
+        "checkpoint_sha": "12c150ea248dfffbad46961d5eee6ea1ccb10587",
+        "input_sha256": "9e1a99a1cd8ae47af2e12a53c79c76135e3fcf927cbb9015180317e5e7267360",
+        "version": 2,
+        "summary": "Approve bounded TEST acceptance. Verified candidate and pinned instruction hashes, exact HEAD, Python ASTs, unchanged receipt manifests and complete capture hashes for the successful 17-test, 455.515-second host run. Audited actual revision/review/publication paths, edited-status zero-launch refusal, unchanged-source no-retry, preserved ownership/budgets and unresolved-intent fences. Tests were not rerun because fixture writes are prohibited. Fresh CI, full-suite, installed pilot and whole-PR/main/Issue acceptance remain pending.",
+        "verdict": "approve",
+        "return_stage": null,
+        "findings": []
+      },
+      "validation_error": null,
+      "runner_sha256": "a7ed9049f6f0fdf1a51b2a212e921b89411a16a7e2f75be41b7b43b18b12619a"
+    }
+  ]
+}

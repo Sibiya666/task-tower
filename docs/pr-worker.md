@@ -85,3 +85,25 @@ recovery permission. Inspection never changes journal rows, effects, barriers,
 Issue state or archives. An unmerged local row retains its local-only report.
 The actual `recovery_of` baseline/follow-up execution gate is still pending;
 this reader does not enable old-card admission or manufacture baseline receipts.
+
+## Same-owner source revisions
+
+A before-intent refusal of a reviewed/publishing/accepted input now parks that
+local input as stale when no consumed unresolved effect exists. Uncertain
+intents retain their existing fences. A separate confirmed negative status
+precedes preparation of a changed, genuinely authorized input. An unchanged
+semantic source cannot acquire another review merely through a new nonce.
+The original owner/PID, first-admission deadline and consumed review budget stay.
+Changing PR text can invalidate original pipeline publication provenance; that
+is not automatically requalified as a new source.
+
+Fresh inputs preserve earlier COMMENT reviews as review material. Exact durable
+acknowledgments may account for earlier own statuses on the same qualified
+Task/PR/head. Their IDs, author, payload and observed hash must still match;
+unknown or edited statuses refuse even the next role launch. All current source,
+CI, private authorization and clean server gates remain required.
+
+This component has independent development/test acceptance and a Root-owned
+17-test replay including actual review/publication revision and changed-old-status
+no-launch cases; see [evidence](tasks/evidence/TT-PR-WORKER-001/task5-source-revision-acceptance.md). Recovery baseline/follow-up execution,
+installed pipeline pilot and whole-feature/PR/main acceptance remain pending.

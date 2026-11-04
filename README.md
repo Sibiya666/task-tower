@@ -154,17 +154,21 @@ Task4c bounded async merge request/retained observation is independently accepte
 Task4c explicit authenticated pending/failure and genuine failed/no-launch record readers now have bounded independent acceptance plus60 diagnostic/native/journal tests (one platformskip) and29 unchanged-source positive/async regressions. See docs/tasks/evidence/TT-PR-WORKER-001/task4c-diagnostic-acceptance.md. Pending is opt-in only; unknown effects never replay, no-launch never invents a PID/receipt, negative status cannot grant merge. Windows launch uses temporary restored thread-local error mode. Controller/CLI/pilot and whole-feature/main/closure acceptance remain pending.
 
 
-Task5 bounded intake/review persistence and typed premerge controller have independent development/test acceptance; see docs/tasks/evidence/TT-PR-WORKER-001/task5-foundation-acceptance.md. Preserve forensic envelopes, one action per tick including uncertain outcomes, and original owner/deadline gates. Lifecycle timeout=None is control-plane only with bounded capture/cancellation; no model/profile waiver. Postmerge/closure integration, supervisor/CLI, pilot and whole-feature/PR/main acceptance remain pending.
-The bounded exact-main/postmerge/closure controller consumer has independent
-development/test acceptance and current genuine positive/default regressions;
-see [qualified evidence](docs/tasks/evidence/TT-PR-WORKER-001/task5-main-consumer-acceptance.md).
-Installed supervised watch/CLI, real pilot and whole Issue17/PR/main completion
-remain pending. This internal integration does not yet enable unattended work.
-The candidate now includes [supervised PR worker commands](docs/pr-worker.md):
-`watch`, diagnostic `work --once`, and independent `status`/`cancel`/`reconcile --inspect`.
-Supervisor/CLI has bounded independent development and test acceptance;
-see [evidence](docs/tasks/evidence/TT-PR-WORKER-001/task5-supervision-acceptance.md).
-The installed pilot and whole-Issue readiness remain pending.
-Merged-row `reconcile --inspect` also exposes original workflow/archive marker
-provenance separately from live PR prose; see [bounded inspection acceptance](docs/tasks/evidence/TT-PR-WORKER-001/task5-recovery-inspection-acceptance.md).
-It cannot refresh old events, approve a recovery or close an Issue.
+## PR worker implementation status
+
+The current branch contains independently accepted bounded components for
+[persistent controller preparation](docs/tasks/evidence/TT-PR-WORKER-001/task5-foundation-acceptance.md),
+[main/postmerge/closure](docs/tasks/evidence/TT-PR-WORKER-001/task5-main-consumer-acceptance.md),
+[contained supervision and CLI](docs/tasks/evidence/TT-PR-WORKER-001/task5-supervision-acceptance.md),
+[immutable event inspection](docs/tasks/evidence/TT-PR-WORKER-001/task5-recovery-inspection-acceptance.md),
+and [same-owner source revisions](docs/tasks/evidence/TT-PR-WORKER-001/task5-source-revision-acceptance.md).
+
+[Private setup and commands](docs/pr-worker.md) describe watch, diagnostic
+work --once, status, cancel and reconcile --inspect. They preserve actual
+pipeline authority, original budgets/ownership and unknown-effect fences.
+
+Issue17 remains open: recovery baseline/follow-up execution, actual operator /
+server prerequisites, genuine installed pipeline pilot, final full-suite,
+whole-diff exact-head/base acceptance, current CI, exact-main acceptance and
+automatic Issue closure are still required. Component acceptance does not
+establish unattended or installed readiness. Old unproven cards remain in #66.

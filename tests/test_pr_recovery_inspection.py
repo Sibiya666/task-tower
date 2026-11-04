@@ -11,7 +11,7 @@ from task_tower.pr_journal import PRJournal
 class RecoveryInspectionTests(unittest.TestCase):
     def setUp(self):
         self.directory=tempfile.TemporaryDirectory();self.addCleanup(self.directory.cleanup)
-        self.journal=PRJournal(Path(self.directory.name)/'pr.db')
+        self.journal=PRJournal(Path(self.directory.name).resolve()/'pr.db')
         self.row=self.journal.admit(dict(binding(),pr_number=7,task_id='TT-ONE'))
 
     def inspect(self,source):

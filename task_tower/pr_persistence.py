@@ -44,6 +44,28 @@ def prepare_admission(context,source,journal,task):
     fresh=context.current(source,task)
     if fresh['authority_error'] is not None or fresh['snapshot']['ready'] is not True or fresh['snapshot']['reasons']!=[]:
         raise ValueError('PR intake source/authority unavailable')
+    previous=journal.get(fresh['task']['repository'],fresh['task']['pr_number'])
+    if previous is not None:
+        if previous['state'] not in ('stale','rejected','needs_input') or previous['owner_id']!=journal._active:
+            raise ValueError('Original PR revision owner/state fenced')
+        retained=context.prepared_record(previous['input_sha256'])['request']['input']
+        snapshot=fresh['snapshot']
+        changed=any(snapshot[k]!=previous[k] for k in ('head_sha','base_sha'))
+        if not changed:
+            from .pr_effects import _remaining_feedback
+            from .pr_policy import canonical
+            reviews=_remaining_feedback(snapshot,journal.effects(previous['repository'],previous['pr_number']),
+                {k:previous[k] for k in BINDING},fresh['task']['publisher_account'])
+            for key,old in retained['source'].items():
+                new=reviews if key=='reviews' else snapshot[key]
+                if key=='pr':
+                    volatile={'updated_at','comments','review_comments'}
+                    old={k:v for k,v in old.items() if k not in volatile}
+                    new={k:v for k,v in new.items() if k not in volatile}
+                changed=changed or canonical(old)!=canonical(new)
+            changed=changed or canonical(retained['authority'])!=canonical(fresh['authority'])
+            changed=changed or canonical(retained['ci'])!=canonical({k:v for k,v in snapshot['ci'].items() if k!='acceptance_statuses'})
+        if not changed:return None
     loaded=context._fresh_inputs()
     connections=[c for c in loaded['connections'] if c.repository.casefold()==fresh['task']['repository']]
     if len(connections)!=1:raise ValueError('Foreign intake connection')
