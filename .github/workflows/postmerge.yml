@@ -9,9 +9,27 @@ permissions:
   contents: read
 
 jobs:
+  scope:
+    if: github.event.pull_request.merged == true
+    runs-on: windows-latest
+    outputs:
+      mode: ${{ steps.classify.outputs.mode }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          fetch-depth: 2
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Classify the complete exact merge
+        id: classify
+        run: python -m task_tower.ci_docs --scope --report "${{ runner.temp }}/ci-docs/scope.json" --github-output "$env:GITHUB_OUTPUT"
   shards:
     name: merge unittest shard (windows-latest, ${{ matrix.shard }})
-    if: github.event.pull_request.merged == true
+    needs: scope
+    if: github.event.pull_request.merged == true && needs.scope.outputs.mode == 'full'
     timeout-minutes: 45
     strategy:
       fail-fast: false
@@ -36,7 +54,7 @@ jobs:
           if-no-files-found: error
   verify-merge:
     name: verify-merge (windows-latest, windows)
-    needs: shards
+    needs: [scope, shards]
     if: always() && github.event.pull_request.merged == true
     timeout-minutes: 45
     runs-on: windows-latest
@@ -45,24 +63,35 @@ jobs:
         id: source
         with:
           ref: ${{ github.event.pull_request.merge_commit_sha }}
+          fetch-depth: 2
           persist-credentials: false
       - uses: actions/setup-python@v5
         id: python
         with:
           python-version: '3.11'
+      - name: Validate documentation only (runtime tests not run)
+        id: docs
+        if: always() && needs.scope.result == 'success' && needs.scope.outputs.mode == 'docs' && needs.shards.result == 'skipped' && steps.source.outcome == 'success' && steps.python.outcome == 'success'
+        run: python -m task_tower.ci_docs --validate --report "${{ runner.temp }}/ci-docs/validation.json" --repository "${{ github.repository }}" --pr ${{ github.event.pull_request.number }} --phase postmerge
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.docs.outcome == 'success'
+        with:
+          name: task-tower-docs-${{ github.event.pull_request.number }}-windows
+          path: ${{ runner.temp }}/ci-docs/validation.json
+          if-no-files-found: error
       - uses: actions/download-artifact@v4
-        if: needs.shards.result == 'success'
+        if: needs.scope.result == 'success' && needs.scope.outputs.mode == 'full' && needs.shards.result == 'success'
         with:
           pattern: ci-unittest-${{ github.run_id }}-*
           path: ${{ runner.temp }}/ci-unittest
           merge-multiple: true
       - name: Verify all exact-merge test shards
         id: tests
-        if: needs.shards.result == 'success'
+        if: needs.scope.result == 'success' && needs.scope.outputs.mode == 'full' && needs.shards.result == 'success'
         continue-on-error: true
         run: python -m task_tower.ci_unittest --verify "${{ runner.temp }}/ci-unittest" --count 4
       - name: Export task-manager event
-        if: always() && steps.source.outcome == 'success' && steps.python.outcome == 'success'
+        if: always() && needs.scope.result == 'success' && needs.scope.outputs.mode == 'full' && steps.source.outcome == 'success' && steps.python.outcome == 'success'
         id: event
         shell: python
         env:
@@ -89,6 +118,6 @@ jobs:
           include-hidden-files: true
           if-no-files-found: error
           overwrite: true
-      - name: Fail if postmerge tests failed
-        if: always() && steps.tests.outcome != 'success'
+      - name: Fail if the selected exact-merge validation failed
+        if: always() && (needs.scope.result != 'success' || (needs.scope.outputs.mode != 'docs' && needs.scope.outputs.mode != 'full') || (needs.scope.outputs.mode == 'full' && (needs.shards.result != 'success' || steps.tests.outcome != 'success')) || (needs.scope.outputs.mode == 'docs' && (needs.shards.result != 'skipped' || steps.docs.outcome != 'success')))
         run: python -c "raise SystemExit(1)"
