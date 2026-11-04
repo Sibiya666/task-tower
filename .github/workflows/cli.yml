@@ -1,9 +1,9 @@
 name: Portable CLI
 on:
-  push:
-    branches-ignore:
-      - 'task-tower/claims/**'
   pull_request:
+concurrency:
+  group: ${{ github.workflow }}-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 jobs:
   unittest:
     strategy:
