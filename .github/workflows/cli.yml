@@ -1,5 +1,9 @@
 name: Portable CLI
-on: [push, pull_request]
+on:
+  push:
+    branches-ignore:
+      - 'task-tower/claims/**'
+  pull_request:
 jobs:
   unittest:
     strategy:
