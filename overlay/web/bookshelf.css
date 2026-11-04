@@ -1,0 +1,29 @@
+@font-face{font-family:'Tower Pixel';src:url('assets/fonts/PressStart2P-Regular.ttf') format('truetype');font-display:swap}
+#floor-bookshelf{position:absolute;left:10px;top:40px;z-index:18;display:flex;align-items:flex-end;gap:2px;padding:4px 6px 8px;background:linear-gradient(90deg,#251a13,#55402b 12%,#281d15 95%);border-bottom:5px solid #87603c;box-shadow:0 3px #211911,2px 0 #322317,-2px 0 #322317}
+#floor-bookshelf[hidden],#books-dialog[hidden]{display:none}
+#floor-bookshelf button{position:relative;width:25px;height:76px;padding:4px 2px;color:#efd48d;border:2px solid #261913;border-left-color:#a37d4c;border-top-color:#c29a60;border-radius:0;background:repeating-linear-gradient(0deg,transparent 0 6px,#c89d5a 6px 8px,transparent 8px 60px),#344649;box-shadow:inset -3px 0 #0005;cursor:pointer}
+#floor-bookshelf button[data-book=tasks]{height:82px;background-color:#663c30}#floor-bookshelf button[data-book=library]{height:79px;background-color:#4d455d}
+#floor-bookshelf button:hover,#floor-bookshelf button:focus-visible{transform:translateY(-4px);filter:brightness(1.25);outline:1px solid #f4d18b}
+.spine-title{display:block;writing-mode:vertical-rl;font:8px/15px 'Tower Pixel',monospace;max-height:58px;overflow:hidden}.spine-emblem{display:block;font:12px/14px serif}
+#floor-bookshelf button[data-book=library] .spine-title{font-size:6px}
+#books-dialog{position:fixed;inset:7px;z-index:1000;display:grid;grid-template-rows:auto minmax(0,1fr) 34px;gap:0;padding:8px;box-sizing:border-box;overflow:hidden;background:#513521;color:#49321e;border:3px solid #281a14;border-radius:0;font:8px/1.85 'Tower Pixel',monospace;overflow-wrap:anywhere;box-shadow:0 3px 0 #170f0b,0 8px 24px #0007}
+#books-dialog *{box-sizing:border-box;min-width:0;max-width:100%}
+.books-heading{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:2px 5px 7px;color:#efcf8d}
+#books-dialog h1{font:10px/1.6 'Tower Pixel',monospace;margin:0;display:block;overflow:visible}
+#books-dialog h2{font:9px/1.8 'Tower Pixel',monospace;margin:5px 0}#books-dialog h3{font-size:8px;margin:8px 0 3px}#books-dialog p{margin:6px 0}
+.book-spread{display:grid;grid-template-columns:1fr 1fr;min-height:0;border:1px solid #ac854f;background:#dbc28c;box-shadow:0 2px #a58856}
+.book-page{overflow:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#9c7749 #e7cf99;padding:10px 9px 14px;background:linear-gradient(90deg,#d5b77c,#f1dda9 13%,#ead19b 83%,#b89b63);box-shadow:inset 0 2px #f6e4b9,inset 0 -2px #b3955f;user-select:text}
+.book-page+.book-page{background:linear-gradient(90deg,#aa8b56,#e5c98e 14%,#f1dda9 85%,#d5b77c);border-left:2px solid #8b6e46}
+#books-dialog button,#books-dialog select{font:inherit;color:#49321e;background:#e0c28b;border:1px solid #9b7647;border-radius:0;padding:5px;margin:3px 0;white-space:normal;overflow-wrap:anywhere;cursor:pointer}
+#books-dialog button:hover:enabled{background:#f5e1ab}#books-dialog :focus-visible{outline:2px solid #6e492c;outline-offset:1px}#books-dialog button:disabled{opacity:.35;cursor:default}
+#books-dialog .books-heading button{background:#38271c;color:#f1d39a;border-color:#9f7748;font-size:7px;padding:5px}
+.books-filters{display:flex;flex-direction:column;gap:5px}.books-filters label{display:flex;flex-direction:column;width:100%;flex:none}
+.books-card{border:0;border-bottom:1px dashed #aa8651;border-radius:0;margin:0 0 10px;padding:0 0 8px}.books-reference{border-left:2px solid #9d7544;padding-left:6px}#books-dialog pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}
+#books-dialog .book-turns{display:flex;align-items:center;justify-content:space-between;position:relative;background:linear-gradient(90deg,#d8bc84,#efdaa4 25%,#b99b64 50%,#efdaa4 75%,#d8bc84);border:1px solid #ad8b54;border-top:0;gap:8px}
+#books-dialog .book-turns span{text-align:center;font-size:7px}
+#books-dialog .book-turns button{position:relative;width:42px;height:32px;flex:none;border:0;margin:0;padding:0;font-size:0;background:transparent;filter:drop-shadow(1px -1px 0 #9c7949)}
+.book-turn-prev:before,.book-turn-next:before{content:'';position:absolute;inset:0;background:#f9e8bc;clip-path:polygon(0 0,100% 100%,0 100%)}
+.book-turn-next:before{clip-path:polygon(100% 0,100% 100%,0 100%)}
+.book-turn-prev:after,.book-turn-next:after{position:absolute;bottom:2px;font:16px monospace;content:'‹';left:5px;color:#765534}.book-turn-next:after{content:'›';left:auto;right:5px}
+@media(min-width:600px){#books-dialog{inset:14px;font-size:10px}.book-page{padding:16px 20px}#books-dialog h2{font-size:11px}}
+@media(prefers-reduced-motion:no-preference){#books-dialog:not([hidden]) .book-spread{animation:book-open .18s ease-out;transform-origin:center}@keyframes book-open{from{opacity:.3;transform:scaleX(.92)}to{opacity:1;transform:scaleX(1)}}}

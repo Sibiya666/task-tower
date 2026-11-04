@@ -163,6 +163,7 @@ function renderOverview(){
 const returning=sentViewMode==='rooms'&&viewMode==='overview';
 if(sentViewMode==='overview'&&viewMode==='rooms')overviewPosition={left:$('overview').scrollLeft,top:$('overview').scrollTop};
 document.body.classList.toggle('overview-mode',viewMode==='overview');
+window.Bookshelf?.show(projectId,viewMode==='rooms');
 if(sentViewMode!==viewMode){sentViewMode=viewMode;bridge(viewMode==='overview'?'overview-view':'floor-view')}
 overviewScenes=[];
 const root=$('overview');let district=root.querySelector('#overview-towers');if(!district){district=document.createElement('div');district.id='overview-towers';root.append(district)}
