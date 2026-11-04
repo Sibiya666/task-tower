@@ -12,13 +12,27 @@ def write(path,value):
     with path.open('xb') as stream:stream.write(canonical(value).encode());stream.flush();os.fsync(stream.fileno())
 
 
-def git(root,args,logs):
+class WorkerCleanupUnknown(ValueError):
+    pass
+
+
+def native_execution_supported():
+    return os.name=='nt'
+
+
+def git(root,args,logs,*,fence=None):
     import uuid
     capture=logs/str(uuid.uuid4());capture.mkdir(parents=True)
     env={k:v for k,v in os.environ.items() if not k.upper().startswith('GIT_') and k.upper() not in ('GH_TOKEN','GITHUB_TOKEN')}
     env.update(GIT_CONFIG_GLOBAL=os.devnull,GIT_CONFIG_NOSYSTEM='1',GIT_TERMINAL_PROMPT='0',GCM_INTERACTIVE='Never',GIT_NO_REPLACE_OBJECTS='1')
-    result=run_command(['git','--no-optional-locks','-c','core.longpaths=true','-c','core.hooksPath='+str(logs/'no-hooks'),
-        '-c','core.fsmonitor=false','-c','diff.external=',*args],root,60,env=env,capture=dict(directory=capture,max_bytes_per_stream=1048576))
+    with (capture/'process.json').open('xb') as facts:
+        facts.flush();os.fsync(facts.fileno())
+        if fence is not None:write(fence,dict(version=1,kind='git',state='launch_reserved'))
+        result=run_command(['git','--no-optional-locks','-c','core.longpaths=true','-c','core.hooksPath='+str(logs/'no-hooks'),
+            '-c','core.fsmonitor=false','-c','diff.external=',*args],root,60,env=env,capture=dict(directory=capture,max_bytes_per_stream=1048576))
+        facts.write(canonical(result).encode());facts.flush();os.fsync(facts.fileno())
+    if result.get('cleanup_confirmed') is not True:raise WorkerCleanupUnknown('Worker Git cleanup unresolved')
+    if fence is not None:fence.unlink()
     if (result.get('status')!='passed' or result.get('cleanup_confirmed') is not True
             or result.get('stdout_tail_unknown') is not False or result.get('stdout_truncated') is not False):raise ValueError('Worker Git operation failed')
     return (capture/'stdout.log').read_bytes()
@@ -92,6 +106,7 @@ def harness_environment():
 
 class SharedWorker:
     def __init__(self,queue,settings):
+        if not native_execution_supported():raise ValueError('Unsupported native worker platform')
         if type(queue) is not SharedQueue:raise ValueError('Actual shared queue required')
         self.queue=queue;self.settings=json.loads(canonical(settings));self.name=settings['worker_name']
         self.source=safe_config_path(Path(settings['source_checkout'])/'.worker-path-check').parent.resolve()
@@ -115,6 +130,9 @@ class SharedWorker:
         self.pins=self._pins()
     def _check_fence(self):
         if safe_config_path(self.fence).exists():raise ValueError('Worker execution cleanup unresolved')
+    def _git(self,root,args,logs):
+        self._check_fence()
+        return git(root,args,logs,fence=self.fence)
     def _pins(self):
         result={}
         files=list(self.skills.rglob('SKILL.md'))
@@ -130,10 +148,10 @@ class SharedWorker:
         body=json.loads(record[6]);directory=self.root/body['claim_id'][:24];directory.mkdir(exist_ok=False)
         logs=directory/'git-logs';logs.mkdir();mirror=directory/'repo.git';checkout=directory/'work'
         validate_source_config(self.source)
-        git(directory,['-c','protocol.file.allow=always','clone','--bare','--no-local','--no-hardlinks','--template=',str(self.source),str(mirror)],logs)
+        self._git(directory,['-c','protocol.file.allow=always','clone','--bare','--no-local','--no-hardlinks','--template=',str(self.source),str(mirror)],logs)
         branch='task-tower/work-'+body['claim_id']
-        git(mirror,['worktree','add','-b',branch,str(checkout),body['base_sha']],logs)
-        common=Path(git(checkout,['rev-parse','--path-format=absolute','--git-common-dir'],logs).decode().strip()).resolve()
+        self._git(mirror,['worktree','add','-b',branch,str(checkout),body['base_sha']],logs)
+        common=Path(self._git(checkout,['rev-parse','--path-format=absolute','--git-common-dir'],logs).decode().strip()).resolve()
         if common!=mirror.resolve() or not (checkout/'.git').is_file():raise ValueError('Private worker worktree mismatch')
         plan=safe_config_path(checkout/self.plans[str(body['issue'])])
         if not plan.is_file():raise ValueError('Prepared repository plan missing')
@@ -185,11 +203,12 @@ class SharedWorker:
                     result=json.loads(result_path.read_bytes())
                     if set(result)!={'version','status','summary'} or type(result['version']) is not int or result['version']!=1 or result['status']!='execution_completed':raise ValueError('Harness not completed')
                     if self._pins()!=self.pins:raise ValueError('Superpowers changed during task')
-                    common=Path(git(checkout,['rev-parse','--path-format=absolute','--git-common-dir'],logs).decode().strip()).resolve()
-                    if common!=mirror.resolve() or git(checkout,['symbolic-ref','--short','HEAD'],logs).decode().strip()!=branch:raise ValueError('Worker Git identity changed')
-                    head=git(checkout,['rev-parse','HEAD'],logs).decode().strip()
-                    if head==task['base_sha'] or git(checkout,['status','--porcelain=v1','--untracked-files=all'],logs):raise ValueError('Missing committed task result')
+                    common=Path(self._git(checkout,['rev-parse','--path-format=absolute','--git-common-dir'],logs).decode().strip()).resolve()
+                    if common!=mirror.resolve() or self._git(checkout,['symbolic-ref','--short','HEAD'],logs).decode().strip()!=branch:raise ValueError('Worker Git identity changed')
+                    head=self._git(checkout,['rev-parse','HEAD'],logs).decode().strip()
+                    if head==task['base_sha'] or self._git(checkout,['status','--porcelain=v1','--untracked-files=all'],logs):raise ValueError('Missing committed task result')
                     state='awaiting_acceptance'
+                except WorkerCleanupUnknown:raise
                 except (OSError,ValueError,KeyError,TypeError):state='needs_input'
             outcome=dict(issue=number,state=state,worker=self.name,head_sha=head,process=process)
             write(directory/'outcome.json',outcome)
@@ -207,6 +226,8 @@ def main(argv=None):
     parser.add_argument('--connections',type=Path,required=True);parser.add_argument('--config',type=Path,required=True)
     parser.add_argument('--once',action='store_true');parser.add_argument('--max-tasks',type=int)
     args=parser.parse_args(argv)
+    if args.command=='run' and not native_execution_supported():
+        print(canonical(dict(status='needs_input',reason='unsupported_platform')));return 2
     try:
         config_path=safe_config_path(args.config)
         from .dispatch_selection import _pairs

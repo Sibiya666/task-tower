@@ -15,6 +15,8 @@ from task_tower.shared_worker import SharedWorker
 
 class ReviewBlockerTests(unittest.TestCase):
     def setUp(self):
+        admission=patch('task_tower.shared_worker.native_execution_supported',return_value=True)
+        admission.start();self.addCleanup(admission.stop)
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
         self.root=Path(self.temp.name).resolve();self.source=self.root/'source';self.source.mkdir()
         def git(*args):
@@ -75,3 +77,41 @@ class ReviewBlockerTests(unittest.TestCase):
     def test_null_assignee_is_not_a_successful_execution_assignment(self):
         queue=SharedQueue(self.server.store(),str(uuid.uuid4()),allowlist=[dict(repository='owner/repo',issue=1,task_id='TT-SHARED-1')])
         claim=queue.claim(1);self.assertFalse(queue.assign(claim));self.assertIsNone(queue.start(claim))
+
+    def test_workspace_git_unknown_cleanup_fences_restart(self):
+        from task_tower.shared_worker import run_command as actual_run
+        calls=[]
+        def execute(argv,*args,**kwargs):
+            if 'clone' in argv:
+                calls.append(argv);return dict(status='cleanup_failed',cleanup_confirmed=False,started=True,pid=12345)
+            return actual_run(argv,*args,**kwargs)
+        worker=SharedWorker(self.queue,self.settings)
+        with patch('task_tower.shared_worker.run_command',side_effect=execute):
+            with self.assertRaises(ValueError):worker.run_once()
+            with self.assertRaises(ValueError):SharedWorker(self.queue,self.settings)
+        self.assertEqual(len(calls),1)
+
+    def test_post_harness_git_unknown_cleanup_fences_refill_and_restart(self):
+        from task_tower.shared_worker import run_command as actual_run
+        completed=[]
+        def execute(argv,*args,**kwargs):
+            if argv[0]==sys.executable:
+                result_path=Path(argv[argv.index('--result')+1])
+                result_path.write_text(json.dumps(dict(version=1,status='execution_completed',summary='Fixture only')))
+                completed.append(True)
+                return dict(status='passed',cleanup_confirmed=True,started=True,pid=12345,exit_code=0,
+                    stdout_tail_unknown=False,stdout_truncated=False,stderr_tail_unknown=False,stderr_truncated=False)
+            if completed and 'rev-parse' in argv:
+                return dict(status='cleanup_failed',cleanup_confirmed=False,started=True,pid=12346)
+            return actual_run(argv,*args,**kwargs)
+        worker=SharedWorker(self.queue,self.settings)
+        with patch('task_tower.shared_worker.run_command',side_effect=execute):
+            with self.assertRaises(ValueError):worker.run_once()
+            with self.assertRaises(ValueError):worker.run_once()
+            with self.assertRaises(ValueError):SharedWorker(self.queue,self.settings)
+        self.assertEqual(len(completed),1)
+
+    def test_unsupported_platform_rejects_worker_before_creating_output(self):
+        with patch('task_tower.shared_worker.native_execution_supported',return_value=False,create=True):
+            with self.assertRaises(ValueError):SharedWorker(self.queue,self.settings)
+        self.assertFalse((self.root/'worker').exists())

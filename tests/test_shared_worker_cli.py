@@ -29,7 +29,8 @@ class SharedWorkerCliTests(unittest.TestCase):
     def invoke(self,command,*extra):
         output=io.StringIO()
         with patch('task_tower.project_connections.load_connections',return_value=[self.connection]),\
-                patch('task_tower.github_tasks.GitHubTasks',return_value=self.store),contextlib.redirect_stdout(output):
+                patch('task_tower.github_tasks.GitHubTasks',return_value=self.store),\
+                patch('task_tower.shared_worker.native_execution_supported',return_value=True),contextlib.redirect_stdout(output):
             status=main([command,'--connections',str(self.connections),'--config',str(self.config),*extra])
         return status,[json.loads(line) for line in output.getvalue().splitlines()]
 
@@ -58,3 +59,11 @@ class SharedWorkerCliTests(unittest.TestCase):
         config=self.source/'worker.json';config.write_bytes(self.config.read_bytes());self.config=config
         status,rows=self.invoke('status');self.assertEqual(status,2)
         self.assertEqual(rows[0]['status'],'needs_input')
+
+    def test_unsupported_run_rejects_before_loading_connections(self):
+        output=io.StringIO()
+        with patch('task_tower.shared_worker.native_execution_supported',return_value=False,create=True),\
+                patch('task_tower.project_connections.load_connections') as load,contextlib.redirect_stdout(output):
+            status=main(['run','--connections','missing.json','--config','missing-worker.json'])
+        self.assertEqual(status,2);load.assert_not_called()
+        self.assertEqual(json.loads(output.getvalue())['reason'],'unsupported_platform')
