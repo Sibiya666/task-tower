@@ -1,0 +1,241 @@
+{
+  "base": "28ededc71aa8c05778c696ff8a66e2f43ab40940",
+  "candidate_files": {
+    "task_tower/pr_main.py": "72b82399d2acf157971295dfe81dcfa9ab1dda3615b78d50f829f01f496f14ce",
+    "task_tower/pr_worker.py": "8bc92ccaa8d55e0b44aae4248f142b9c6bd5c04d23176198da5b8c66b65b626a",
+    "task_tower/pr_journal.py": "0345543152edc912eb6a4bcbc583aa4b8d977cc8caed19deb7b8e53e3bf8a938",
+    "task_tower/pr_evidence.py": "66904e4d8e6e5edabb31cd8a8b818c096d94034647935bb19c395ef69844dc3e",
+    "task_tower/github_publication.py": "1836cac19f990c7e1f5b91018e310cf7bb430da5502450429060d29cc5eaf5ea",
+    "tests/test_pr_main.py": "0dcf2c9c1a9408784894f92ea1f7274a03018824fe53c0155fec014371519c8e",
+    "tests/test_pr_main_preparation.py": "62cd2c67134a6c145b409eafb8d40815fbfc8cc4c5e826c99db85663222d00b9",
+    "tests/test_pr_completion_transaction.py": "4d50f2351ecf79883ea610abe9569f60723110870665063f1a1b3d31a2a69c2d",
+    "task_tower/reviewer.py": "d67c28c3e9a315045184564d161030086989135ec2c43a1e7246c0493d4041e8",
+    "task_tower/postmerge_worker.py": "44cb05dc3d1b173820b53a56cd760830bccbfcc179900b0d586ba371d7832cce"
+  },
+  "scope": "Bounded main/postmerge/closure consumer only",
+  "reviews": [
+    {
+      "capture": "pr17-main-closure-native-review",
+      "qualified_current_review": true,
+      "source_unchanged": true,
+      "verification_unchanged": null,
+      "binary_unchanged": true,
+      "result": {
+        "status": "passed",
+        "exit_code": 0,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 221612,
+        "stdout_sha256": "ecf8b606ed635fb2b0c5139a2e72afb4f333618de73f78435500230529ff2692",
+        "stdout_bytes": 282375,
+        "stdout_captured_bytes": 282375,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "d94b23e959755744bde1ed2b816f2862bf9b277b7d7f8cd05fea585b46fd6fca",
+        "stderr_bytes": 7613,
+        "stderr_captured_bytes": 7613,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 78.515
+      },
+      "verdict": {
+        "run_id": "7d3159d1-cf88-4c9e-aded-3c9df3238401",
+        "attempt_id": "e89001a6-9cb0-4e25-bf36-286e51ea7ee4",
+        "instance_id": "06ca5ae9-05f3-4688-8a33-2163f95c0e08",
+        "stage": "development",
+        "generation": 1,
+        "source_sha": "28ededc71aa8c05778c696ff8a66e2f43ab40940",
+        "checkpoint_sha": "28ededc71aa8c05778c696ff8a66e2f43ab40940",
+        "input_sha256": "8397886ee9b466a643fe0253948c1ef6dc58c9b1c2903062811fe0aecf13ddda",
+        "version": 2,
+        "summary": "Reject bounded consumer: publish_main checks fresh private inputs before entering publish_step, which performs multiple blocking reads and durable intent acquisition before POST/PATCH without reloading PRHostContext inputs or pins. Revoking policy or changing private configuration during those reads or a SQLite lock wait still permits the external write; the subsequent _prepared_current check detects drift only after the effect. Add a typed fresh host authorization check after intent acquisition and immediately before transport, retaining consumed intents on refusal, and regression coverage for both publication actions. HEAD, all eight candidate hashes and pinned instruction files match. Four pure main-selection tests passed; write-based integration and full-suite tests were not run under the read-only restriction. Watch/CLI, installed pilot and whole-Issue acceptance were excluded as explicitly outside scope.",
+        "verdict": "reject",
+        "return_stage": "development",
+        "findings": [
+          {
+            "code": "product_defect",
+            "path": "task_tower/pr_main.py",
+            "line": 237
+          }
+        ]
+      },
+      "runner_sha256": "86531073cff80aff2959a1495cb8030799beefa4d3f9fbee4ee3a76ca1af9e25"
+    },
+    {
+      "capture": "pr17-main-closure-fix1-native-review",
+      "qualified_current_review": true,
+      "source_unchanged": true,
+      "verification_unchanged": null,
+      "binary_unchanged": true,
+      "result": {
+        "status": "passed",
+        "exit_code": 0,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 221988,
+        "stdout_sha256": "8a492663596a83244e2f48ff588d6cfe7def085b55f6954df69806e5dfb01e95",
+        "stdout_bytes": 193469,
+        "stdout_captured_bytes": 193469,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "3c8e053663e734a1531549a2f11670a72dc8838c71c1086ddd4e77d751704671",
+        "stderr_bytes": 7613,
+        "stderr_captured_bytes": 7613,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 58.203
+      },
+      "verdict": {
+        "run_id": "967fbf99-21c8-49ae-b0de-a7bdbd8fbd48",
+        "attempt_id": "d9f29a3c-9996-4860-b7cd-5493ca2d74a6",
+        "instance_id": "ec9bf626-6cf7-4147-bd10-4f4231844507",
+        "stage": "development",
+        "generation": 1,
+        "source_sha": "28ededc71aa8c05778c696ff8a66e2f43ab40940",
+        "checkpoint_sha": "28ededc71aa8c05778c696ff8a66e2f43ab40940",
+        "input_sha256": "da7d560708a5bc0ba6d19eaa37ad15df584e3386319305a07b311a3b39789560",
+        "version": 2,
+        "summary": "Reject bounded consumer: authorize_transport checks owner/cancellation/deadline inside _prepared_current before subsequent blocking source polling and Git reads. Its final checks reload only private inputs/pins. Deadline expiry or cancellation during those reads therefore still permits POST/PATCH; later transactional acknowledgement fences cannot undo the write. Recheck original live owner, barrier, cancellation and both deadlines after blocking validation immediately before transport, with regression coverage for both writes. Candidate and pinned instruction hashes match; four pure main-selection tests passed. Watch/CLI/pilot and whole-Issue acceptance were excluded as explicitly outside scope.",
+        "verdict": "reject",
+        "return_stage": "development",
+        "findings": [
+          {
+            "code": "product_defect",
+            "path": "task_tower/pr_evidence.py",
+            "line": 178
+          }
+        ]
+      },
+      "runner_sha256": "49cc7c01c70a0f113a0493cc73585a68c73cd87778e46f108acf929c39acc700"
+    },
+    {
+      "capture": "pr17-main-closure-fix2-native-review",
+      "qualified_current_review": true,
+      "source_unchanged": true,
+      "verification_unchanged": null,
+      "binary_unchanged": true,
+      "result": {
+        "status": "passed",
+        "exit_code": 0,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 26368,
+        "stdout_sha256": "9557788b0040334de203402892f10b66096cd24e37c251049b493997576e76ed",
+        "stdout_bytes": 183820,
+        "stdout_captured_bytes": 183820,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "1ec39e9bbb2ad06df6935e0868c386e307670af3599f029eecaa0021e8c45295",
+        "stderr_bytes": 10541,
+        "stderr_captured_bytes": 10541,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 71.672
+      },
+      "verdict": {
+        "run_id": "f7497f75-4e42-4468-b282-6f13ebdc613b",
+        "attempt_id": "db4ee015-d7d3-4100-960d-2192262cda70",
+        "instance_id": "b13abaf6-970a-48f6-be12-3c746d366fad",
+        "stage": "development",
+        "generation": 1,
+        "source_sha": "28ededc71aa8c05778c696ff8a66e2f43ab40940",
+        "checkpoint_sha": "28ededc71aa8c05778c696ff8a66e2f43ab40940",
+        "input_sha256": "5e86d363bc4c53f96d99feea77e83a900ec4f94fd2be684803e29340a979d899",
+        "version": 2,
+        "summary": "Reject bounded consumer: review_main checks original cancellation/deadlines before blocking validation, then Worker.review_one performs additional HTTP/Git reads before launching review_bound without another original-authority check. Cancellation, private-policy revocation or deadline expiry during those reads still permits a reviewer process launch; later acknowledgement refusal cannot undo that effect. Add a fresh original owner/barrier/private-input/deadline gate immediately before actual reviewer launch and regression coverage for delayed reads. Candidate and instruction hashes match; four pure main-selection tests passed. Write-dependent integration tests were not run under read-only restrictions. Supervisor/CLI/installed pilot and whole-Issue acceptance were excluded as explicitly deferred.",
+        "verdict": "reject",
+        "return_stage": "development",
+        "findings": [
+          {
+            "code": "product_defect",
+            "path": "task_tower/pr_main.py",
+            "line": 175
+          }
+        ]
+      },
+      "runner_sha256": "1b609a3c2ab643a644c14ca55df27cd2e7d9452099e89cc70f0a4ddf020a4de5"
+    },
+    {
+      "capture": "pr17-main-closure-fix3-native-review",
+      "qualified_current_review": true,
+      "source_unchanged": true,
+      "verification_unchanged": null,
+      "binary_unchanged": true,
+      "result": {
+        "status": "passed",
+        "exit_code": 0,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 221788,
+        "stdout_sha256": "c75936c81ed08eca52220461e6e5c65b528494633ed8baf32f08acb555224ddc",
+        "stdout_bytes": 257081,
+        "stdout_captured_bytes": 257081,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "27173815202e2673ff63e764ec05628ccf0c08b89399a1cc0212a67ab97ac76b",
+        "stderr_bytes": 10976,
+        "stderr_captured_bytes": 10976,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 78.532
+      },
+      "verdict": {
+        "run_id": "672b3c12-ad3d-4fd8-838b-ad84f0c7f3cf",
+        "attempt_id": "bef911b3-bbfb-47db-9407-ecf41723cf56",
+        "instance_id": "b8880a0d-00f3-4fbf-90fd-e5c6f40fb1e6",
+        "stage": "development",
+        "generation": 1,
+        "source_sha": "28ededc71aa8c05778c696ff8a66e2f43ab40940",
+        "checkpoint_sha": "28ededc71aa8c05778c696ff8a66e2f43ab40940",
+        "input_sha256": "c8382cbfa1aab513d8365f3f5f254ad3fedc58bd85d04e193d2339e008d11a44",
+        "version": 2,
+        "summary": "Approve bounded consumer review: candidate hashes and instruction pins verified; no blocking defect identified. Four pure main-source tests passed. Native fixture regressions and full suite were not run under read-only restrictions. Watch/CLI, installed pilot, operator/protection attestation and whole-Issue acceptance remain outside this verdict.",
+        "verdict": "approve",
+        "return_stage": null,
+        "findings": []
+      },
+      "runner_sha256": "e24bd53e6727dd4cd6e64fb7ff09227cd056f948e3ddcdb1f5d9e40609acc0d5"
+    },
+    {
+      "capture": "pr17-main-closure-native-test-review",
+      "qualified_current_review": true,
+      "source_unchanged": true,
+      "verification_unchanged": true,
+      "binary_unchanged": true,
+      "result": {
+        "status": "passed",
+        "exit_code": 0,
+        "started": true,
+        "cleanup_confirmed": true,
+        "pid": 218204,
+        "stdout_sha256": "a2b904fba02609ab742a7c1a27f5860e585b5a6dd7467999f9d6bfe45576ff11",
+        "stdout_bytes": 336577,
+        "stdout_captured_bytes": 336577,
+        "stdout_tail_unknown": false,
+        "stdout_truncated": false,
+        "stderr_sha256": "a97a4590a48bd79e2e92aefc0404a4402d03c52875cc5f1c90d375bb4be8fbdd",
+        "stderr_bytes": 8696,
+        "stderr_captured_bytes": 8696,
+        "stderr_tail_unknown": false,
+        "stderr_truncated": false,
+        "duration_seconds": 90.375
+      },
+      "verdict": {
+        "run_id": "e8b51787-a908-48e7-83de-baeb5f3a4f96",
+        "attempt_id": "8e6b0e01-01ed-4dc4-91e3-da5e5b3e0e73",
+        "instance_id": "01ab4eb9-b43b-4434-bb6d-b64d6610c4dc",
+        "stage": "test",
+        "generation": 1,
+        "source_sha": "28ededc71aa8c05778c696ff8a66e2f43ab40940",
+        "checkpoint_sha": "28ededc71aa8c05778c696ff8a66e2f43ab40940",
+        "input_sha256": "568e4cd96d3f1ed25a6d79674eb28153854aa013c8a483615c1f9b91cd3c6c96",
+        "version": 2,
+        "summary": "Approve bounded TEST acceptance. Candidate, instruction and capture hashes verified; four pure tests passed independently. Current captures show 32 positive/default tests and delayed cancellation passing with zero reviewer launches. Earlier RED/GREEN and transaction evidence retains its source qualification. The failed 110-test capture remains failed; subsequent module/current-chain repeats passed. No bounded blocker identified. Full suite and native integration were not rerun here; watch/CLI, pilot, attestation and whole-Issue/PR/main acceptance remain excluded.",
+        "verdict": "approve",
+        "return_stage": null,
+        "findings": []
+      },
+      "runner_sha256": "b010dba5c194e9f14984a54f71a9ac6de864358c76135ca149ef7bb41d7adc1d"
+    }
+  ]
+}

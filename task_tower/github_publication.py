@@ -74,6 +74,7 @@ class GitHubPublisher:
         if (not meta or meta.get('kind')!='task' or
             (meta.get('legacy_id') or meta.get('task_id') or meta.get('id'))!=receipt['task_id']):
             raise PublicationError('Issue task identity changed')
+        if self.publication_context is not None:self.publication_context.validate_issue(issue)
         comparison=self.store.request('GET','/compare/'+receipt['commit']+'...main')
         if not isinstance(comparison,dict) or comparison.get('status') not in ('ahead','identical'):
             raise PublicationError('Publication commit is not on main')
@@ -277,6 +278,7 @@ class GitHubPublisher:
                 expected=dict(remote_attempt=dict(kind='local-postmerge',status='done',commit=receipt['commit'],publication_id=identity,receipt=receipt),status='done')
                 body=LIFECYCLE+canonical(expected)+'\n-->'
                 action='comment_post'
+                live_owner(); context.authorize_transport()
                 comment=self.store.request('POST',f"/issues/{receipt['issue']}/comments",dict(body=body))
                 if (not isinstance(comment,dict) or type(comment.get('id')) is not int or comment['id']<1 or comment.get('body')!=body or
                         comment.get('user',{}).get('login','').casefold()!=self.account.casefold()): raise PublicationError('Unconfirmed comment response')
@@ -287,6 +289,7 @@ class GitHubPublisher:
                 confirmed_comment(matching); context.validate(receipt); live_owner()
                 effect_store.begin_effect(context.binding['repository'],context.binding['pr_number'],owner_id,'issue_close',dict(publication_id=identity,issue_id=receipt['issue_id'],state='closed',state_reason='completed'))
                 publication=effect_store.publication(identity); action='issue_close'
+                live_owner(); context.authorize_transport()
                 closed=self.store.request('PATCH',f"/issues/{receipt['issue']}",dict(state='closed',state_reason='completed'))
                 if (not isinstance(closed,dict) or closed.get('id')!=receipt['issue_id'] or closed.get('number')!=receipt['issue'] or
                         closed.get('state')!='closed' or closed.get('state_reason')!='completed'): raise PublicationError('Unconfirmed close response')

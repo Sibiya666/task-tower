@@ -72,7 +72,7 @@ class Worker:
             raise ValueError('Private card provider returned foreign path')
         return path
 
-    def review_one(self,task_id,bundle,*,review_binding):
+    def review_one(self,task_id,bundle,*,review_binding,main_preparation=None):
         """One genuine bound review; no publication or implicit unknown retry."""
         from .pr_evidence import PostmergeReviewBinding
         from .pr_policy import policy_fingerprint, strict_json
@@ -125,7 +125,9 @@ class Worker:
             if bound_git(checkout,'rev-parse','HEAD').decode().strip()!=sha or bound_git(checkout,'status','--porcelain=v1','--untracked-files=all'):
                 raise ValueError('Reviewer checkout mismatch')
             output=tasks._safe_path(self.state/'bound-output'/review_binding.effect_id)
-            envelope=self.reviewer.review_bound(checkout,card,bundle,output,binding=review_binding,executor_profile=self.reviewer.config)
+            kwargs=dict(binding=review_binding,executor_profile=self.reviewer.config)
+            if main_preparation is not None:kwargs['main_preparation']=main_preparation
+            envelope=self.reviewer.review_bound(checkout,card,bundle,output,**kwargs)
             _validate_bound_envelope(envelope)
             if bound_git(checkout,'rev-parse','HEAD').decode().strip()!=sha or bound_git(checkout,'status','--porcelain=v1','--untracked-files=all'):
                 raise ValueError('Readonly reviewer changed checkout')

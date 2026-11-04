@@ -155,3 +155,8 @@ Task4c explicit authenticated pending/failure and genuine failed/no-launch recor
 
 
 Task5 bounded intake/review persistence and typed premerge controller have independent development/test acceptance; see docs/tasks/evidence/TT-PR-WORKER-001/task5-foundation-acceptance.md. Preserve forensic envelopes, one action per tick including uncertain outcomes, and original owner/deadline gates. Lifecycle timeout=None is control-plane only with bounded capture/cancellation; no model/profile waiver. Postmerge/closure integration, supervisor/CLI, pilot and whole-feature/PR/main acceptance remain pending.
+The bounded exact-main/postmerge/closure controller consumer has independent
+development/test acceptance and current genuine positive/default regressions;
+see [qualified evidence](docs/tasks/evidence/TT-PR-WORKER-001/task5-main-consumer-acceptance.md).
+Installed supervised watch/CLI, real pilot and whole Issue17/PR/main completion
+remain pending. This internal integration does not yet enable unattended work.

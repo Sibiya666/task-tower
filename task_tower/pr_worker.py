@@ -2,7 +2,8 @@
 import os
 from .pr_context import PRHostContext
 from .pr_journal import PRJournal,BINDING
-from .pr_source import PRSource
+from .pr_source import PRSource,PRSourceError
+from .github_source import GitHubSource,GitHubSourceError
 from .pr_policy import authorized_task,canonical,identifier
 from .pr_effects import PREffects
 from .pr_persistence import prepare_admission,run_review
@@ -20,7 +21,7 @@ class Controller:
     def __init__(self):raise TypeError('Use Controller.from_context')
 
     @classmethod
-    def from_context(cls,context,journal,owner_id,*,sources=None):
+    def from_context(cls,context,journal,owner_id,*,sources=None,main_sources=None):
         if type(context) is not PRHostContext or type(journal) is not PRJournal:raise ValueError('Actual controller objects required')
         identifier(owner_id)
         if journal._active!=owner_id:raise ValueError('Actual persistent controller owner required')
@@ -36,9 +37,18 @@ class Controller:
         for repository,source in sources.items():
             if (type(source) is not PRSource or source.repository!=repository or source.connection!=connections[repository]
                     or canonical(source.policy)!=canonical(loaded['policy'])):raise ValueError('Foreign controller source')
+        if main_sources is None:
+            main_sources={r:GitHubSource(connections[r].repository) for r in repositories}
+            for repository,source in sources.items():
+                if 'Authorization' in source.headers:
+                    main_sources[repository].headers['Authorization']=source.headers['Authorization']
+        if (not isinstance(main_sources,dict) or set(main_sources)!=repositories or
+                any(type(source) is not GitHubSource or source.repository.casefold()!=repository for repository,source in main_sources.items())):
+            raise ValueError('Actual configured main sources required')
         controller=object.__new__(cls)
         controller.context=context;controller.journal=journal;controller.owner_id=owner_id
         controller.sources=dict(sources);controller.cursor=0
+        controller.main_sources=dict(main_sources);controller._mains={}
         controller.references=tuple(sorted((p['repository'].casefold(),t['pr_number']) for p in loaded['policy']['projects'] for t in p['tasks']))
         controller.config={'_controller':controller}
         return controller
@@ -64,8 +74,35 @@ class Controller:
             observed=effects.observe_merge()
             return _public(journal.get(task['repository'],task['pr_number']),action='merge_observed',
                 reason=None if observed['status']=='confirmed' else 'merge_pending'),True
-        if any(e['status'] not in ('confirmed','failed') for e in self._effects(row)):
+        unresolved=[e for e in self._effects(row) if e['status'] not in ('confirmed','failed')]
+        if unresolved and (row['state']!='awaiting_closure' or any(e['kind'] not in ('comment_post','issue_close') for e in unresolved)):
             return _public(row,reason='effect_unverified'),False
+        if row['state']=='awaiting_main':
+            from .pr_main import prepare_main
+            prepared=prepare_main(context,source,self.main_sources[source.repository],journal,task,self.owner_id)
+            if prepared is None:return _public(row,reason='main_ci_pending'),False
+            self._mains[(row['repository'],row['pr_number'])]=prepared
+            row=self._transition(row,'awaiting_postmerge')
+            return _public(row,action='main_prepared'),True
+        if row['state']=='awaiting_postmerge':
+            from .pr_main import review_main
+            prepared=self._mains.get((row['repository'],row['pr_number']))
+            observed,result=review_main(prepared)
+            envelope=result['host_review']
+            approved=(observed['status']=='confirmed' and result['status']=='done' and envelope['result']['verdict']=='approve')
+            row=self._transition(row,'awaiting_closure' if approved else 'needs_input',
+                **(dict(postmerge_receipt_sha256=envelope['receipt_sha256']) if approved else dict(reason='postmerge_not_accepted')))
+            return _public(row,action='postmerge_review'),True
+        if row['state']=='awaiting_closure':
+            from .pr_main import publish_main
+            prepared=self._mains.get((row['repository'],row['pr_number']))
+            result,publication=publish_main(prepared)
+            if result['status']=='published':
+                if publication is None or publication['phase']!='published':raise ValueError('Actual completion publication required')
+                journal.complete_barrier(row['repository'],self.owner_id,publication['completion_proof'])
+                return _public(journal.get(row['repository'],row['pr_number']),action='closure_completed'),True
+            if result['status']=='needs_input':row=self._transition(row,'needs_input',reason='publication_not_accepted')
+            return _public(row,action=result['action'] if result['action']!='none' else 'publication_observed'),True
         if row['state'] in ('stale','rejected','needs_input'):
             if row['cancel_requested']:return _public(row,reason='cancelled'),False
             if any(e['kind']=='acceptance_status' and e['payload']['state']=='failure' and e['status']=='confirmed' for e in self._effects(row)):
@@ -119,7 +156,7 @@ def step(config,journal,*,owner_id):
             task=authorized_task(loaded['policy'],repository,number)
             report,acted=controller._advance(task)
             if acted:return report
-        except (ValueError,OSError,TypeError,KeyError):
+        except (ValueError,OSError,TypeError,KeyError,PRSourceError,GitHubSourceError):
             row=journal.get(repository,number)
             # An exception can follow a consumed role/write intent. Never
             # scan another PR in this tick after an uncertain outcome. The

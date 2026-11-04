@@ -138,7 +138,7 @@ class PostmergeReviewBinding:
         _binding(self.pr_binding)
         for value in (self.effect_id,self.reviewer_instance_id,*self.excluded_instances): identifier(value)
         if (self.reviewer_instance_id in self.excluded_instances or
-                self.pr_binding['task_id']!=task['id'] or bundle.get('repository')!=self.pr_binding['repository'] or
+                self.pr_binding['task_id']!=task['id'] or not isinstance(bundle.get('repository'),str) or bundle['repository'].casefold()!=self.pr_binding['repository'] or
                 task['id'] not in bundle.get('task_ids',[]) or self.merge_commit!=bundle.get('merge_commit') or
                 self.bundle_sha256!=policy_fingerprint(bundle) or self.snapshot_sha256!=tasks.task_snapshot(task) or
                 self.profile_sha256!=profile_fingerprint(config) or self.instructions_sha256!=profile_fingerprint(_pins(config['superpowers']))):
@@ -158,6 +158,37 @@ class PublicationContext:
     main_reader: object
     pr_receipt: dict
     postmerge_review: dict
+    criteria_sha256: str | None = None
+    main_preparation: object | None = None
+
+    def authorize_transport(self):
+        """Reload actual private authority after durable intent/remote reads."""
+        if self.main_preparation is None:return
+        from .pr_main import MainPreparation,_prepared_current,_live_main
+        prepared=self.main_preparation
+        if type(prepared) is not MainPreparation:
+            raise ValueError('Actual main preparation required for transport')
+        row,_,_,record,_,_=_prepared_current(prepared,state='awaiting_closure')
+        if (any(record['binding'][key]!=self.binding[key] for key in record['binding'])
+                or row['merge_commit']!=self.binding['merge_commit']):
+            raise ValueError('Foreign publication transport preparation')
+        # Source/Git/SQLite reads above may block. Re-read private files and
+        # instruction pins after them, immediately before the HTTP write.
+        effect=prepared.journal.effect(record['merge_effect_id'])
+        _live_main(prepared.context,prepared.journal,prepared.owner_id,row,effect,
+            states=('awaiting_closure',))
+
+    def validate_issue(self,issue):
+        """Opt-in original pipeline criteria; legacy receipt bytes stay intact."""
+        if self.criteria_sha256 is None:return
+        from .pr_policy import text,HASH
+        from .github_tasks import parse_metadata
+        from .pipeline_policy import criteria_snapshot
+        from .executor_profiles import profile_fingerprint
+        text(self.criteria_sha256,HASH)
+        criteria=criteria_snapshot(issue,parse_metadata(issue.get('body')),self.binding['repository'])
+        if profile_fingerprint(criteria)!=self.criteria_sha256:
+            raise ValueError('Current Issue criteria changed after acceptance')
 
     def validate(self,receipt):
         from .pr_journal import BINDING, _binding
@@ -165,7 +196,8 @@ class PublicationContext:
         exact(self.binding,BINDING|{'merge_commit'})
         _binding({k:self.binding[k] for k in BINDING})
         if (self.connection.repository.casefold()!=self.binding['repository'] or
-                any(receipt[k]!=self.binding[k] for k in ('repository','issue','issue_id','task_id')) or
+                receipt['repository'].casefold()!=self.binding['repository'] or
+                any(receipt[k]!=self.binding[k] for k in ('issue','issue_id','task_id')) or
                 receipt['commit']!=self.binding['merge_commit'] or self.main_reader()!=self.binding['merge_commit']):
             raise ValueError('Publication context or exact main changed')
         pr=self.pr_receipt; post=self.postmerge_review
@@ -211,7 +243,7 @@ def _validate_bound_envelope(envelope):
 def publication_completion_proof(context,publication,issue,*,store):
     """Genuine closure proof; does not depend on already-published state."""
     from .project_worker import verified_done
-    receipt=publication['receipt']; context.validate(receipt)
+    receipt=publication['receipt']; context.validate(receipt);context.validate_issue(issue)
     if any(publication['binding'][k]!=context.binding[k] for k in publication['binding']):
         raise ValueError('Foreign publication binding')
     if (issue.get('id')!=receipt['issue_id'] or issue.get('number')!=receipt['issue'] or

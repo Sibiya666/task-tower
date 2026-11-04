@@ -32,7 +32,7 @@ class ReviewRunner:
     def __init__(self, config):
         self.config = config
 
-    def review_bound(self,checkout,task,bundle,output_dir,*,binding,executor_profile):
+    def review_bound(self,checkout,task,bundle,output_dir,*,binding,executor_profile,main_preparation=None):
         """Full installation profile, fresh private instructions, host envelope.
 
         This opt-in protocol does not translate a full profile into the legacy
@@ -95,6 +95,10 @@ class ReviewRunner:
                 ', and the immutable postmerge request at '+str(request_path)+
                 '. Independently verify the task criteria, accepted stages and exact-main CI. Do not implement changes. '
                 'Return only the required postmerge review JSON.']
+        if main_preparation is not None:
+            from .pr_main import authorize_review_launch
+            bounds=authorize_review_launch(main_preparation,binding)
+            timeout=min(timeout,bounds['timeout_seconds']);limit=min(limit,bounds['log_max_bytes'])
         execution=run_command(command,checkout,timeout,env=child_environment(os.environ),
             capture=dict(directory=output,max_bytes_per_stream=limit))
         if (execution.get('status')!='passed' or execution.get('started') is not True or

@@ -559,6 +559,19 @@ class PRJournal:
             if effect['observation'] is not None:
                 for key,value in effect['observation'].items():
                     if key!='status' and observation.get(key)!=value: raise ValueError('Conflicting PR observation')
+            if observation['status']=='confirmed':
+                # Completion facts cannot outrun cancellation/deadline while
+                # waiting for BEGIN IMMEDIATE, including read-only recovery.
+                self._tick(row)
+                if row['cancel_requested'] or row['owner_pid']!=os.getpid() or effect['owner_pid']!=os.getpid():
+                    raise ValueError('PR confirmation transaction fenced')
+                if effect['kind'] in ('postmerge_review','comment_post','issue_close'):
+                    expected='awaiting_postmerge' if effect['kind']=='postmerge_review' else 'awaiting_closure'
+                    barrier=self._load(db,'barriers','repository',row['repository'])
+                    if (row['state']!=expected or barrier is None or barrier['completed'] is not False
+                            or barrier['owner_id']!=owner_id or barrier['owner_pid']!=os.getpid()
+                            or any(type(barrier[k]) is not type(row[k]) or barrier[k]!=row[k] for k in BINDING)):
+                        raise ValueError('Postmerge confirmation barrier fenced')
             if effect['kind']=='merge' and observation['status']=='confirmed':
                 # Recheck after BEGIN IMMEDIATE, in the transaction that
                 # records completion. A prior host check may precede a lock wait.
@@ -657,6 +670,10 @@ class PRJournal:
             value=self._load(db,'publications','publication_id',publication_id)
             if value is None or value['phase']!=expected_phase or value['owner_id']!=owner_id: raise ValueError('Publication CAS mismatch')
             row=self._get(db,value['repository'],value['pr_number']); self._owned(db,row,owner_id)
+            if update['phase'] in ('comment_confirmed','closure_observed','published'):
+                self._tick(row)
+                if row['cancel_requested'] or row['state']!='awaiting_closure' or row['owner_pid']!=os.getpid():
+                    raise ValueError('Publication confirmation transaction fenced')
             allowed={'comment_intent':{'comment_confirmed','unknown','needs_input'},'close_intent':{'closure_observed','unknown','needs_input'},
                 'closure_observed':{'published','unknown','needs_input'},'prepared':{'unknown','needs_input'},'comment_confirmed':{'unknown','needs_input'}}
             if expected_phase=='unknown':
@@ -681,6 +698,10 @@ class PRJournal:
             barrier=self._load(db,'barriers','repository',repository)
             if barrier is None or barrier['completed'] or barrier['owner_id']!=owner_id: raise ValueError('Barrier ownership fenced')
             row=self._get(db,repository,barrier['pr_number']); self._owned(db,row,owner_id)
+            self._tick(row)
+            if (row['cancel_requested'] or row['owner_pid']!=os.getpid() or barrier['owner_pid']!=os.getpid()
+                    or any(type(barrier[k]) is not type(row[k]) or barrier[k]!=row[k] for k in BINDING)):
+                raise ValueError('Barrier completion transaction fenced')
             publication=self._load(db,'publications','publication_id',proof['publication_id'])
             if row['state']!='awaiting_closure' or publication is None or publication['phase']!='published' or publication['completion_proof']!=proof: raise ValueError('Incomplete barrier proof')
             self._match_proof(proof,row,publication)
