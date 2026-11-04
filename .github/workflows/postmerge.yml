@@ -9,16 +9,37 @@ permissions:
   contents: read
 
 jobs:
-  verify-merge:
+  shards:
+    name: merge unittest shard (windows-latest, ${{ matrix.shard }})
     if: github.event.pull_request.merged == true
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - runner: windows-latest
-            platform: windows
-    runs-on: ${{ matrix.runner }}
+        shard: [0, 1, 2, 3]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m task_tower.ci_unittest --count 4 --index ${{ matrix.shard }} --manifest "${{ runner.temp }}/ci-unittest/shard-${{ matrix.shard }}.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ci-unittest-${{ github.run_id }}-${{ matrix.shard }}
+          path: ${{ runner.temp }}/ci-unittest/shard-${{ matrix.shard }}.json
+          include-hidden-files: true
+          if-no-files-found: error
+  verify-merge:
+    name: verify-merge (windows-latest, windows)
+    needs: shards
+    if: always() && github.event.pull_request.merged == true
+    timeout-minutes: 45
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
         id: source
@@ -29,17 +50,24 @@ jobs:
         id: python
         with:
           python-version: '3.11'
-      - name: Test exact merged revision
+      - uses: actions/download-artifact@v4
+        if: needs.shards.result == 'success'
+        with:
+          pattern: ci-unittest-${{ github.run_id }}-*
+          path: ${{ runner.temp }}/ci-unittest
+          merge-multiple: true
+      - name: Verify all exact-merge test shards
         id: tests
+        if: needs.shards.result == 'success'
         continue-on-error: true
-        run: python -m unittest discover -s tests -v
+        run: python -m task_tower.ci_unittest --verify "${{ runner.temp }}/ci-unittest" --count 4
       - name: Export task-manager event
         if: always() && steps.source.outcome == 'success' && steps.python.outcome == 'success'
         id: event
         shell: python
         env:
           TASK_REPOSITORY: ${{ github.repository }}
-          TASK_PLATFORM: ${{ matrix.platform }}
+          TASK_PLATFORM: windows
           TEST_OUTCOME: ${{ steps.tests.outcome }}
         run: |
           import os, subprocess, sys
@@ -56,7 +84,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always() && steps.event.outcome == 'success'
         with:
-          name: task-tower-merge-${{ github.event.pull_request.number }}-${{ matrix.platform }}
+          name: task-tower-merge-${{ github.event.pull_request.number }}-windows
           path: .task-tower/merge-event.json
           include-hidden-files: true
           if-no-files-found: error
