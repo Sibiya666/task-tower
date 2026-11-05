@@ -38,3 +38,7 @@
 - Preserve failed local smoke at6353a22 and actual cleanup/source receipt; no repeat native for green.
 - TDD active-host turnover correlation and bounded allowlisted native failure locations, with no raw exception formatting or DB reads.
 - Independent task review, new commit and fresh whole six-file head/base review precede the single hosted baseline.
+
+## Task2 evidence boundary
+
+Baseline41964473875 passed without reproducing the historical delay. Independent causal review therefore scopes `tt-qrk.4.1` to duplicate-work optimization, not parent-bug closure. The150ms-per-original-walk virtual workload is predeclared in the spec and must not be tuned. Execute real validators, original one-second guard and real journal/status machinery; preserve all unsafe-path and exhaustion controls. After reviewed TDD, use the one changed-head diagnostic opportunity, then remove the branch-only research workflow before ordinary final PR/full-suite/main gates. Keep the parent unresolved if historical causation remains unproven.

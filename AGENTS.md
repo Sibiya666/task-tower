@@ -57,3 +57,7 @@ PowerShell 5.1 scripts with Cyrillic must be UTF-8 BOM. The desktop shortcut mus
 Keep execution_completed separate from accepted/done. Existing model/custom/check children strip GH_TOKEN/GITHUB_TOKEN case-insensitively; only the established fixed trusted host helpers may inherit host GitHub authentication. Never copy tokens into argv, task text, prompts, logs or public artifacts. Do not install tools, change model/account/auth or activate old workers implicitly.
 
 Inspect/read/write UTF-8 explicitly, including subprocess output decoding on Windows. Use ASCII-escaped JSON or verified code points when diagnosing Unicode source predicates; never edit based on lossy terminal rendering. Preserve source bytes, unknown-outcome fences, existing project authorization and private settings.
+
+## Residual CI timing investigation
+
+Baseline hosted diagnostic41964473875 passed without reproducing the historical one-second preconnection exhaustion. Child tt-qrk.4.1 covers only the independently reviewed duplicate-validation workload optimization and fixed150ms virtual-workload regression. Retain `_private_stat()` ancestry validation immediately before stat, every security predicate and the original operation deadline. Passing baseline/verification or accepted child delivery cannot close parent tt-qrk.4 while historical timing causation remains unresolved. The branch-only research trigger must not ship as a permanent CI job.
