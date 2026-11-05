@@ -1,13 +1,15 @@
 # Запуск после clone
 
-Shared-worker pipeline handoff is configured separately using an existing private
+**Текущий вход:** [согласованная единая спецификация](superpowers/specs/2026-11-05-task-tower-unified-design.md), решение пользователя «согласую» от 2026-11-05. Сначала конкретный независимо принятый план B и квалификация установленного Windows 10 исполнителя, затем C до результата в книге. Состав агентов определяется задачей, независимость проверок сохраняется. Admission `.1` accepted; `.2` blocked у исходного владельца `task-tower-beads-stages`, PR85 Draft/HOLD. Одобрение требований само по себе не означает публикацию/приёмку main или квалификацию runtime. Bootstrap ниже описывает интерактивный/исторический интерфейс, а не готовый unattended executor.
+
+**Historical compatibility recipe — not the current execution path:** shared-worker pipeline handoff was configured separately using an existing private
 pipeline installation; bootstrap does not install it or start a service. See the
 [Windows operator profile](shared-conveyor.md#windows-pipeline-handoff). It does
 not import legacy execution results as accepted stage receipts.
 
 Установите Python 3.11+ и выбранный harness обычным способом. Bootstrap не устанавливает программы, не покупает доступ и не читает ключи или файлы авторизации.
 
-Для подключения GitHub выполните [полную настройку GitHub CLI, авторизации и Project](github-setup.md). Project создаётся/подключается **до импорта Issues**; локальный интерактивный режим ниже остаётся доступен и не означает полной готовности GitHub.
+Историческая GitHub-интеграция описана в [настройке GitHub CLI, авторизации и Project](github-setup.md): для того режима Project создаётся/подключается до импорта Issues. Эти инструкции не являются текущей очередью Beads и не разрешают новое подключение/изменение авторизации. Локальный интерактивный режим ниже не означает полной готовности GitHub или qualification B.
 
 Из папки клона:
 
@@ -62,11 +64,11 @@ python3 bootstrap.py --launch
 
 ## Первая проектная задача
 
-Для экспериментального общего GitHub-бэклога предусмотрен отдельный [shared-worker](shared-conveyor.md).
-Он использует подключённый Project и приватный профиль, атомарный захват и установленный Superpowers.
-Обычный интерактивный bootstrap не включает его автоматически; полный PR/main цикл ещё проходит разработку.
+Исторический эксперимент общего GitHub-бэклога описан в [shared-worker](shared-conveyor.md); его не следует запускать как следующий этап текущей Beads-вертикали.
+Этот сохранённый режим использует подключённый Project, приватный профиль, атомарный захват и установленный Superpowers.
+Обычный интерактивный bootstrap не включает его автоматически; это историческая совместимость, не текущий план квалификации/PR-main доставки.
 
-[TT-BOOTSTRAP-001](tasks/TT-BOOTSTRAP-001.json) — пилот собственной карточки Task Tower:
+[TT-BOOTSTRAP-001](tasks/TT-BOOTSTRAP-001.json) — исторический файловый пилот собственной карточки Task Tower; команды ниже сохранены для аудита интерфейса, не как текущий task authority:
 
 ```sh
 python -m task_tower task show docs/tasks/TT-BOOTSTRAP-001.json
