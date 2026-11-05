@@ -145,4 +145,3 @@ Rubric bytes и credentials в manifest для модели не включаю�
 [fingerprint]: https://github.com/google-research/harness2/blob/6868817518876de8fd170c6a8354daca273b6191/harness2/core/runmark.py#L42-L63
 [context]: https://github.com/google-research/harness2/blob/6868817518876de8fd170c6a8354daca273b6191/harness2/core/context.py#L153-L175
 [common]: https://github.com/google-research/harness2/blob/6868817518876de8fd170c6a8354daca273b6191/harness2/cli/_common.py#L97-L138
-
