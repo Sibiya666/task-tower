@@ -18,6 +18,14 @@ from task_tower import beads_stages as stages
 
 
 class BoundaryTests(unittest.TestCase):
+    def test_qualification_cannot_enter_ordinary_dispatch_before_candidate_binding(self):
+        runner=object.__new__(stages.StageRoleRunner);runner.mode='qualification'
+        runner.host_checks=stages.HostCheckAuthority(documentation_tasks={'tt-a'},
+            sandbox_factory=lambda *a:None,qualification_verifier=lambda *a:True)
+        with patch.object(stages,'load_stage_policy',side_effect=AssertionError('ordinary policy dispatch forbidden')) as policy:
+            result=runner.run_session(Path('not-a-policy.json'),stop_requested=threading.Event())
+            policy.assert_not_called()
+        self.assertEqual(result,dict(outcome='refused',reason='qualification_requires_explicit_candidate',tasks=[]))
     def test_runtime_helper_rejects_case_alias_overlap_even_before_policy_loader(self):
         execution=stages.RuntimeExecutionCapability(launcher=lambda *a:None,qualification_verifier=lambda *a:True)
         checks=stages.RuntimeCheckAuthority(test_paths={'tt-a':('tests',)},selected_tests={'tt-a':('tests.test_behavior',)},
@@ -832,15 +840,34 @@ class LocalSourceTests(unittest.TestCase):
         self._actual_pipeline(runtime=True,zero_full_test=True)
 
     def test_actual_full_test_zero_inventory_is_refused_despite_exit_zero(self):
+        with self.assertRaises(ValueError):
+            self._direct_runtime_check('import unittest,atexit,os\n'
+                'atexit.register(lambda:os._exit(0))\ndef load_tests(loader,suite,pattern):\n return unittest.TestSuite()\n','test')
+        self.assertEqual(len(self.direct_receipts),1)
+        self.assertEqual(self.direct_receipts[0]['exit_code'],0)
+        self.assertEqual(self.direct_receipts[0]['status'],'passed')
+
+    def test_genuine_red_with_footer_beyond_context_prefix_is_accepted(self):
+        result=self._direct_runtime_check('import unittest,sys\nclass Loud(unittest.TestCase):\n'
+            ' def test_missing(self):\n  print("X"*12000,file=sys.stderr)\n  self.assertEqual(1,2)\n','tests_only')
+        self.assertEqual(result['coverage']['tests_run'],1)
+        self.assertEqual(result['coverage']['failures'],1)
+        self.assertIn('AssertionError',result['failure_context']['stderr'])
+        record=self.authority.get_accepted_artifact(result['runner_report']['name'])
+        actual=json.loads(record.path.read_bytes())
+        self.assertGreater(actual['host_supervisor']['streams']['stderr']['bytes'],8192)
+        self.assertEqual(actual['context']['kind'],'captured_prefix_and_suffix')
+        self.assertLess(len(result['failure_context']['stderr'].encode('utf-8')),8300)
+
+    def _direct_runtime_check(self,test_source,phase):
         roles=self.roles;context=self.slot.context;source=context['source']
         (source/'tests').mkdir();(source/'tests'/'__init__.py').write_bytes(b'')
-        (source/'tests'/'test_empty.py').write_text('import unittest,atexit,os\n'
-            'atexit.register(lambda:os._exit(0))\ndef load_tests(loader,suite,pattern):\n return unittest.TestSuite()\n',encoding='utf-8')
+        (source/'tests'/'test_boundary.py').write_text(test_source,encoding='utf-8')
         roles._git(source,'add','--all');roles._git(source,'-c','user.name=Fixture','-c','user.email=fixture@invalid',
-            'commit','--no-gpg-sign','-m','zero coverage fixture')
+            'commit','--no-gpg-sign','-m','runtime boundary fixture')
         context['snapshot']=roles.snapshot_source(source,self.base)
         self.slot.owned=dict(paths=['code.py','tests'],domains=['runtime'])
-        receipts=[];grants=[]
+        receipts=[];self.direct_receipts=receipts;grants=[]
         from task_tower.processes import run_command
         def launch(argv,source,evidence,cancel,env,timeout):
             receipt=run_command(argv,source,timeout,env=env,cancel_requested=lambda:threading.Event.is_set(cancel),
@@ -855,13 +882,10 @@ class LocalSourceTests(unittest.TestCase):
                 grant=stages.RuntimeCheckSandbox(target,capture,snapshot['manifest_sha256'],capability,artifacts,
                     reporter,output/'runner-observations.json')
             grants.append(grant);return grant
-        checks=stages.RuntimeCheckAuthority(test_paths={'tt-doc':('tests',)},selected_tests={'tt-doc':('tests.test_empty',)},
+        checks=stages.RuntimeCheckAuthority(test_paths={'tt-doc':('tests',)},selected_tests={'tt-doc':('tests.test_boundary',)},
             execution=execution,sandbox_factory=sandbox,qualification_verifier=lambda *a:True)
         with roles.attempt_budget(time.monotonic()+120):
-            with self.assertRaises(ValueError):checks.run(self.slot,dict(phase='test',instance_id=uuid.uuid4().hex),threading.Event())
-        self.assertEqual(len(receipts),1)
-        self.assertEqual(receipts[0]['exit_code'],0)
-        self.assertEqual(receipts[0]['status'],'passed')
+            return checks.run(self.slot,dict(phase=phase,instance_id=uuid.uuid4().hex),threading.Event())
 
     def test_runtime_implementation_test_write_breaches_phase_scope_and_revokes_live_bundle(self):
         self._actual_pipeline(runtime=True,mutate_tests=True)

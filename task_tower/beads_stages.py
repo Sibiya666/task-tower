@@ -578,6 +578,8 @@ class StageRoleRunner:
             # These are live host objects, never profile booleans/JSON factories.
             if type(self.host_checks) not in (HostCheckAuthority,RuntimeCheckAuthority):
                 return dict(outcome='refused', reason='host_check_capability_unavailable', tasks=[])
+            if getattr(self,'mode',None) != 'production':
+                return dict(outcome='refused',reason='qualification_requires_explicit_candidate',tasks=[])
             if port_factory is not None:
                 return dict(outcome='refused', reason='synthetic_port_cannot_enable_production', tasks=[])
             roles._require(os.name == 'nt' and type(stop_requested) is _EVENT_TYPE)
@@ -1139,12 +1141,18 @@ class RuntimeCheckAuthority:
             roles._require(digest==receipt.get(stream+'_sha256')
                 and path.stat().st_size==receipt.get(stream+'_bytes')==receipt.get(stream+'_captured_bytes'))
             streams[stream]=dict(sha256=digest,bytes=path.stat().st_size)
-        output={s:roles._file(evidence/(s+'.log'),roles.CAPTURE_LIMIT).read_bytes()[:8192].decode('utf-8',errors='replace')
-                for s in ('stdout','stderr')}
+        output,omitted={},{}
+        for stream in ('stdout','stderr'):
+            roles._check_cancel(cancel)
+            raw=roles._file(evidence/(stream+'.log'),roles.CAPTURE_LIMIT).read_bytes()
+            omitted[stream]=max(0,len(raw)-8192)
+            if len(raw)>8192:
+                output[stream]=(raw[:4096].decode('utf-8',errors='replace')
+                    +'\n[bounded context omitted]\n'+raw[-4096:].decode('utf-8',errors='replace'))
+            else:output[stream]=raw.decode('utf-8',errors='replace')
         if phase=='tests_only':
             roles._require(fact['status']=='failed' and fact['exit_code']==1
-                           and re.search(r'Ran [1-9][0-9]* tests?',output['stderr']) is not None
-                           and 'FAILED (' in output['stderr'])
+                           and observations['failures']+observations['errors']>0)
         else:roles._require(fact['status']=='passed' and fact['exit_code']==0)
         roles._require(observations['successful']==(phase!='tests_only'))
         roles._require(roles.snapshot_source(source,before['base'],cancel_requested=cancel)==before
@@ -1156,7 +1164,8 @@ class RuntimeCheckAuthority:
             selection=list(selection),selection_digest=selection_digest,runner_observations=observations,
             exclusions=exclusions,host_supervisor=dict(process=fact,streams=streams),
             reporter_sha256=self.execution.reporter_sha256,
-            context=dict(streams=output,limit_bytes_per_stream=8192,kind='captured_prefix'))
+            context=dict(streams=output,captured_bytes_per_stream=8192,omitted_bytes=omitted,
+                omission_marker_not_counted=True,kind='captured_prefix_and_suffix'))
         raw=roles._bytes(report);roles._require(len(raw)<=test_reporter.MAX_REPORT)
         name='runtime-report-'+call['instance_id']+'.json';target=context['inputs']/name
         with target.open('xb') as stream:stream.write(raw)
