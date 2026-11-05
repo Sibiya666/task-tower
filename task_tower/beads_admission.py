@@ -15,6 +15,7 @@ from pathlib import Path
 import re
 import sys
 import tempfile
+import threading
 import time
 import uuid
 
@@ -156,9 +157,21 @@ def _environment(directory):
     return env
 
 
-def _production_runner(operation, argv, cwd, timeout, env):
+_EVENT_TYPE = threading.Event
+_EVENT_IS_SET = threading.Event.is_set
+
+
+def _production_runner(operation, argv, cwd, timeout, env, *, cancel_requested=None):
+    if cancel_requested is not None and type(cancel_requested) is not _EVENT_TYPE:
+        raise ValueError('exact_event_required')
+    def cancelled():
+        value = _EVENT_IS_SET(cancel_requested) if cancel_requested is not None else False
+        if type(value) is not bool:
+            raise ValueError('exact_event_state_required')
+        return value
     with tempfile.TemporaryDirectory(prefix='task-tower-admission-') as directory:
         receipt = run_command(argv, cwd, timeout, env=env,
+                              cancel_requested=cancelled if cancel_requested is not None else None,
                               capture=dict(directory=Path(directory), max_bytes_per_stream=CAPTURE_LIMIT))
         # Read only bounded captures; stderr is deliberately never parsed or exposed.
         raw = (Path(directory) / 'stdout.log').read_bytes()

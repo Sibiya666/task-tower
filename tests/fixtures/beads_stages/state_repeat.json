@@ -1,0 +1,807 @@
+{
+  "schema": 1,
+  "kind": "synthetic_native_state_event_compatibility_extension",
+  "base_contract_sha256": "7f91959cfe358ee823ea16eb0ce359e17146cebba2cc639c3fbe2a26d38b1bee",
+  "executable_sha256": "1cbe948667e441e80983681501b05cbaaad64eba0f5b07af861daea8fdb9ade4",
+  "sources": [
+    {
+      "name": "native-state-repeat-first/result.json",
+      "sha256": "3229539944ae22fb8719f2ed1b9d2c6732ff4aa6d6bbf86a2527492d1e7b2f1e"
+    },
+    {
+      "name": "native-state-trace-first/result.json",
+      "sha256": "fdb8bdacc49160f1be9395b80382f0a69ff253c6866601e5a6b7341013527985"
+    }
+  ],
+  "same_state_new_reason": {
+    "first": {
+      "changed": true,
+      "dimension": "tower-stage",
+      "event_id": "stgq-hye.1",
+      "issue_id": "stgq-hye",
+      "new_value": "spec_pending",
+      "old_value": null,
+      "schema_version": 1
+    },
+    "second": {
+      "changed": false,
+      "dimension": "tower-stage",
+      "issue_id": "stgq-hye",
+      "schema_version": 1,
+      "value": "spec_pending"
+    },
+    "new_event_was_appended": false,
+    "accepting_noop_as_event_is_forbidden": true
+  },
+  "verified_state_trace": [
+    {
+      "state": "claimed",
+      "response": {
+        "changed": true,
+        "dimension": "tower-stage",
+        "event_id": "stgq-hye.2",
+        "issue_id": "stgq-hye",
+        "new_value": "claimed",
+        "old_value": "spec_pending",
+        "schema_version": 1
+      },
+      "event": {
+        "id": "stgq-hye.2",
+        "parent": "stgq-hye",
+        "created_by": "contract-state-repeat-20261105",
+        "issue_type": "event",
+        "status": "closed",
+        "description": "Changed tower-stage from spec_pending to claimed\n\nReason: trace-0-sha256-f8c91eca9eb350bd54b18f5f079a1d2e914e7a23544da53399e0d6f157bbb225"
+      },
+      "body": {
+        "schema": 1,
+        "kind": "synthetic.state.transition",
+        "bead": "stgq-hye",
+        "index": 0,
+        "state": "claimed",
+        "role_or_model_executed": false
+      },
+      "body_sha256": "f8c91eca9eb350bd54b18f5f079a1d2e914e7a23544da53399e0d6f157bbb225"
+    },
+    {
+      "state": "spec_pending",
+      "response": {
+        "changed": true,
+        "dimension": "tower-stage",
+        "event_id": "stgq-hye.3",
+        "issue_id": "stgq-hye",
+        "new_value": "spec_pending",
+        "old_value": "claimed",
+        "schema_version": 1
+      },
+      "event": {
+        "id": "stgq-hye.3",
+        "parent": "stgq-hye",
+        "created_by": "contract-state-repeat-20261105",
+        "issue_type": "event",
+        "status": "closed",
+        "description": "Changed tower-stage from claimed to spec_pending\n\nReason: trace-1-sha256-d38f4364ecf42cec8b3bb0fa60d10bf57ad1ecf8bb541eed5e311530d7cf671f"
+      },
+      "body": {
+        "schema": 1,
+        "kind": "synthetic.state.transition",
+        "bead": "stgq-hye",
+        "index": 1,
+        "state": "spec_pending",
+        "role_or_model_executed": false
+      },
+      "body_sha256": "d38f4364ecf42cec8b3bb0fa60d10bf57ad1ecf8bb541eed5e311530d7cf671f"
+    },
+    {
+      "state": "spec_review",
+      "response": {
+        "changed": true,
+        "dimension": "tower-stage",
+        "event_id": "stgq-hye.4",
+        "issue_id": "stgq-hye",
+        "new_value": "spec_review",
+        "old_value": "spec_pending",
+        "schema_version": 1
+      },
+      "event": {
+        "id": "stgq-hye.4",
+        "parent": "stgq-hye",
+        "created_by": "contract-state-repeat-20261105",
+        "issue_type": "event",
+        "status": "closed",
+        "description": "Changed tower-stage from spec_pending to spec_review\n\nReason: trace-2-sha256-5cae550b41b00d00e79980c4156126ad34596fb7ad06abffd70cda0e87b56a5a"
+      },
+      "body": {
+        "schema": 1,
+        "kind": "synthetic.state.transition",
+        "bead": "stgq-hye",
+        "index": 2,
+        "state": "spec_review",
+        "role_or_model_executed": false
+      },
+      "body_sha256": "5cae550b41b00d00e79980c4156126ad34596fb7ad06abffd70cda0e87b56a5a"
+    },
+    {
+      "state": "spec_pending",
+      "response": {
+        "changed": true,
+        "dimension": "tower-stage",
+        "event_id": "stgq-hye.5",
+        "issue_id": "stgq-hye",
+        "new_value": "spec_pending",
+        "old_value": "spec_review",
+        "schema_version": 1
+      },
+      "event": {
+        "id": "stgq-hye.5",
+        "parent": "stgq-hye",
+        "created_by": "contract-state-repeat-20261105",
+        "issue_type": "event",
+        "status": "closed",
+        "description": "Changed tower-stage from spec_review to spec_pending\n\nReason: trace-3-sha256-d7173a7762d48020b5e937116724f31a012e63689d947919588cf2e6cb6a9115"
+      },
+      "body": {
+        "schema": 1,
+        "kind": "synthetic.state.transition",
+        "bead": "stgq-hye",
+        "index": 3,
+        "state": "spec_pending",
+        "role_or_model_executed": false
+      },
+      "body_sha256": "d7173a7762d48020b5e937116724f31a012e63689d947919588cf2e6cb6a9115"
+    },
+    {
+      "state": "spec_review",
+      "response": {
+        "changed": true,
+        "dimension": "tower-stage",
+        "event_id": "stgq-hye.6",
+        "issue_id": "stgq-hye",
+        "new_value": "spec_review",
+        "old_value": "spec_pending",
+        "schema_version": 1
+      },
+      "event": {
+        "id": "stgq-hye.6",
+        "parent": "stgq-hye",
+        "created_by": "contract-state-repeat-20261105",
+        "issue_type": "event",
+        "status": "closed",
+        "description": "Changed tower-stage from spec_pending to spec_review\n\nReason: trace-4-sha256-2247fb2378a0e8f296d87d30d0a186a7205b1f2c5ad2770492155118340d1cb5"
+      },
+      "body": {
+        "schema": 1,
+        "kind": "synthetic.state.transition",
+        "bead": "stgq-hye",
+        "index": 4,
+        "state": "spec_review",
+        "role_or_model_executed": false
+      },
+      "body_sha256": "2247fb2378a0e8f296d87d30d0a186a7205b1f2c5ad2770492155118340d1cb5"
+    },
+    {
+      "state": "spec_approved",
+      "response": {
+        "changed": true,
+        "dimension": "tower-stage",
+        "event_id": "stgq-hye.7",
+        "issue_id": "stgq-hye",
+        "new_value": "spec_approved",
+        "old_value": "spec_review",
+        "schema_version": 1
+      },
+      "event": {
+        "id": "stgq-hye.7",
+        "parent": "stgq-hye",
+        "created_by": "contract-state-repeat-20261105",
+        "issue_type": "event",
+        "status": "closed",
+        "description": "Changed tower-stage from spec_review to spec_approved\n\nReason: trace-5-sha256-6bab118f2b74dd76782fc90aea34fe60a940c731dfc388f6494d235cd3f85819"
+      },
+      "body": {
+        "schema": 1,
+        "kind": "synthetic.state.transition",
+        "bead": "stgq-hye",
+        "index": 5,
+        "state": "spec_approved",
+        "role_or_model_executed": false
+      },
+      "body_sha256": "6bab118f2b74dd76782fc90aea34fe60a940c731dfc388f6494d235cd3f85819"
+    },
+    {
+      "state": "dev_tests_pending",
+      "response": {
+        "changed": true,
+        "dimension": "tower-stage",
+        "event_id": "stgq-hye.8",
+        "issue_id": "stgq-hye",
+        "new_value": "dev_tests_pending",
+        "old_value": "spec_approved",
+        "schema_version": 1
+      },
+      "event": {
+        "id": "stgq-hye.8",
+        "parent": "stgq-hye",
+        "created_by": "contract-state-repeat-20261105",
+        "issue_type": "event",
+        "status": "closed",
+        "description": "Changed tower-stage from spec_approved to dev_tests_pending\n\nReason: trace-6-sha256-0b6df3c3808c627178c0b5b3b69abc441a8c356bfa6750fb9f5ce4e9e275e15b"
+      },
+      "body": {
+        "schema": 1,
+        "kind": "synthetic.state.transition",
+        "bead": "stgq-hye",
+        "index": 6,
+        "state": "dev_tests_pending",
+        "role_or_model_executed": false
+      },
+      "body_sha256": "0b6df3c3808c627178c0b5b3b69abc441a8c356bfa6750fb9f5ce4e9e275e15b"
+    },
+    {
+      "state": "dev_red_observed",
+      "response": {
+        "changed": true,
+        "dimension": "tower-stage",
+        "event_id": "stgq-hye.9",
+        "issue_id": "stgq-hye",
+        "new_value": "dev_red_observed",
+        "old_value": "dev_tests_pending",
+        "schema_version": 1
+      },
+      "event": {
+        "id": "stgq-hye.9",
+        "parent": "stgq-hye",
+        "created_by": "contract-state-repeat-20261105",
+        "issue_type": "event",
+        "status": "closed",
+        "description": "Changed tower-stage from dev_tests_pending to dev_red_observed\n\nReason: trace-7-sha256-63c21c5f621fc02a880d888fa5d3b96d31305a150b25f0d56ee1565edaf1a1e7"
+      },
+      "body": {
+        "schema": 1,
+        "kind": "synthetic.state.transition",
+        "bead": "stgq-hye",
+        "index": 7,
+        "state": "dev_red_observed",
+        "role_or_model_executed": false
+      },
+      "body_sha256": "63c21c5f621fc02a880d888fa5d3b96d31305a150b25f0d56ee1565edaf1a1e7"
+    },
+    {
+      "state": "dev_pending",
+      "response": {
+        "changed": true,
+        "dimension": "tower-stage",
+        "event_id": "stgq-hye.10",
+        "issue_id": "stgq-hye",
+        "new_value": "dev_pending",
+        "old_value": "dev_red_observed",
+        "schema_version": 1
+      },
+      "event": {
+        "id": "stgq-hye.10",
+        "parent": "stgq-hye",
+        "created_by": "contract-state-repeat-20261105",
+        "issue_type": "event",
+        "status": "closed",
+        "description": "Changed tower-stage from dev_red_observed to dev_pending\n\nReason: trace-8-sha256-e31615d6a1049c2ae2055d98c240e14d6d8187e2b8582708f59facc544118cbd"
+      },
+      "body": {
+        "schema": 1,
+        "kind": "synthetic.state.transition",
+        "bead": "stgq-hye",
+        "index": 8,
+        "state": "dev_pending",
+        "role_or_model_executed": false
+      },
+      "body_sha256": "e31615d6a1049c2ae2055d98c240e14d6d8187e2b8582708f59facc544118cbd"
+    },
+    {
+      "state": "dev_review",
+      "response": {
+        "changed": true,
+        "dimension": "tower-stage",
+        "event_id": "stgq-hye.11",
+        "issue_id": "stgq-hye",
+        "new_value": "dev_review",
+        "old_value": "dev_pending",
+        "schema_version": 1
+      },
+      "event": {
+        "id": "stgq-hye.11",
+        "parent": "stgq-hye",
+        "created_by": "contract-state-repeat-20261105",
+        "issue_type": "event",
+        "status": "closed",
+        "description": "Changed tower-stage from dev_pending to dev_review\n\nReason: trace-9-sha256-86df0e80dd4ee9c1265a0a40e6aa597b184c5814d493cf3d6eeaa21845268b4c"
+      },
+      "body": {
+        "schema": 1,
+        "kind": "synthetic.state.transition",
+        "bead": "stgq-hye",
+        "index": 9,
+        "state": "dev_review",
+        "role_or_model_executed": false
+      },
+      "body_sha256": "86df0e80dd4ee9c1265a0a40e6aa597b184c5814d493cf3d6eeaa21845268b4c"
+    },
+    {
+      "state": "dev_approved",
+      "response": {
+        "changed": true,
+        "dimension": "tower-stage",
+        "event_id": "stgq-hye.12",
+        "issue_id": "stgq-hye",
+        "new_value": "dev_approved",
+        "old_value": "dev_review",
+        "schema_version": 1
+      },
+      "event": {
+        "id": "stgq-hye.12",
+        "parent": "stgq-hye",
+        "created_by": "contract-state-repeat-20261105",
+        "issue_type": "event",
+        "status": "closed",
+        "description": "Changed tower-stage from dev_review to dev_approved\n\nReason: trace-10-sha256-bc5c974aa2bf0a5257c78e28d8dbf3650ca60969624c5b84f9249ba783988653"
+      },
+      "body": {
+        "schema": 1,
+        "kind": "synthetic.state.transition",
+        "bead": "stgq-hye",
+        "index": 10,
+        "state": "dev_approved",
+        "role_or_model_executed": false
+      },
+      "body_sha256": "bc5c974aa2bf0a5257c78e28d8dbf3650ca60969624c5b84f9249ba783988653"
+    },
+    {
+      "state": "test_pending",
+      "response": {
+        "changed": true,
+        "dimension": "tower-stage",
+        "event_id": "stgq-hye.13",
+        "issue_id": "stgq-hye",
+        "new_value": "test_pending",
+        "old_value": "dev_approved",
+        "schema_version": 1
+      },
+      "event": {
+        "id": "stgq-hye.13",
+        "parent": "stgq-hye",
+        "created_by": "contract-state-repeat-20261105",
+        "issue_type": "event",
+        "status": "closed",
+        "description": "Changed tower-stage from dev_approved to test_pending\n\nReason: trace-11-sha256-270f27abb3db18131cee91fe65572a6fbd61bdb3996f24c1fab6fbb34f2a2785"
+      },
+      "body": {
+        "schema": 1,
+        "kind": "synthetic.state.transition",
+        "bead": "stgq-hye",
+        "index": 11,
+        "state": "test_pending",
+        "role_or_model_executed": false
+      },
+      "body_sha256": "270f27abb3db18131cee91fe65572a6fbd61bdb3996f24c1fab6fbb34f2a2785"
+    },
+    {
+      "state": "test_review",
+      "response": {
+        "changed": true,
+        "dimension": "tower-stage",
+        "event_id": "stgq-hye.14",
+        "issue_id": "stgq-hye",
+        "new_value": "test_review",
+        "old_value": "test_pending",
+        "schema_version": 1
+      },
+      "event": {
+        "id": "stgq-hye.14",
+        "parent": "stgq-hye",
+        "created_by": "contract-state-repeat-20261105",
+        "issue_type": "event",
+        "status": "closed",
+        "description": "Changed tower-stage from test_pending to test_review\n\nReason: trace-12-sha256-676a4d82ba808a88d64ac559b787cbc4e46e8f3178dccf463e1e941143c60044"
+      },
+      "body": {
+        "schema": 1,
+        "kind": "synthetic.state.transition",
+        "bead": "stgq-hye",
+        "index": 12,
+        "state": "test_review",
+        "role_or_model_executed": false
+      },
+      "body_sha256": "676a4d82ba808a88d64ac559b787cbc4e46e8f3178dccf463e1e941143c60044"
+    },
+    {
+      "state": "candidate_for_integration",
+      "response": {
+        "changed": true,
+        "dimension": "tower-stage",
+        "event_id": "stgq-hye.15",
+        "issue_id": "stgq-hye",
+        "new_value": "candidate_for_integration",
+        "old_value": "test_review",
+        "schema_version": 1
+      },
+      "event": {
+        "id": "stgq-hye.15",
+        "parent": "stgq-hye",
+        "created_by": "contract-state-repeat-20261105",
+        "issue_type": "event",
+        "status": "closed",
+        "description": "Changed tower-stage from test_review to candidate_for_integration\n\nReason: trace-13-sha256-9d784ff25ec890de04526d96cfd31de3d799ecc9873bba1ff5a3817d9e156cfd"
+      },
+      "body": {
+        "schema": 1,
+        "kind": "synthetic.state.transition",
+        "bead": "stgq-hye",
+        "index": 13,
+        "state": "candidate_for_integration",
+        "role_or_model_executed": false
+      },
+      "body_sha256": "9d784ff25ec890de04526d96cfd31de3d799ecc9873bba1ff5a3817d9e156cfd"
+    }
+  ],
+  "processes": [
+    {
+      "operation": "create",
+      "pid": 25396,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 0.781,
+      "stdout_bytes": 402,
+      "stderr_bytes": 0
+    },
+    {
+      "operation": "state-first",
+      "pid": 23420,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 0.735,
+      "stdout_bytes": 181,
+      "stderr_bytes": 0
+    },
+    {
+      "operation": "state-repeat-new-reference",
+      "pid": 43760,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 0.5,
+      "stdout_bytes": 129,
+      "stderr_bytes": 0
+    },
+    {
+      "operation": "event-first",
+      "pid": 261264,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 0.407,
+      "stdout_bytes": 1137,
+      "stderr_bytes": 0
+    },
+    {
+      "operation": "state-0",
+      "pid": 174476,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 1.016,
+      "stdout_bytes": 186,
+      "stderr_bytes": 0
+    },
+    {
+      "operation": "read-0",
+      "pid": 261548,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 0.438,
+      "stdout_bytes": 1204,
+      "stderr_bytes": 0
+    },
+    {
+      "operation": "state-1",
+      "pid": 24052,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 0.718,
+      "stdout_bytes": 186,
+      "stderr_bytes": 0
+    },
+    {
+      "operation": "read-1",
+      "pid": 248072,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 0.406,
+      "stdout_bytes": 1215,
+      "stderr_bytes": 0
+    },
+    {
+      "operation": "state-2",
+      "pid": 268040,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 0.75,
+      "stdout_bytes": 190,
+      "stderr_bytes": 0
+    },
+    {
+      "operation": "read-2",
+      "pid": 264800,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 0.39,
+      "stdout_bytes": 1216,
+      "stderr_bytes": 0
+    },
+    {
+      "operation": "state-3",
+      "pid": 247876,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 0.719,
+      "stdout_bytes": 190,
+      "stderr_bytes": 0
+    },
+    {
+      "operation": "read-3",
+      "pid": 266652,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 0.391,
+      "stdout_bytes": 1218,
+      "stderr_bytes": 0
+    },
+    {
+      "operation": "state-4",
+      "pid": 266832,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 0.734,
+      "stdout_bytes": 190,
+      "stderr_bytes": 0
+    },
+    {
+      "operation": "read-4",
+      "pid": 225260,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 0.406,
+      "stdout_bytes": 1216,
+      "stderr_bytes": 0
+    },
+    {
+      "operation": "state-5",
+      "pid": 257612,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 0.734,
+      "stdout_bytes": 191,
+      "stderr_bytes": 0
+    },
+    {
+      "operation": "read-5",
+      "pid": 236472,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 0.407,
+      "stdout_bytes": 1221,
+      "stderr_bytes": 0
+    },
+    {
+      "operation": "state-6",
+      "pid": 263312,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 0.766,
+      "stdout_bytes": 197,
+      "stderr_bytes": 0
+    },
+    {
+      "operation": "read-6",
+      "pid": 51824,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 0.422,
+      "stdout_bytes": 1236,
+      "stderr_bytes": 0
+    },
+    {
+      "operation": "state-7",
+      "pid": 267740,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 0.734,
+      "stdout_bytes": 200,
+      "stderr_bytes": 0
+    },
+    {
+      "operation": "read-7",
+      "pid": 249176,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 0.437,
+      "stdout_bytes": 1236,
+      "stderr_bytes": 0
+    },
+    {
+      "operation": "state-8",
+      "pid": 202636,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 0.735,
+      "stdout_bytes": 195,
+      "stderr_bytes": 0
+    },
+    {
+      "operation": "read-8",
+      "pid": 269016,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 0.406,
+      "stdout_bytes": 1220,
+      "stderr_bytes": 0
+    },
+    {
+      "operation": "state-9",
+      "pid": 268580,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 0.75,
+      "stdout_bytes": 189,
+      "stderr_bytes": 0
+    },
+    {
+      "operation": "read-9",
+      "pid": 267944,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 0.406,
+      "stdout_bytes": 1214,
+      "stderr_bytes": 0
+    },
+    {
+      "operation": "state-10",
+      "pid": 183388,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 1.407,
+      "stdout_bytes": 190,
+      "stderr_bytes": 0
+    },
+    {
+      "operation": "read-10",
+      "pid": 263496,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 0.406,
+      "stdout_bytes": 1220,
+      "stderr_bytes": 0
+    },
+    {
+      "operation": "state-11",
+      "pid": 18444,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 0.734,
+      "stdout_bytes": 192,
+      "stderr_bytes": 0
+    },
+    {
+      "operation": "read-11",
+      "pid": 12572,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 0.391,
+      "stdout_bytes": 1221,
+      "stderr_bytes": 0
+    },
+    {
+      "operation": "state-12",
+      "pid": 13900,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 0.75,
+      "stdout_bytes": 191,
+      "stderr_bytes": 0
+    },
+    {
+      "operation": "read-12",
+      "pid": 260740,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 0.422,
+      "stdout_bytes": 1218,
+      "stderr_bytes": 0
+    },
+    {
+      "operation": "state-13",
+      "pid": 197960,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 0.75,
+      "stdout_bytes": 204,
+      "stderr_bytes": 0
+    },
+    {
+      "operation": "read-13",
+      "pid": 40912,
+      "exit_code": 0,
+      "status": "passed",
+      "eof_confirmed": true,
+      "cleanup_confirmed": true,
+      "duration_seconds": 0.406,
+      "stdout_bytes": 1258,
+      "stderr_bytes": 0
+    }
+  ],
+  "limits": {
+    "new_synthetic_issue_only": true,
+    "canonical_project_touched": false,
+    "claim_or_model_launched": false,
+    "stage_checks_executed": false,
+    "pipeline_qualification": false,
+    "automatic_retry": false,
+    "original_contract_modified": false
+  }
+}

@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -23,6 +24,24 @@ def facts(**changes):
                  stdout_truncated=False, stderr_truncated=False)
     value.update(changes)
     return value
+
+
+class OptionalRunnerCancellationTests(unittest.TestCase):
+    def test_exact_stopped_event_prevents_child_and_corrupt_flag_never_calls_truthiness(self):
+        from task_tower.beads_admission import _production_runner
+        event=threading.Event();event.set()
+        data,receipt=_production_runner('git_surrogate',[sys.executable,'-c','raise SystemExit(99)'],Path.cwd(),1,
+            os.environ.copy(),cancel_requested=event)
+        self.assertFalse(receipt['started']);self.assertEqual(receipt['status'],'cancelled')
+        self.assertTrue(receipt['cleanup_confirmed'])
+        class Flag:
+            def __bool__(self):raise AssertionError('unsafe truthiness')
+        event._flag=Flag()
+        data,receipt=_production_runner('git_surrogate',[sys.executable,'-c','raise SystemExit(99)'],Path.cwd(),1,
+            os.environ.copy(),cancel_requested=event)
+        self.assertFalse(receipt['started']);self.assertEqual(receipt['status'],'unknown')
+        with self.assertRaises(ValueError):
+            _production_runner('git_surrogate',[],Path.cwd(),1,{},cancel_requested=lambda:False)
 
 
 class AdmissionTests(unittest.TestCase):

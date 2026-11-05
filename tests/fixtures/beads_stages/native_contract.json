@@ -1,0 +1,1958 @@
+{
+  "schema": 1,
+  "kind": "beads.native_compatibility_fixture",
+  "scope": "Windows tt-auq.2 Task 1 synthetic API observations only",
+  "authority": "test_data_only",
+  "qualification": {
+    "mapping_review": "pending_independent_input_extension_review",
+    "production": false,
+    "real_stage_pilot": false,
+    "six_role_qualification": false,
+    "adapter_implemented": false,
+    "base_mapping_review": "approved_as_reported_by_coordinator:/root/beads_native_contract_review"
+  },
+  "installed_executable": {
+    "sha256": "1cbe948667e441e80983681501b05cbaaad64eba0f5b07af861daea8fdb9ade4",
+    "version_string": null,
+    "version_string_status": "not_present_in_allowlisted_observations",
+    "verified_archive_version": "1.3.4",
+    "archive_version_source": "reused_ownership_proof"
+  },
+  "provenance": {
+    "observation_reference": "runtime/beads-stage-20261105/native-contract-first/public-observations.json",
+    "observation_sha256": "36bb13e6d2e6f9377b6032972807a8bdddc85cfcab45ce9dc9fc3142247d6f3d",
+    "help": [
+      {
+        "reference": "runtime/beads-stage-20261105/public-help/root.txt",
+        "sha256": "e4005c240576b113174105495f70a3f20c704092eb398a062e74ce4448bfd446"
+      },
+      {
+        "reference": "runtime/beads-stage-20261105/public-help/show.txt",
+        "sha256": "0a3561e2dbbe9e968fb2440f6c2d94edd8294bdf262cafcd80578aa9574322c5"
+      },
+      {
+        "reference": "runtime/beads-stage-20261105/public-help/dependencies.txt",
+        "sha256": "54c740c1a803682fa685df589fa428caeaf3603bae7ebdc850ec6d0360c14725"
+      },
+      {
+        "reference": "runtime/beads-stage-20261105/public-help/ready.txt",
+        "sha256": "534ae7f2d8b80b07593e82b9dc3df97f23c68c586fee6d822823e2350b1e6a2b"
+      },
+      {
+        "reference": "runtime/beads-stage-20261105/public-help/update.txt",
+        "sha256": "d873f4752dfb348cc937fbeda64c069ea6b1307fe4b9006e244551958779b510"
+      },
+      {
+        "reference": "runtime/beads-stage-20261105/public-help/set-state.txt",
+        "sha256": "3ad9cee04f24dbc31a7ea5856abe573149891f5c26238cd4f391556382d330e4"
+      },
+      {
+        "reference": "runtime/beads-stage-20261105/public-help/state.txt",
+        "sha256": "a478c734f9bcd9b0c89765848f8be399bbbecb455df1e018dc64bea2c4d8e2bd"
+      },
+      {
+        "reference": "runtime/beads-stage-20261105/public-help/history.txt",
+        "sha256": "2738ceffee2a1f4e49397cbc3dd47c82ae859e36b683e6f70f4906e273e82879"
+      },
+      {
+        "reference": "runtime/beads-stage-20261105/public-help/heartbeat.txt",
+        "sha256": "f56b567cc384de3b1af91c7f5823b7a9e0f28a85eaa9a3c98af667c7f120f365"
+      }
+    ],
+    "canonical_database_touched": false,
+    "harnesses_or_models_launched": false,
+    "recorded_operations": 38,
+    "recorded_operations_note": "38 total: git-init setup, Beads init, and 36 subsequent public CLI operations; do not call all 38 independent stage tests.",
+    "all_actual_eof_cleanup": true,
+    "process_fact_limits": "Sanitized recorded exit/status/EOF facts and stdout digests only; argv, durations, private paths, raw stderr and byte bounds are not present in this observation file. A stdout digest binds original capture bytes, not reserialized JSON.",
+    "coordinator_invocation_facts": "Sanitized coordinator message accompanying Task 1 authoring, 2026-11-05; fixed argv/bounds/environment recorded separately from the hashed output observations.",
+    "synthetic_setup_note": "git-init and init have non-JSON output summaries only; _non_json_stdout/bytes in the source are observer metadata, not invented native CLI keys."
+  },
+  "argv_templates": {
+    "source": "Coordinator-provided sanitized actual invocation facts; observation JSON contains outputs/process digests, not argv.",
+    "executable": "BD_EXE",
+    "cwd": "NEW_SYNTHETIC_PROJECT",
+    "prefix": [
+      "BD_EXE",
+      "--sandbox",
+      "--actor",
+      "ACTOR",
+      "--json"
+    ],
+    "placeholders": {
+      "BD_EXE": "Privately pinned installed native executable, not a public path",
+      "ACTOR": "stage-contract-owner; stage-contract-foreign only in negative examples",
+      "ID": "Selected synthetic issue ID",
+      "EVENT_ID": "Exact event_id returned by the successful set-state call",
+      "VALUE": "Observed spec_pending or spec_review only",
+      "REFERENCE": "Exact synthetic host reference/digest retained in event description"
+    },
+    "observed_suffixes": {
+      "ready": [
+        "--readonly",
+        "ready",
+        "--limit",
+        "1001"
+      ],
+      "show": [
+        "--readonly",
+        "show",
+        "--id=ID",
+        "--brief-deps"
+      ],
+      "dependencies": [
+        "--readonly",
+        "dep",
+        "list",
+        "ID",
+        "--direction",
+        "down"
+      ],
+      "event_read": [
+        "--readonly",
+        "show",
+        "--id=EVENT_ID",
+        "--long"
+      ],
+      "history_twenty": [
+        "--readonly",
+        "history",
+        "ID",
+        "--events",
+        "--limit",
+        "20"
+      ],
+      "history_one": [
+        "--readonly",
+        "history",
+        "ID",
+        "--events",
+        "--limit",
+        "1"
+      ],
+      "state_cache": [
+        "--readonly",
+        "state",
+        "ID",
+        "tower-stage"
+      ],
+      "claim": [
+        "update",
+        "ID",
+        "--claim"
+      ],
+      "set_state": [
+        "set-state",
+        "ID",
+        "tower-stage=VALUE",
+        "--reason",
+        "REFERENCE"
+      ],
+      "heartbeat": [
+        "heartbeat",
+        "ID"
+      ]
+    },
+    "substitution": "ID/ACTOR/VALUE/REFERENCE are host-validated individual argv values; --id=ID and tower-stage=VALUE each remain one argv element. No shell or task prose.",
+    "bounds": {
+      "beads_timeout_seconds": 30,
+      "capture_bytes_per_stream": 1048576,
+      "cleanup": "Actual EOF/cleanup recorded for all 38 operations; detailed timing is not included in public observations."
+    },
+    "environment": {
+      "strip_prefixes": [
+        "BD_",
+        "BEADS_",
+        "DOLT_",
+        "GIT_"
+      ],
+      "strip_exact_case_insensitive": [
+        "GH_TOKEN",
+        "GITHUB_TOKEN"
+      ],
+      "explicit": {
+        "BEADS_DIR": "NEW_SYNTHETIC_PROJECT/.beads",
+        "BD_EVENTS_JOURNAL": "1",
+        "GIT_CONFIG_NOSYSTEM": "1",
+        "GIT_CONFIG_GLOBAL": "NUL",
+        "GIT_TERMINAL_PROMPT": "0"
+      },
+      "note": "Sanitized fixture setup only; no actual paths or credentials. This data is not an environment/launch authorization."
+    },
+    "unobserved": "History --limit 1001 was not executed. Ready 1001 is an actual bounded request, not proof that 1001-row overflow was exercised. No other templates are approved by this data."
+  },
+  "native_field_mappings": {
+    "show": {
+      "shape": "array_exactly_one_selected_issue",
+      "identity": "[0].id",
+      "status": "[0].status",
+      "issue_type": "[0].issue_type",
+      "owner": "[0].assignee",
+      "lease_expiry": "[0].lease_expires_at",
+      "heartbeat": "[0].heartbeat_at",
+      "deferred_until": "[0].defer_until",
+      "parent": "[0].parent",
+      "dependencies": "[0].dependencies",
+      "dependency_identity": "[0].dependencies[*].id",
+      "dependency_status": "[0].dependencies[*].status",
+      "dependency_issue_type": "[0].dependencies[*].issue_type",
+      "dependency_kind": "[0].dependencies[*].dependency_type",
+      "note": "Observed show dependencies are issue-shaped rows, not raw edges. Absence of optional owner/defer/parent is not proof that arbitrary omitted semantics are safe."
+    },
+    "dependency_list": {
+      "shape": "array_dependency_issue_rows",
+      "identity": "[*].id",
+      "status": "[*].status",
+      "issue_type": "[*].issue_type",
+      "kind": "[*].dependency_type",
+      "note": "NOT depends_on_id/type. deps-parent is an observed empty array; do not infer ancestor semantics."
+    },
+    "ready": {
+      "shape": "array_issue_rows",
+      "identity": "[*].id",
+      "priority": "[*].priority",
+      "issue_type": "[*].issue_type",
+      "status": "[*].status",
+      "edge_identity": "[*].dependencies[*].depends_on_id",
+      "edge_kind": "[*].dependencies[*].type",
+      "note": "Where present, ready dependencies are raw edge rows with issue_id/depends_on_id/type. Do not reuse this mapping for show or dep list; counts and absence of fields do not prove eligibility."
+    },
+    "claim": {
+      "shape": "array_exactly_one_selected_issue",
+      "identity": "[0].id",
+      "status": "[0].status",
+      "owner": "[0].assignee",
+      "note": "Owned idempotent output resembles fresh ownership. Success JSON alone is insufficient to prove a new claim; selected-ID ownership is not atomic readiness."
+    },
+    "set_state": {
+      "shape": "object",
+      "exact_observed_keys": [
+        "changed",
+        "dimension",
+        "event_id",
+        "issue_id",
+        "new_value",
+        "old_value",
+        "schema_version"
+      ],
+      "schema_version": 1,
+      "event_reference": "event_id",
+      "note": "old_value null on initial state, prior string on repeated dimension. Observed changed true only; unchanged/no-op contract unqualified."
+    },
+    "event_readback": {
+      "shape": "array_exactly_one_returned_event",
+      "identity": "[0].id",
+      "actor": "[0].created_by",
+      "original_issue": "[0].parent",
+      "type": "[0].issue_type",
+      "status": "[0].status",
+      "reference_text": "[0].description",
+      "parent_edge": "[0].dependencies[*].id + dependency_type",
+      "note": "Require ID equal returned event_id, event type event, status closed, created_by exact actual actor, parent original issue, parent-child dependency to original issue and exact safe host reason reference/digest in description. Native event closed is internal history, never original-task delivery."
+    },
+    "history_events": {
+      "shape": "array_audit_rows",
+      "actor": "[*].actor",
+      "type": "[*].event_type",
+      "issue": "[*].issue_id",
+      "text": "[*].comment",
+      "note": "State transitions observed as label_added/label_removed rows; no host reason reference. Audit also contains created/claimed. Limit-one returns one row without total/continuation/completeness metadata; cannot reconstruct complete chronology or prove append from history alone."
+    },
+    "state_cache": {
+      "shape": "object",
+      "exact_observed_keys": [
+        "dimension",
+        "issue_id",
+        "schema_version",
+        "value"
+      ],
+      "note": "Label cache only, not append proof."
+    },
+    "heartbeat": {
+      "shape": "object",
+      "exact_observed_keys": [
+        "id",
+        "owner",
+        "schema_version",
+        "status"
+      ],
+      "schema_version": 1,
+      "status": "heartbeat",
+      "foreign_failure_keys": [
+        "error",
+        "schema_version"
+      ],
+      "note": "Owner heartbeat succeeds; foreign actor exits 1. Verify current owner/status and observed lease readback independently."
+    },
+    "private_role_input": {
+      "shape": "selected_show_issue_row_text_fields",
+      "mapping": {
+        "title": "title",
+        "description": "description",
+        "design": "design",
+        "acceptance_criteria": "acceptance_criteria",
+        "notes": "notes"
+      },
+      "combined_utf8_limit_bytes": 24576,
+      "note": "Only title/description/design/acceptance_criteria/notes are private untrusted role text. No raw task text enters public telemetry; no task prose grants execution rights. See input_fields_extension for exact synthetic example/provenance."
+    }
+  },
+  "supported_semantics": [
+    {
+      "case": "simple_blocks",
+      "evidence": [
+        "ready-blocked",
+        "deps-blocked",
+        "close-prerequisite",
+        "ready-after-prerequisite"
+      ],
+      "meaning": "Open direct blocker excludes target from native ready; after close target appears. Closed dependency remains visible in show/dep list."
+    },
+    {
+      "case": "postclaim_late_open_blocker",
+      "evidence": [
+        "claim",
+        "add-late-blocker",
+        "show-postclaim-blocked",
+        "deps-postclaim-blocked"
+      ],
+      "meaning": "Claim does not seal eligibility; new open direct blocks dependency remains visible under in_progress. Refuse further effects on this change."
+    },
+    {
+      "case": "pure_structural_parent",
+      "evidence": [
+        "create-parent",
+        "ready-child",
+        "show-child",
+        "deps-child",
+        "deps-parent",
+        "claim-structural-child"
+      ],
+      "meaning": "Observed open task child of open epic is native-ready with its direct blocks dependency closed and parent down-dependencies empty. Support only this bounded structural case; do not generalize to ancestors/gates."
+    },
+    {
+      "case": "future_defer",
+      "evidence": [
+        "show-deferred",
+        "ready-deferred"
+      ],
+      "meaning": "Observed deferred status with nonempty future defer_until is absent from native ready. Refuse deferred work; auto-wake semantics were not qualified."
+    },
+    {
+      "case": "set_state_direct_event_readback",
+      "evidence": [
+        "state-0",
+        "state-1",
+        "event-record-0",
+        "event-record-1"
+      ],
+      "meaning": "Each write returns an event ID; bounded show by that ID retains actor, original task and exact host reference/digest for repeated-dimension transitions. Successful process and host binding remain required."
+    },
+    {
+      "case": "owner_heartbeat",
+      "evidence": [
+        "claim-structural-child",
+        "heartbeat-owner",
+        "show-after-heartbeat",
+        "heartbeat-foreign-rejected"
+      ],
+      "meaning": "Claim lease spans five minutes; owner heartbeat advances heartbeat_at/lease_expires_at by one second in this observation. Foreign actor exits 1. Public help says node-local ephemeral lease, no Dolt commit/history; durability and cross-machine enforcement are not claimed."
+    }
+  ],
+  "refused_semantics": [
+    "Complex gates, waits-for, other dependency kinds, missing/malformed/unknown kind or status, unverified ancestor semantics, parent with dependencies, non-epic or multiple structural parents: unsupported; never interpret as an empty blocker set.",
+    "No application DAG evaluator or replacement queue; native readiness remains authority.",
+    "Broad ready --claim is refused: no documented exact-ID selector or proved policy-reserved complete possible match set; do not manufacture labels/filters.",
+    "No atomic readiness guarantee from update ID --claim; recheck qualified current native facts before every effect.",
+    "Already-owned/idempotent claim, prior-session owner or serialized JSON cannot establish fresh live ownership.",
+    "Native state labels/cache, audit history limit, copied JSON or source closed status cannot prove host execution, acceptance, delivery or safe slot release.",
+    "Missing/truncated/oversize output, unknown exit/EOF/cleanup/write or missing/mismatched event readback stops effects; no retry, replay, unclaim, release or reassignment.",
+    "append-notes fallback is not qualified or selected; no speculative fallback API.",
+    "Lease expiry, reclaim, recovery, multi-machine ownership and unattended scheduling are unsupported. Heartbeat is not recovery or a scheduler.",
+    "No unobserved ready overflow, no-op state event, malformed-native-response behavior or complete historical enumeration is claimed."
+  ],
+  "ownership_race": {
+    "new_race_run": false,
+    "status": "coordinator_verified_sanitized_prior_qualification_reuse",
+    "reference": "runtime/beads-stage-20261105/native-contract-first/reused-ownership-proof.json",
+    "reference_sha256": "a792065fb34be797a715e085bbfd0839eb0acdd6719d41b132db440e2059e0ae",
+    "version": "1.3.4",
+    "official_archive_sha256": "e66e7b66c0d1ac6a878951462edddb4a177532aff3fc22989daac115feaaef11",
+    "official_checksums_verified": true,
+    "current_executable_matches_verified_archive_payload": true,
+    "executable_sha256": "1cbe948667e441e80983681501b05cbaaad64eba0f5b07af861daea8fdb9ade4",
+    "prior_receipt_sha256": {
+      "completion.json": "ff9efe12e63d51f95d2fbfa4d4969442b22f999866d4b250b6c381130baa139a",
+      "race.json": "49ec12943ca7432a1fff9823533fe40fd855729bf26cceba3f434a528a141926",
+      "download-verification.json": "1b86f932e4030813959266412f89002eefacf74d6a5d6cd076a056fff5ea5f99"
+    },
+    "prior_workers": [
+      {
+        "actor": "worker-a",
+        "exit_code": 0,
+        "status": "passed",
+        "actual_eof_cleanup": true
+      },
+      {
+        "actor": "worker-b",
+        "exit_code": 1,
+        "status": "failed",
+        "actual_eof_cleanup": true
+      }
+    ],
+    "one_winner": true,
+    "historical_provenance_limit": "prior race records executable path/version installation sequence, not a per-process binary hash; current binary verified against that official archive",
+    "new_controller_adapter_race_still_requires_own_tests": true,
+    "note": "Sanitized receipt reuse only; no private historical capture was read or copied and no race was rerun. This is not cryptographic attestation of the executable bytes of each historical race process or live ownership authority."
+  },
+  "examples": [
+    {
+      "case": "open_blocker",
+      "interpretation": "refuse",
+      "observations": [
+        {
+          "operation": "ready-blocked",
+          "native_json": [
+            {
+              "id": "stgq-ubp",
+              "title": "Synthetic prerequisite",
+              "description": "Synthetic native API contract fixture only; not a product task or stage acceptance.",
+              "status": "open",
+              "priority": 2,
+              "issue_type": "task",
+              "created_at": "2026-11-05T08:33:31Z",
+              "created_by": "stage-contract-owner",
+              "updated_at": "2026-11-05T08:33:31Z",
+              "dependency_count": 0,
+              "dependent_count": 1,
+              "comment_count": 0
+            },
+            {
+              "id": "stgq-fp8",
+              "title": "Synthetic late blocker",
+              "description": "Synthetic native API contract fixture only; not a product task or stage acceptance.",
+              "status": "open",
+              "priority": 2,
+              "issue_type": "task",
+              "created_at": "2026-11-05T08:33:33Z",
+              "created_by": "stage-contract-owner",
+              "updated_at": "2026-11-05T08:33:33Z",
+              "dependency_count": 0,
+              "dependent_count": 0,
+              "comment_count": 0
+            }
+          ],
+          "process": {
+            "operation": "ready-blocked",
+            "exit_code": 0,
+            "status": "passed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "b9344fde6b79fac6e8e6af061cfd6659c63e121e22a5c0117e9a74492f682e68"
+          }
+        },
+        {
+          "operation": "show-blocked",
+          "native_json": [
+            {
+              "id": "stgq-oj9",
+              "title": "Synthetic stage target",
+              "description": "Synthetic native API contract fixture only; not a product task or stage acceptance.",
+              "status": "open",
+              "priority": 2,
+              "issue_type": "task",
+              "created_at": "2026-11-05T08:33:32Z",
+              "created_by": "stage-contract-owner",
+              "updated_at": "2026-11-05T08:33:32Z",
+              "dependencies": [
+                {
+                  "id": "stgq-ubp",
+                  "title": "Synthetic prerequisite",
+                  "status": "open",
+                  "priority": 2,
+                  "issue_type": "task",
+                  "created_at": "0001-01-01T00:00:00Z",
+                  "updated_at": "0001-01-01T00:00:00Z",
+                  "dependency_type": "blocks"
+                }
+              ],
+              "dependent_count": 0,
+              "dependency_count": 1,
+              "comment_count": 0,
+              "revision": "5811300399724377187"
+            }
+          ],
+          "process": {
+            "operation": "show-blocked",
+            "exit_code": 0,
+            "status": "passed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "1f793f5ad3ee4c3f0f787e716f0ab367b6f40e864b27efaae9d1e7862cc88fd5"
+          }
+        },
+        {
+          "operation": "deps-blocked",
+          "native_json": [
+            {
+              "id": "stgq-ubp",
+              "title": "Synthetic prerequisite",
+              "description": "Synthetic native API contract fixture only; not a product task or stage acceptance.",
+              "status": "open",
+              "priority": 2,
+              "issue_type": "task",
+              "created_at": "2026-11-05T08:33:31Z",
+              "created_by": "stage-contract-owner",
+              "updated_at": "2026-11-05T08:33:31Z",
+              "dependency_type": "blocks"
+            }
+          ],
+          "process": {
+            "operation": "deps-blocked",
+            "exit_code": 0,
+            "status": "passed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "b3a4ba89fbd076419b4b47459d2a52e2e33cceac7c74608b9e5c85ddf476afe2"
+          }
+        }
+      ]
+    },
+    {
+      "case": "closed_blocker",
+      "interpretation": "supported_observation",
+      "observations": [
+        {
+          "operation": "close-prerequisite",
+          "native_json": [
+            {
+              "id": "stgq-ubp",
+              "title": "Synthetic prerequisite",
+              "description": "Synthetic native API contract fixture only; not a product task or stage acceptance.",
+              "status": "closed",
+              "priority": 2,
+              "issue_type": "task",
+              "created_at": "2026-11-05T08:33:31Z",
+              "created_by": "stage-contract-owner",
+              "updated_at": "2026-11-05T08:33:36Z",
+              "closed_at": "2026-11-05T08:33:36Z",
+              "close_reason": "Synthetic contract prerequisite completed; no product delivery claimed."
+            }
+          ],
+          "process": {
+            "operation": "close-prerequisite",
+            "exit_code": 0,
+            "status": "passed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "937e9fb0b65621f7831e1ad946062a855c4c0fe3573ff3989328fb3642050917"
+          }
+        },
+        {
+          "operation": "ready-after-prerequisite",
+          "native_json": [
+            {
+              "id": "stgq-oj9",
+              "title": "Synthetic stage target",
+              "description": "Synthetic native API contract fixture only; not a product task or stage acceptance.",
+              "status": "open",
+              "priority": 2,
+              "issue_type": "task",
+              "created_at": "2026-11-05T08:33:32Z",
+              "created_by": "stage-contract-owner",
+              "updated_at": "2026-11-05T08:33:32Z",
+              "dependencies": [
+                {
+                  "issue_id": "stgq-oj9",
+                  "depends_on_id": "stgq-ubp",
+                  "type": "blocks",
+                  "created_at": "2026-11-05T08:33:32Z",
+                  "created_by": "stage-contract-owner",
+                  "metadata": "{}"
+                }
+              ],
+              "dependency_count": 1,
+              "dependent_count": 0,
+              "comment_count": 0
+            },
+            {
+              "id": "stgq-fp8",
+              "title": "Synthetic late blocker",
+              "description": "Synthetic native API contract fixture only; not a product task or stage acceptance.",
+              "status": "open",
+              "priority": 2,
+              "issue_type": "task",
+              "created_at": "2026-11-05T08:33:33Z",
+              "created_by": "stage-contract-owner",
+              "updated_at": "2026-11-05T08:33:33Z",
+              "dependency_count": 0,
+              "dependent_count": 0,
+              "comment_count": 0
+            }
+          ],
+          "process": {
+            "operation": "ready-after-prerequisite",
+            "exit_code": 0,
+            "status": "passed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "e3c07a01b13dd638cc51fa465675335b869b8092eb485f175658e83f96a02a1e"
+          }
+        },
+        {
+          "operation": "show-claimed",
+          "native_json": [
+            {
+              "id": "stgq-oj9",
+              "title": "Synthetic stage target",
+              "description": "Synthetic native API contract fixture only; not a product task or stage acceptance.",
+              "status": "in_progress",
+              "priority": 2,
+              "issue_type": "task",
+              "assignee": "stage-contract-owner",
+              "created_at": "2026-11-05T08:33:32Z",
+              "created_by": "stage-contract-owner",
+              "updated_at": "2026-11-05T08:33:40Z",
+              "started_at": "2026-11-05T08:33:40Z",
+              "lease_expires_at": "2026-11-05T08:38:40Z",
+              "heartbeat_at": "2026-11-05T08:33:40Z",
+              "dependencies": [
+                {
+                  "id": "stgq-ubp",
+                  "title": "Synthetic prerequisite",
+                  "status": "closed",
+                  "priority": 2,
+                  "issue_type": "task",
+                  "created_at": "0001-01-01T00:00:00Z",
+                  "updated_at": "0001-01-01T00:00:00Z",
+                  "dependency_type": "blocks"
+                }
+              ],
+              "dependent_count": 0,
+              "dependency_count": 1,
+              "comment_count": 0,
+              "revision": "-8578775206012660475"
+            }
+          ],
+          "process": {
+            "operation": "show-claimed",
+            "exit_code": 0,
+            "status": "passed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "df3c06f7a752975275ff60531b5ae47e3572c6f884ad74f8d6e8d29b4b3e9e3c"
+          }
+        }
+      ]
+    },
+    {
+      "case": "claim_owner_idempotency",
+      "interpretation": "not_fresh_authority",
+      "observations": [
+        {
+          "operation": "claim",
+          "native_json": [
+            {
+              "id": "stgq-oj9",
+              "title": "Synthetic stage target",
+              "description": "Synthetic native API contract fixture only; not a product task or stage acceptance.",
+              "status": "in_progress",
+              "priority": 2,
+              "issue_type": "task",
+              "assignee": "stage-contract-owner",
+              "created_at": "2026-11-05T08:33:32Z",
+              "created_by": "stage-contract-owner",
+              "updated_at": "2026-11-05T08:33:40Z",
+              "started_at": "2026-11-05T08:33:40Z",
+              "lease_expires_at": "2026-11-05T08:38:40Z",
+              "heartbeat_at": "2026-11-05T08:33:40Z"
+            }
+          ],
+          "process": {
+            "operation": "claim",
+            "exit_code": 0,
+            "status": "passed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "f35c619e56bf9227a2abd0b20b35d5628f378c4c582063b1b72062104c9b08a2"
+          }
+        },
+        {
+          "operation": "show-claimed",
+          "native_json": [
+            {
+              "id": "stgq-oj9",
+              "title": "Synthetic stage target",
+              "description": "Synthetic native API contract fixture only; not a product task or stage acceptance.",
+              "status": "in_progress",
+              "priority": 2,
+              "issue_type": "task",
+              "assignee": "stage-contract-owner",
+              "created_at": "2026-11-05T08:33:32Z",
+              "created_by": "stage-contract-owner",
+              "updated_at": "2026-11-05T08:33:40Z",
+              "started_at": "2026-11-05T08:33:40Z",
+              "lease_expires_at": "2026-11-05T08:38:40Z",
+              "heartbeat_at": "2026-11-05T08:33:40Z",
+              "dependencies": [
+                {
+                  "id": "stgq-ubp",
+                  "title": "Synthetic prerequisite",
+                  "status": "closed",
+                  "priority": 2,
+                  "issue_type": "task",
+                  "created_at": "0001-01-01T00:00:00Z",
+                  "updated_at": "0001-01-01T00:00:00Z",
+                  "dependency_type": "blocks"
+                }
+              ],
+              "dependent_count": 0,
+              "dependency_count": 1,
+              "comment_count": 0,
+              "revision": "-8578775206012660475"
+            }
+          ],
+          "process": {
+            "operation": "show-claimed",
+            "exit_code": 0,
+            "status": "passed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "df3c06f7a752975275ff60531b5ae47e3572c6f884ad74f8d6e8d29b4b3e9e3c"
+          }
+        },
+        {
+          "operation": "foreign-owner-rejected",
+          "native_json": null,
+          "process": {
+            "operation": "foreign-owner-rejected",
+            "exit_code": 1,
+            "status": "failed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "capture_summary": {
+            "_non_json_stdout": true,
+            "bytes": 0
+          },
+          "stdout_kind": "non_json_observation_wrapper_not_native_response"
+        },
+        {
+          "operation": "same-owner-idempotent",
+          "native_json": [
+            {
+              "id": "stgq-oj9",
+              "title": "Synthetic stage target",
+              "description": "Synthetic native API contract fixture only; not a product task or stage acceptance.",
+              "status": "in_progress",
+              "priority": 2,
+              "issue_type": "task",
+              "assignee": "stage-contract-owner",
+              "created_at": "2026-11-05T08:33:32Z",
+              "created_by": "stage-contract-owner",
+              "updated_at": "2026-11-05T08:33:40Z",
+              "started_at": "2026-11-05T08:33:40Z",
+              "lease_expires_at": "2026-11-05T08:38:40Z",
+              "heartbeat_at": "2026-11-05T08:33:40Z",
+              "labels": [
+                "tower-stage:spec_review"
+              ]
+            }
+          ],
+          "process": {
+            "operation": "same-owner-idempotent",
+            "exit_code": 0,
+            "status": "passed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "69a9f7e9a8e0b1077e5e8316a874e69823cd2ecb8bd0d8fc65482e80dff598c4"
+          }
+        },
+        {
+          "operation": "final-owner",
+          "native_json": [
+            {
+              "id": "stgq-oj9",
+              "title": "Synthetic stage target",
+              "description": "Synthetic native API contract fixture only; not a product task or stage acceptance.",
+              "status": "in_progress",
+              "priority": 2,
+              "issue_type": "task",
+              "assignee": "stage-contract-owner",
+              "created_at": "2026-11-05T08:33:32Z",
+              "created_by": "stage-contract-owner",
+              "updated_at": "2026-11-05T08:33:40Z",
+              "started_at": "2026-11-05T08:33:40Z",
+              "lease_expires_at": "2026-11-05T08:38:40Z",
+              "heartbeat_at": "2026-11-05T08:33:40Z",
+              "labels": [
+                "tower-stage:spec_review"
+              ],
+              "dependencies": [
+                {
+                  "id": "stgq-fp8",
+                  "title": "Synthetic late blocker",
+                  "status": "open",
+                  "priority": 2,
+                  "issue_type": "task",
+                  "created_at": "0001-01-01T00:00:00Z",
+                  "updated_at": "0001-01-01T00:00:00Z",
+                  "dependency_type": "blocks"
+                },
+                {
+                  "id": "stgq-ubp",
+                  "title": "Synthetic prerequisite",
+                  "status": "closed",
+                  "priority": 2,
+                  "issue_type": "task",
+                  "created_at": "0001-01-01T00:00:00Z",
+                  "updated_at": "0001-01-01T00:00:00Z",
+                  "dependency_type": "blocks"
+                }
+              ],
+              "dependent_count": 2,
+              "dependency_count": 2,
+              "comment_count": 0,
+              "revision": "-8578775206012660475"
+            }
+          ],
+          "process": {
+            "operation": "final-owner",
+            "exit_code": 0,
+            "status": "passed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "6781daf1605a3d26bf8301e4458375b64372044b91636bce65689feb5a427177"
+          }
+        }
+      ]
+    },
+    {
+      "case": "late_blocker",
+      "interpretation": "refuse",
+      "observations": [
+        {
+          "operation": "add-late-blocker",
+          "native_json": {
+            "depends_on_id": "stgq-fp8",
+            "issue_id": "stgq-oj9",
+            "schema_version": 1,
+            "status": "added",
+            "type": "blocks"
+          },
+          "process": {
+            "operation": "add-late-blocker",
+            "exit_code": 0,
+            "status": "passed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "6c57ffaa51f9360122f3df50c5a78cf1fdfb8d5785a5a9249be05e0fafe59b07"
+          }
+        },
+        {
+          "operation": "show-postclaim-blocked",
+          "native_json": [
+            {
+              "id": "stgq-oj9",
+              "title": "Synthetic stage target",
+              "description": "Synthetic native API contract fixture only; not a product task or stage acceptance.",
+              "status": "in_progress",
+              "priority": 2,
+              "issue_type": "task",
+              "assignee": "stage-contract-owner",
+              "created_at": "2026-11-05T08:33:32Z",
+              "created_by": "stage-contract-owner",
+              "updated_at": "2026-11-05T08:33:40Z",
+              "started_at": "2026-11-05T08:33:40Z",
+              "lease_expires_at": "2026-11-05T08:38:40Z",
+              "heartbeat_at": "2026-11-05T08:33:40Z",
+              "labels": [
+                "tower-stage:spec_review"
+              ],
+              "dependencies": [
+                {
+                  "id": "stgq-fp8",
+                  "title": "Synthetic late blocker",
+                  "status": "open",
+                  "priority": 2,
+                  "issue_type": "task",
+                  "created_at": "0001-01-01T00:00:00Z",
+                  "updated_at": "0001-01-01T00:00:00Z",
+                  "dependency_type": "blocks"
+                },
+                {
+                  "id": "stgq-ubp",
+                  "title": "Synthetic prerequisite",
+                  "status": "closed",
+                  "priority": 2,
+                  "issue_type": "task",
+                  "created_at": "0001-01-01T00:00:00Z",
+                  "updated_at": "0001-01-01T00:00:00Z",
+                  "dependency_type": "blocks"
+                }
+              ],
+              "dependent_count": 2,
+              "dependency_count": 2,
+              "comment_count": 0,
+              "revision": "-8578775206012660475"
+            }
+          ],
+          "process": {
+            "operation": "show-postclaim-blocked",
+            "exit_code": 0,
+            "status": "passed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "6781daf1605a3d26bf8301e4458375b64372044b91636bce65689feb5a427177"
+          }
+        },
+        {
+          "operation": "deps-postclaim-blocked",
+          "native_json": [
+            {
+              "id": "stgq-fp8",
+              "title": "Synthetic late blocker",
+              "description": "Synthetic native API contract fixture only; not a product task or stage acceptance.",
+              "status": "open",
+              "priority": 2,
+              "issue_type": "task",
+              "created_at": "2026-11-05T08:33:33Z",
+              "created_by": "stage-contract-owner",
+              "updated_at": "2026-11-05T08:33:33Z",
+              "dependency_type": "blocks"
+            },
+            {
+              "id": "stgq-ubp",
+              "title": "Synthetic prerequisite",
+              "description": "Synthetic native API contract fixture only; not a product task or stage acceptance.",
+              "status": "closed",
+              "priority": 2,
+              "issue_type": "task",
+              "created_at": "2026-11-05T08:33:31Z",
+              "created_by": "stage-contract-owner",
+              "updated_at": "2026-11-05T08:33:36Z",
+              "closed_at": "2026-11-05T08:33:36Z",
+              "close_reason": "Synthetic contract prerequisite completed; no product delivery claimed.",
+              "dependency_type": "blocks"
+            }
+          ],
+          "process": {
+            "operation": "deps-postclaim-blocked",
+            "exit_code": 0,
+            "status": "passed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "cbce5994c76c74d43a561ca1363e275412c5623de9e56d3660c52528fcc51436"
+          }
+        }
+      ]
+    },
+    {
+      "case": "structural_parent",
+      "interpretation": "supported_bounded_observation",
+      "observations": [
+        {
+          "operation": "create-parent",
+          "native_json": {
+            "created_at": "2026-11-05T08:37:04.3632832Z",
+            "created_by": "stage-contract-owner",
+            "description": "Synthetic API fixture only.",
+            "id": "stgq-vrw",
+            "issue_type": "epic",
+            "priority": 2,
+            "schema_version": 1,
+            "status": "open",
+            "title": "Synthetic structural epic",
+            "updated_at": "2026-11-05T08:37:04.3632832Z"
+          },
+          "process": {
+            "operation": "create-parent",
+            "exit_code": 0,
+            "status": "passed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "1acac5f28cf31571150cf5961559857ba8af219d4f903702d305310c3f2363fc"
+          }
+        },
+        {
+          "operation": "ready-child",
+          "native_json": [
+            {
+              "id": "stgq-fp8",
+              "title": "Synthetic late blocker",
+              "description": "Synthetic native API contract fixture only; not a product task or stage acceptance.",
+              "status": "open",
+              "priority": 2,
+              "issue_type": "task",
+              "created_at": "2026-11-05T08:33:33Z",
+              "created_by": "stage-contract-owner",
+              "updated_at": "2026-11-05T08:33:33Z",
+              "dependency_count": 0,
+              "dependent_count": 1,
+              "comment_count": 0
+            },
+            {
+              "id": "stgq-vrw",
+              "title": "Synthetic structural epic",
+              "description": "Synthetic API fixture only.",
+              "status": "open",
+              "priority": 2,
+              "issue_type": "epic",
+              "created_at": "2026-11-05T08:37:04Z",
+              "created_by": "stage-contract-owner",
+              "updated_at": "2026-11-05T08:37:04Z",
+              "dependency_count": 0,
+              "dependent_count": 0,
+              "comment_count": 0
+            },
+            {
+              "id": "stgq-vrw.1",
+              "title": "Synthetic child",
+              "description": "Synthetic API fixture only.",
+              "status": "open",
+              "priority": 2,
+              "issue_type": "task",
+              "created_at": "2026-11-05T08:37:06Z",
+              "created_by": "stage-contract-owner",
+              "updated_at": "2026-11-05T08:37:06Z",
+              "dependencies": [
+                {
+                  "issue_id": "stgq-vrw.1",
+                  "depends_on_id": "stgq-vrw",
+                  "type": "parent-child",
+                  "created_at": "2026-11-05T08:37:06Z",
+                  "created_by": "stage-contract-owner",
+                  "metadata": "{}"
+                },
+                {
+                  "issue_id": "stgq-vrw.1",
+                  "depends_on_id": "stgq-ubp",
+                  "type": "blocks",
+                  "created_at": "2026-11-05T08:37:06Z",
+                  "created_by": "stage-contract-owner",
+                  "metadata": "{}"
+                }
+              ],
+              "dependency_count": 1,
+              "dependent_count": 0,
+              "comment_count": 0,
+              "parent": "stgq-vrw"
+            }
+          ],
+          "process": {
+            "operation": "ready-child",
+            "exit_code": 0,
+            "status": "passed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "875598e2a0f5ae37efea6568484f28b4474137ac6f7fdee1d44f6d24129d0b3a"
+          }
+        },
+        {
+          "operation": "show-child",
+          "native_json": [
+            {
+              "id": "stgq-vrw.1",
+              "title": "Synthetic child",
+              "description": "Synthetic API fixture only.",
+              "status": "open",
+              "priority": 2,
+              "issue_type": "task",
+              "created_at": "2026-11-05T08:37:06Z",
+              "created_by": "stage-contract-owner",
+              "updated_at": "2026-11-05T08:37:06Z",
+              "dependencies": [
+                {
+                  "id": "stgq-vrw",
+                  "title": "Synthetic structural epic",
+                  "status": "open",
+                  "priority": 2,
+                  "issue_type": "epic",
+                  "created_at": "0001-01-01T00:00:00Z",
+                  "updated_at": "0001-01-01T00:00:00Z",
+                  "dependency_type": "parent-child"
+                },
+                {
+                  "id": "stgq-ubp",
+                  "title": "Synthetic prerequisite",
+                  "status": "closed",
+                  "priority": 2,
+                  "issue_type": "task",
+                  "created_at": "0001-01-01T00:00:00Z",
+                  "updated_at": "0001-01-01T00:00:00Z",
+                  "dependency_type": "blocks"
+                }
+              ],
+              "parent": "stgq-vrw",
+              "dependent_count": 0,
+              "dependency_count": 2,
+              "comment_count": 0,
+              "revision": "-3554360281190240655"
+            }
+          ],
+          "process": {
+            "operation": "show-child",
+            "exit_code": 0,
+            "status": "passed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "b28f847f7d6c16e4bf934a399d0f808ad05572452e65e93551302460399a902c"
+          }
+        },
+        {
+          "operation": "deps-child",
+          "native_json": [
+            {
+              "id": "stgq-ubp",
+              "title": "Synthetic prerequisite",
+              "description": "Synthetic native API contract fixture only; not a product task or stage acceptance.",
+              "status": "closed",
+              "priority": 2,
+              "issue_type": "task",
+              "created_at": "2026-11-05T08:33:31Z",
+              "created_by": "stage-contract-owner",
+              "updated_at": "2026-11-05T08:33:36Z",
+              "closed_at": "2026-11-05T08:33:36Z",
+              "close_reason": "Synthetic contract prerequisite completed; no product delivery claimed.",
+              "dependency_type": "blocks"
+            },
+            {
+              "id": "stgq-vrw",
+              "title": "Synthetic structural epic",
+              "description": "Synthetic API fixture only.",
+              "status": "open",
+              "priority": 2,
+              "issue_type": "epic",
+              "created_at": "2026-11-05T08:37:04Z",
+              "created_by": "stage-contract-owner",
+              "updated_at": "2026-11-05T08:37:04Z",
+              "dependency_type": "parent-child"
+            }
+          ],
+          "process": {
+            "operation": "deps-child",
+            "exit_code": 0,
+            "status": "passed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "a14554ef85ea2ded6cbb1c99230652411444279b7b8794123ed3971a333e5994"
+          }
+        },
+        {
+          "operation": "deps-parent",
+          "native_json": [],
+          "process": {
+            "operation": "deps-parent",
+            "exit_code": 0,
+            "status": "passed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+          }
+        }
+      ]
+    },
+    {
+      "case": "deferred",
+      "interpretation": "refuse",
+      "observations": [
+        {
+          "operation": "show-deferred",
+          "native_json": [
+            {
+              "id": "stgq-pje",
+              "title": "Synthetic deferred task",
+              "description": "Synthetic API fixture only.",
+              "status": "deferred",
+              "priority": 2,
+              "issue_type": "task",
+              "created_at": "2026-11-05T08:37:08Z",
+              "created_by": "stage-contract-owner",
+              "updated_at": "2026-11-05T08:37:08Z",
+              "defer_until": "2026-11-06T08:37:08Z",
+              "dependent_count": 0,
+              "dependency_count": 0,
+              "comment_count": 0,
+              "revision": "8548561848949565955"
+            }
+          ],
+          "process": {
+            "operation": "show-deferred",
+            "exit_code": 0,
+            "status": "passed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "29355f8494a93bdd94eceea18b1478504d43d4578f1bf1aecfdc628bc8c5e431"
+          }
+        },
+        {
+          "operation": "ready-deferred",
+          "native_json": [
+            {
+              "id": "stgq-fp8",
+              "title": "Synthetic late blocker",
+              "description": "Synthetic native API contract fixture only; not a product task or stage acceptance.",
+              "status": "open",
+              "priority": 2,
+              "issue_type": "task",
+              "created_at": "2026-11-05T08:33:33Z",
+              "created_by": "stage-contract-owner",
+              "updated_at": "2026-11-05T08:33:33Z",
+              "dependency_count": 0,
+              "dependent_count": 1,
+              "comment_count": 0
+            },
+            {
+              "id": "stgq-vrw",
+              "title": "Synthetic structural epic",
+              "description": "Synthetic API fixture only.",
+              "status": "open",
+              "priority": 2,
+              "issue_type": "epic",
+              "created_at": "2026-11-05T08:37:04Z",
+              "created_by": "stage-contract-owner",
+              "updated_at": "2026-11-05T08:37:04Z",
+              "dependency_count": 0,
+              "dependent_count": 0,
+              "comment_count": 0
+            },
+            {
+              "id": "stgq-vrw.1",
+              "title": "Synthetic child",
+              "description": "Synthetic API fixture only.",
+              "status": "open",
+              "priority": 2,
+              "issue_type": "task",
+              "created_at": "2026-11-05T08:37:06Z",
+              "created_by": "stage-contract-owner",
+              "updated_at": "2026-11-05T08:37:06Z",
+              "dependencies": [
+                {
+                  "issue_id": "stgq-vrw.1",
+                  "depends_on_id": "stgq-vrw",
+                  "type": "parent-child",
+                  "created_at": "2026-11-05T08:37:06Z",
+                  "created_by": "stage-contract-owner",
+                  "metadata": "{}"
+                },
+                {
+                  "issue_id": "stgq-vrw.1",
+                  "depends_on_id": "stgq-ubp",
+                  "type": "blocks",
+                  "created_at": "2026-11-05T08:37:06Z",
+                  "created_by": "stage-contract-owner",
+                  "metadata": "{}"
+                }
+              ],
+              "dependency_count": 1,
+              "dependent_count": 0,
+              "comment_count": 0,
+              "parent": "stgq-vrw"
+            }
+          ],
+          "process": {
+            "operation": "ready-deferred",
+            "exit_code": 0,
+            "status": "passed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "875598e2a0f5ae37efea6568484f28b4474137ac6f7fdee1d44f6d24129d0b3a"
+          }
+        }
+      ]
+    },
+    {
+      "case": "repeated_dimension_events",
+      "interpretation": "supported_write_readback_observation",
+      "observations": [
+        {
+          "operation": "state-0",
+          "native_json": {
+            "changed": true,
+            "dimension": "tower-stage",
+            "event_id": "stgq-oj9.1",
+            "issue_id": "stgq-oj9",
+            "new_value": "spec_pending",
+            "old_value": null,
+            "schema_version": 1
+          },
+          "process": {
+            "operation": "state-0",
+            "exit_code": 0,
+            "status": "passed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "ef87ba7d046e679606815271cc08d9147d0c4600cc7a02ded92080330a78168c"
+          }
+        },
+        {
+          "operation": "state-1",
+          "native_json": {
+            "changed": true,
+            "dimension": "tower-stage",
+            "event_id": "stgq-oj9.2",
+            "issue_id": "stgq-oj9",
+            "new_value": "spec_review",
+            "old_value": "spec_pending",
+            "schema_version": 1
+          },
+          "process": {
+            "operation": "state-1",
+            "exit_code": 0,
+            "status": "passed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "9bd16394ad21ecc838138a9bad9d829a8cbcf6dd8e1eceb3c70edd0df23d6f70"
+          }
+        },
+        {
+          "operation": "event-record-0",
+          "native_json": [
+            {
+              "id": "stgq-oj9.1",
+              "title": "State change: tower-stage → spec_pending",
+              "description": "Set tower-stage to spec_pending\n\nReason: synthetic-host-ref-0-sha256-5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9",
+              "status": "closed",
+              "priority": 4,
+              "issue_type": "event",
+              "created_at": "2026-11-05T08:33:42Z",
+              "created_by": "stage-contract-owner",
+              "updated_at": "2026-11-05T08:33:42Z",
+              "closed_at": "2026-11-05T08:33:43Z",
+              "dependencies": [
+                {
+                  "id": "stgq-oj9",
+                  "title": "Synthetic stage target",
+                  "description": "Synthetic native API contract fixture only; not a product task or stage acceptance.",
+                  "status": "in_progress",
+                  "priority": 2,
+                  "issue_type": "task",
+                  "assignee": "stage-contract-owner",
+                  "created_at": "2026-11-05T08:33:32Z",
+                  "created_by": "stage-contract-owner",
+                  "updated_at": "2026-11-05T08:33:40Z",
+                  "started_at": "2026-11-05T08:33:40Z",
+                  "lease_expires_at": "2026-11-05T08:38:40Z",
+                  "heartbeat_at": "2026-11-05T08:33:40Z",
+                  "labels": [
+                    "tower-stage:spec_review"
+                  ],
+                  "dependency_type": "parent-child"
+                }
+              ],
+              "parent": "stgq-oj9",
+              "dependent_count": 0,
+              "dependency_count": 1,
+              "comment_count": 0,
+              "revision": "2496388127301384172"
+            }
+          ],
+          "process": {
+            "operation": "event-record-0",
+            "exit_code": 0,
+            "status": "passed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "4722db58f5f254df67de10f07aa4671c07eebe936cb193de825711ab138e54d0"
+          }
+        },
+        {
+          "operation": "event-record-1",
+          "native_json": [
+            {
+              "id": "stgq-oj9.2",
+              "title": "State change: tower-stage → spec_review",
+              "description": "Changed tower-stage from spec_pending to spec_review\n\nReason: synthetic-host-ref-1-sha256-6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+              "status": "closed",
+              "priority": 4,
+              "issue_type": "event",
+              "created_at": "2026-11-05T08:33:44Z",
+              "created_by": "stage-contract-owner",
+              "updated_at": "2026-11-05T08:33:44Z",
+              "closed_at": "2026-11-05T08:33:45Z",
+              "dependencies": [
+                {
+                  "id": "stgq-oj9",
+                  "title": "Synthetic stage target",
+                  "description": "Synthetic native API contract fixture only; not a product task or stage acceptance.",
+                  "status": "in_progress",
+                  "priority": 2,
+                  "issue_type": "task",
+                  "assignee": "stage-contract-owner",
+                  "created_at": "2026-11-05T08:33:32Z",
+                  "created_by": "stage-contract-owner",
+                  "updated_at": "2026-11-05T08:33:40Z",
+                  "started_at": "2026-11-05T08:33:40Z",
+                  "lease_expires_at": "2026-11-05T08:38:40Z",
+                  "heartbeat_at": "2026-11-05T08:33:40Z",
+                  "labels": [
+                    "tower-stage:spec_review"
+                  ],
+                  "dependency_type": "parent-child"
+                }
+              ],
+              "parent": "stgq-oj9",
+              "dependent_count": 0,
+              "dependency_count": 1,
+              "comment_count": 0,
+              "revision": "-3116407006868927787"
+            }
+          ],
+          "process": {
+            "operation": "event-record-1",
+            "exit_code": 0,
+            "status": "passed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "3dd5c6598d61203ddf1f9b1965ffa990409530aacb771d8ea7b1180d3d6e1072"
+          }
+        }
+      ]
+    },
+    {
+      "case": "audit_history_cache",
+      "interpretation": "insufficient_event_proof",
+      "observations": [
+        {
+          "operation": "history-events",
+          "native_json": [
+            {
+              "id": "135999f8-7e22-5867-9d17-75a6f2354f6a",
+              "issue_id": "stgq-oj9",
+              "event_type": "label_added",
+              "actor": "stage-contract-owner",
+              "comment": "Added label: tower-stage:spec_review",
+              "created_at": "2026-11-05T08:33:44Z"
+            },
+            {
+              "id": "3d87498d-fe07-5373-89ae-45620423a613",
+              "issue_id": "stgq-oj9",
+              "event_type": "label_removed",
+              "actor": "stage-contract-owner",
+              "comment": "Removed label: tower-stage:spec_pending",
+              "created_at": "2026-11-05T08:33:44Z"
+            },
+            {
+              "id": "87eda387-1007-5042-be1f-7dee0bd78546",
+              "issue_id": "stgq-oj9",
+              "event_type": "label_added",
+              "actor": "stage-contract-owner",
+              "comment": "Added label: tower-stage:spec_pending",
+              "created_at": "2026-11-05T08:33:42Z"
+            },
+            {
+              "id": "9acf068e-7aa0-585f-aa02-c207daa59c68",
+              "issue_id": "stgq-oj9",
+              "event_type": "claimed",
+              "actor": "stage-contract-owner",
+              "old_value": "{\"id\":\"stgq-oj9\",\"title\":\"Synthetic stage target\",\"description\":\"Synthetic native API contract fixture only; not a product task or stage acceptance.\",\"status\":\"open\",\"priority\":2,\"issue_type\":\"task\",\"created_at\":\"2026-11-05T08:33:32Z\",\"created_by\":\"stage-contract-owner\",\"updated_at\":\"2026-11-05T08:33:32Z\"}",
+              "new_value": "{\"assignee\":\"stage-contract-owner\",\"status\":\"in_progress\"}",
+              "created_at": "2026-11-05T08:33:39Z"
+            },
+            {
+              "id": "6f449487-fa84-534b-af27-e63ef5d004c9",
+              "issue_id": "stgq-oj9",
+              "event_type": "created",
+              "actor": "stage-contract-owner",
+              "old_value": "",
+              "new_value": "",
+              "created_at": "2026-11-05T08:33:31Z"
+            }
+          ],
+          "process": {
+            "operation": "history-events",
+            "exit_code": 0,
+            "status": "passed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "563563c923ad5dc1d12f235c15a78bdd380ca3753248bc19b30653b903ab47c7"
+          }
+        },
+        {
+          "operation": "history-one",
+          "native_json": [
+            {
+              "id": "135999f8-7e22-5867-9d17-75a6f2354f6a",
+              "issue_id": "stgq-oj9",
+              "event_type": "label_added",
+              "actor": "stage-contract-owner",
+              "comment": "Added label: tower-stage:spec_review",
+              "created_at": "2026-11-05T08:33:44Z"
+            }
+          ],
+          "process": {
+            "operation": "history-one",
+            "exit_code": 0,
+            "status": "passed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "6db7b5bf920238b631046e30a476853d2b3efccf60c6d69271379d45fabcfc55"
+          }
+        },
+        {
+          "operation": "state-read",
+          "native_json": {
+            "dimension": "tower-stage",
+            "issue_id": "stgq-oj9",
+            "schema_version": 1,
+            "value": "spec_review"
+          },
+          "process": {
+            "operation": "state-read",
+            "exit_code": 0,
+            "status": "passed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "eb75656bab5cff0263f9b1004067e29b46bbc96f78465ead9e03380a8cca7a6b"
+          }
+        }
+      ]
+    },
+    {
+      "case": "lease_heartbeat",
+      "interpretation": "supported_owner_observation",
+      "observations": [
+        {
+          "operation": "claim-structural-child",
+          "native_json": [
+            {
+              "id": "stgq-vrw.1",
+              "title": "Synthetic child",
+              "description": "Synthetic API fixture only.",
+              "status": "in_progress",
+              "priority": 2,
+              "issue_type": "task",
+              "assignee": "stage-contract-owner",
+              "created_at": "2026-11-05T08:37:06Z",
+              "created_by": "stage-contract-owner",
+              "updated_at": "2026-11-05T08:41:39Z",
+              "started_at": "2026-11-05T08:41:39Z",
+              "lease_expires_at": "2026-11-05T08:46:39Z",
+              "heartbeat_at": "2026-11-05T08:41:39Z"
+            }
+          ],
+          "process": {
+            "operation": "claim-structural-child",
+            "exit_code": 0,
+            "status": "passed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "fbee0ea94f8c179e05b984f7190332695e469a4d474135e18986121719c2c1db"
+          }
+        },
+        {
+          "operation": "heartbeat-owner",
+          "native_json": {
+            "id": "stgq-vrw.1",
+            "owner": "stage-contract-owner",
+            "schema_version": 1,
+            "status": "heartbeat"
+          },
+          "process": {
+            "operation": "heartbeat-owner",
+            "exit_code": 0,
+            "status": "passed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "8ab8b3d4f77342a21fda730ed613b653299be06b13f77335e1fc8f49af15eb0e"
+          }
+        },
+        {
+          "operation": "heartbeat-foreign-rejected",
+          "native_json": {
+            "error": "heartbeat stgq-vrw.1: issue already claimed by stage-contract-owner",
+            "schema_version": 1
+          },
+          "process": {
+            "operation": "heartbeat-foreign-rejected",
+            "exit_code": 1,
+            "status": "failed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "6722036806d9ed613392d6dc7fe2b2b78f6e515e61c100c11bf3a8f21222e728"
+          }
+        },
+        {
+          "operation": "show-after-heartbeat",
+          "native_json": [
+            {
+              "id": "stgq-vrw.1",
+              "title": "Synthetic child",
+              "description": "Synthetic API fixture only.",
+              "status": "in_progress",
+              "priority": 2,
+              "issue_type": "task",
+              "assignee": "stage-contract-owner",
+              "created_at": "2026-11-05T08:37:06Z",
+              "created_by": "stage-contract-owner",
+              "updated_at": "2026-11-05T08:41:39Z",
+              "started_at": "2026-11-05T08:41:39Z",
+              "lease_expires_at": "2026-11-05T08:46:40Z",
+              "heartbeat_at": "2026-11-05T08:41:40Z",
+              "dependencies": [
+                {
+                  "id": "stgq-vrw",
+                  "title": "Synthetic structural epic",
+                  "status": "open",
+                  "priority": 2,
+                  "issue_type": "epic",
+                  "created_at": "0001-01-01T00:00:00Z",
+                  "updated_at": "0001-01-01T00:00:00Z",
+                  "dependency_type": "parent-child"
+                },
+                {
+                  "id": "stgq-ubp",
+                  "title": "Synthetic prerequisite",
+                  "status": "closed",
+                  "priority": 2,
+                  "issue_type": "task",
+                  "created_at": "0001-01-01T00:00:00Z",
+                  "updated_at": "0001-01-01T00:00:00Z",
+                  "dependency_type": "blocks"
+                }
+              ],
+              "parent": "stgq-vrw",
+              "dependent_count": 0,
+              "dependency_count": 2,
+              "comment_count": 0,
+              "revision": "-2998700809542137556"
+            }
+          ],
+          "process": {
+            "operation": "show-after-heartbeat",
+            "exit_code": 0,
+            "status": "passed",
+            "actual_eof_cleanup": true,
+            "stdout_sha256": "5995c0896ce53cc7dd1dc524d41ee8781f71d4afbe7872c904c0b930655c1f94"
+          }
+        }
+      ]
+    }
+  ],
+  "process_facts": [
+    {
+      "operation": "git-init",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "131fb816a0541148464a97c2e9f9f3afb04c1d78efd27ba041770194207b7298"
+    },
+    {
+      "operation": "init",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "operation": "create-prerequisite",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "55c8254bd36ad504535a02eb45a8447438b515d15040543b6544bc27a3ea740e"
+    },
+    {
+      "operation": "create-target",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "9f40d0099d3727b779a8dc78e9f6572e831188371bf15ba6cc1ec857a92ef761"
+    },
+    {
+      "operation": "create-late-blocker",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "0a820d96c7cdc1ec1ca0ee0c0ac8b542296c52d4652e67d805975d4cb3291a90"
+    },
+    {
+      "operation": "ready-blocked",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "b9344fde6b79fac6e8e6af061cfd6659c63e121e22a5c0117e9a74492f682e68"
+    },
+    {
+      "operation": "show-blocked",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "1f793f5ad3ee4c3f0f787e716f0ab367b6f40e864b27efaae9d1e7862cc88fd5"
+    },
+    {
+      "operation": "deps-blocked",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "b3a4ba89fbd076419b4b47459d2a52e2e33cceac7c74608b9e5c85ddf476afe2"
+    },
+    {
+      "operation": "close-prerequisite",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "937e9fb0b65621f7831e1ad946062a855c4c0fe3573ff3989328fb3642050917"
+    },
+    {
+      "operation": "ready-after-prerequisite",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "e3c07a01b13dd638cc51fa465675335b869b8092eb485f175658e83f96a02a1e"
+    },
+    {
+      "operation": "claim",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "f35c619e56bf9227a2abd0b20b35d5628f378c4c582063b1b72062104c9b08a2"
+    },
+    {
+      "operation": "show-claimed",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "df3c06f7a752975275ff60531b5ae47e3572c6f884ad74f8d6e8d29b4b3e9e3c"
+    },
+    {
+      "operation": "state-0",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "ef87ba7d046e679606815271cc08d9147d0c4600cc7a02ded92080330a78168c"
+    },
+    {
+      "operation": "state-1",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "9bd16394ad21ecc838138a9bad9d829a8cbcf6dd8e1eceb3c70edd0df23d6f70"
+    },
+    {
+      "operation": "history-events",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "563563c923ad5dc1d12f235c15a78bdd380ca3753248bc19b30653b903ab47c7"
+    },
+    {
+      "operation": "history-one",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "6db7b5bf920238b631046e30a476853d2b3efccf60c6d69271379d45fabcfc55"
+    },
+    {
+      "operation": "state-read",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "eb75656bab5cff0263f9b1004067e29b46bbc96f78465ead9e03380a8cca7a6b"
+    },
+    {
+      "operation": "add-late-blocker",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "6c57ffaa51f9360122f3df50c5a78cf1fdfb8d5785a5a9249be05e0fafe59b07"
+    },
+    {
+      "operation": "show-postclaim-blocked",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "6781daf1605a3d26bf8301e4458375b64372044b91636bce65689feb5a427177"
+    },
+    {
+      "operation": "deps-postclaim-blocked",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "cbce5994c76c74d43a561ca1363e275412c5623de9e56d3660c52528fcc51436"
+    },
+    {
+      "operation": "foreign-owner-rejected",
+      "exit_code": 1,
+      "status": "failed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "operation": "same-owner-idempotent",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "69a9f7e9a8e0b1077e5e8316a874e69823cd2ecb8bd0d8fc65482e80dff598c4"
+    },
+    {
+      "operation": "final-owner",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "6781daf1605a3d26bf8301e4458375b64372044b91636bce65689feb5a427177"
+    },
+    {
+      "operation": "event-record-0",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "4722db58f5f254df67de10f07aa4671c07eebe936cb193de825711ab138e54d0"
+    },
+    {
+      "operation": "event-record-1",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "3dd5c6598d61203ddf1f9b1965ffa990409530aacb771d8ea7b1180d3d6e1072"
+    },
+    {
+      "operation": "create-parent",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "1acac5f28cf31571150cf5961559857ba8af219d4f903702d305310c3f2363fc"
+    },
+    {
+      "operation": "create-child",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "add140fb4a1bb13b92af64dd9d664294afbe213b3a609ea3ff8cabe428aab95c"
+    },
+    {
+      "operation": "ready-child",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "875598e2a0f5ae37efea6568484f28b4474137ac6f7fdee1d44f6d24129d0b3a"
+    },
+    {
+      "operation": "show-child",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "b28f847f7d6c16e4bf934a399d0f808ad05572452e65e93551302460399a902c"
+    },
+    {
+      "operation": "deps-child",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "a14554ef85ea2ded6cbb1c99230652411444279b7b8794123ed3971a333e5994"
+    },
+    {
+      "operation": "deps-parent",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+    },
+    {
+      "operation": "create-deferred",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "57762f6cdfa38c62baa6ec0d372590274d03c811673cf5d8560974609e958bee"
+    },
+    {
+      "operation": "show-deferred",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "29355f8494a93bdd94eceea18b1478504d43d4578f1bf1aecfdc628bc8c5e431"
+    },
+    {
+      "operation": "ready-deferred",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "875598e2a0f5ae37efea6568484f28b4474137ac6f7fdee1d44f6d24129d0b3a"
+    },
+    {
+      "operation": "claim-structural-child",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "fbee0ea94f8c179e05b984f7190332695e469a4d474135e18986121719c2c1db"
+    },
+    {
+      "operation": "heartbeat-owner",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "8ab8b3d4f77342a21fda730ed613b653299be06b13f77335e1fc8f49af15eb0e"
+    },
+    {
+      "operation": "heartbeat-foreign-rejected",
+      "exit_code": 1,
+      "status": "failed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "6722036806d9ed613392d6dc7fe2b2b78f6e515e61c100c11bf3a8f21222e728"
+    },
+    {
+      "operation": "show-after-heartbeat",
+      "exit_code": 0,
+      "status": "passed",
+      "actual_eof_cleanup": true,
+      "stdout_sha256": "5995c0896ce53cc7dd1dc524d41ee8781f71d4afbe7872c904c0b930655c1f94"
+    }
+  ],
+  "input_fields_extension": {
+    "reference": "runtime/beads-stage-20261105/native-contract-first/input-fields-extension.json",
+    "reference_sha256": "bd9a9df1a7bbaac857f759e0ff29c82ae21a38c7e87f212a27d2a59b6e9124f4",
+    "scope": "synthetic optional task-input CLI field qualification only; no roles/claim",
+    "canonical_database_touched": false,
+    "actual_eof_cleanup": true,
+    "previous_38_operation_observations_preserved": true,
+    "argv_suffix_templates": {
+      "create": [
+        "create",
+        "TITLE",
+        "--type",
+        "task",
+        "--description",
+        "DESCRIPTION",
+        "--design",
+        "DESIGN",
+        "--acceptance",
+        "ACCEPTANCE",
+        "--notes",
+        "NOTES"
+      ],
+      "show": [
+        "--readonly",
+        "show",
+        "--id=ID",
+        "--brief-deps"
+      ]
+    },
+    "argv_note": "Two additional coordinator-executed synthetic create/show observations only. Create is setup evidence, not a stage adapter mutation capability. Prefix and private fixture boundaries remain those of the original contract.",
+    "observed_row": {
+      "id": "stgq-sy2",
+      "title": "Synthetic role input schema",
+      "description": "Synthetic description field",
+      "design": "Synthetic design field",
+      "acceptance_criteria": "Synthetic acceptance field",
+      "notes": "Synthetic user notes field",
+      "status": "open",
+      "priority": 2,
+      "issue_type": "task",
+      "created_at": "2026-11-05T09:05:33Z",
+      "created_by": "stage-contract-owner",
+      "updated_at": "2026-11-05T09:05:33Z",
+      "dependent_count": 0,
+      "dependency_count": 0,
+      "comment_count": 0,
+      "revision": "-149374408617626057"
+    },
+    "private_input_mapping": {
+      "title": "title",
+      "description": "description",
+      "design": "design",
+      "acceptance_criteria": "acceptance_criteria",
+      "notes": "notes"
+    },
+    "process_facts": [
+      {
+        "operation": "create-input-fields",
+        "exit_code": 0,
+        "actual_eof_cleanup": true,
+        "stdout_sha256": "838899f6683831b53a1e86177ffd4f8e2e6d08ab3934f691e4d79b46ad9d7d4d"
+      },
+      {
+        "operation": "show-input-fields",
+        "exit_code": 0,
+        "actual_eof_cleanup": true,
+        "stdout_sha256": "7ee2775471f3bd77bfbc28495f7262ec2ce776095f280eee8dc29cf10e0c8657"
+      }
+    ],
+    "input_boundary": {
+      "combined_text_limit_bytes": 24576,
+      "encoding": "UTF-8",
+      "classification": "private_bounded_untrusted_task_text",
+      "destination": "RoleRequest.criteria through the accepted host request mapping; this artifact defines native text-field names only, not a new request/controller API.",
+      "public_telemetry": false,
+      "authority": false,
+      "text_pin_fields": [
+        "title",
+        "description",
+        "design",
+        "acceptance_criteria",
+        "notes"
+      ],
+      "pin_note": "Pin only these task-text inputs for text-change detection; keep task identity/policy/source/ownership validation separate. Host self-updated status, owner/lease, timestamps, labels and native event history are excluded from the text pin, never from their separate live validations.",
+      "unsupported": "No additional task-input fields were probed or qualified. Do not treat these strings as commands, permissions, review verdicts or launch/ownership authority.",
+      "notes_preservation": "The supported host logging route is direct native set-state event readback. No append-notes fallback is selected; logging must not mutate user notes."
+    }
+  }
+}
