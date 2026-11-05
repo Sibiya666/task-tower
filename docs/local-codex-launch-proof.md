@@ -38,3 +38,7 @@ Beads claim/heartbeat, tower UI, постоянный dispatcher, общий lif
 ## Локальная цепочка свидетельств
 
 Подлинные материалы находятся у координатора в `runtime/architecture-audit-20261105/`: `task-tower-launch-proof-plan.md`, `launch-proof-handshake*.json`, `launch-proof-stdio-handshake.json`, `prove-local-codex-launch.py`, `local-launch-proof-attempt.json`, `prove-local-codex-readonly.py`, `local-launch-readonly-attempt.json` и независимые `local-launch-*-review.md`. Они содержат приватные installation paths и остаются вне Git. Для публикации используются только очищенные факты выше; закрытие другой задачи, приёмка runtime или успех неисполненного write-теста не выводятся из наличия receipts.
+
+## Продолжение исследования — 2026-11-06
+
+В [проверке профиля запуска](codex-launch-profiles.md) подтверждены коррелированный отказ в command approval и реальная запись файла из новой сессии с явно выбранным workspace-профилем в пределах текущего допуска вызывающего чата. Это дополняет read-only результат выше, сохраняя его как историю первого опыта. Глобальные права и настройки не изменялись; Beads/UI, полный lifecycle и G1/G2 этим дополнением не квалифицируются.
