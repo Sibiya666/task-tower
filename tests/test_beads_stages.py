@@ -719,6 +719,7 @@ class LocalSourceTests(unittest.TestCase):
             stages.HostCheckAuthority.check_documentation_delta(self.before, changed)
 
     def test_unknown_preparation_git_proof_keeps_actual_project_mutex_held(self):
+        self.runner.mode='production'  # This fixture exercises ordinary dispatch.
         from tests.test_beads_admission import facts
         profile=self.root/'synthetic-profile.json';profile.write_text('{}',encoding='utf-8')
         database=self.root/'synthetic-database';(database/'.beads').mkdir(parents=True)
