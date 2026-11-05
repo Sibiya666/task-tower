@@ -32,3 +32,9 @@
 - [ ] Update README/AGENTS and diagnostic findings; obtain fresh independent whole head/base PR approval and current CI.
 - [ ] Expected-head merge, fresh fetch60/local Git10 exact-main materialization, distinct main source review and actual postmerge event/manifests.
 - [ ] Close tt-qrk.4 with verified original actor only after accepted fix/main; verify state/history and epic eligibility.
+
+## Task1 amendment before publication
+
+- Preserve failed local smoke at6353a22 and actual cleanup/source receipt; no repeat native for green.
+- TDD active-host turnover correlation and bounded allowlisted native failure locations, with no raw exception formatting or DB reads.
+- Independent task review, new commit and fresh whole six-file head/base review precede the single hosted baseline.

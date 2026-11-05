@@ -1,4 +1,7 @@
+import gc
 import json
+import threading
+import weakref
 from pathlib import Path
 import tempfile
 import time
@@ -9,10 +12,94 @@ import uuid
 from tools import windows_preconnect_diagnostic as diagnostic
 
 
+class Host:
+    def __init__(self, **values):
+        self.done = threading.Event()
+        self.__dict__.update(values)
+
+
 class DiagnosticTests(unittest.TestCase):
+    def test_completed_retained_hosts_do_not_suppress_late_failure(self):
+        observer = diagnostic.PreconnectObservation()
+        retained = []
+        for index in range(90):
+            host = Host(owner=str(uuid.uuid4()), journal=SimpleNamespace())
+            retained.append(host)  # Original fixture observation retains early hosts.
+            def callback(unused):
+                if index == 89:
+                    raise ValueError('PRIVATE late failure')
+                return False
+            try:
+                observer.callback(callback, host)
+            except ValueError:
+                pass
+            host.done.set()
+        report = observer.report()
+        self.assertEqual(report['callbacks'], 90)
+        self.assertEqual(report['omitted_host_callbacks'], 0)
+        self.assertEqual(len(report['records']), 64)
+        late = [r for r in report['records'] if r['owner_id'] == retained[-1].owner]
+        self.assertEqual(len(late), 1)
+        self.assertTrue(late[0]['failed'])
+        self.assertEqual(late[0]['sequence'], 1)
+        self.assertLessEqual(len(observer.sequences), 32)
+
+    def test_host_tracking_is_weak_and_caps_simultaneously_active_hosts(self):
+        observer = diagnostic.PreconnectObservation()
+        host = Host(owner=str(uuid.uuid4()), journal=SimpleNamespace())
+        reference = weakref.ref(host)
+        observer.callback(lambda unused: None, host)
+        del host
+        gc.collect()
+        self.assertIsNone(reference())
+        self.assertEqual(len(observer.sequences), 0)
+        active = [Host(owner=str(uuid.uuid4()), journal=SimpleNamespace()) for unused in range(33)]
+        for host in active:
+            observer.callback(lambda unused: None, host)
+        self.assertEqual(len(observer.sequences), 32)
+        self.assertEqual(observer.report()['omitted_host_callbacks'], 1)
+        active[0].done.set()
+        observer.callback(lambda unused: None, active[-1])
+        self.assertEqual(observer.report()['callbacks'], 34)
+        final = [r for r in observer.report()['records'] if r['owner_id'] == active[-1].owner]
+        self.assertEqual(final[0]['sequence'], 1)
+
+    def test_nonweak_host_still_preserves_original_callback_result(self):
+        observer = diagnostic.PreconnectObservation()
+        marker = object()
+        self.assertIs(observer.callback(lambda unused: marker, SimpleNamespace(owner=None)), marker)
+        self.assertEqual(observer.report()['observation_errors'], 1)
+        self.assertEqual(len(observer.sequences), 0)
+
+    def test_native_failure_locations_are_allowlisted_bounded_and_fail_closed(self):
+        namespace = {'__name__': 'tests.test_pipeline_watch'}
+        exec(compile("class WatchTests:\n def until(self):\n  raise AssertionError('PRIVATE task C:/secret')\n", 'C:/PRIVATE/source.py', 'exec'), namespace)
+        result = diagnostic.ScalarResult()
+        case = unittest.FunctionTestCase(lambda: None)
+        for unused in range(20):
+            try:
+                namespace['WatchTests']().until()
+            except AssertionError:
+                result.addFailure(case, diagnostic.sys.exc_info())
+        report = result.scalars()
+        self.assertIn('failure_locations', report)
+        locations = report['failure_locations']
+        self.assertEqual(len(locations), 8)
+        self.assertEqual(locations[0], dict(module='tests.test_pipeline_watch',
+                         function='WatchTests.until', line=3, kind='failure'))
+        self.assertGreater(report['omitted_failure_locations'], 0)
+        self.assertNotIn('PRIVATE', json.dumps(report))
+        child = dict(case=diagnostic.CASE, observation=diagnostic.PreconnectObservation().report(), **report)
+        self.assertTrue(diagnostic._valid_child(child))
+        for mutation in (dict(locations[0], module='PRIVATE'), dict(locations[0], function='PRIVATE'),
+                         dict(locations[0], line=True), dict(locations[0], prose='PRIVATE')):
+            self.assertFalse(diagnostic._valid_child(dict(child, failure_locations=[mutation])))
+        self.assertFalse(diagnostic._valid_child(dict(child, failure_locations=locations * 2)))
+        self.assertLessEqual(len(diagnostic.encode_report(child)), 65536)
+
     def test_observation_preserves_return_and_same_exception(self):
         observer = diagnostic.PreconnectObservation()
-        host = SimpleNamespace(owner=str(uuid.uuid4()), journal=SimpleNamespace())
+        host = Host(owner=str(uuid.uuid4()), journal=SimpleNamespace())
         marker = object()
         self.assertIs(observer.callback(lambda unused: marker, host), marker)
         error = ValueError('PRIVATE prose and C:/private/file')
@@ -29,7 +116,7 @@ class DiagnosticTests(unittest.TestCase):
     def test_safe_and_outside_safe_preconnect_are_attributed(self):
         observer = diagnostic.PreconnectObservation()
         journal = SimpleNamespace(_operation_deadline=time.monotonic() + 1)
-        host = SimpleNamespace(owner=str(uuid.uuid4()), journal=journal)
+        host = Host(owner=str(uuid.uuid4()), journal=journal)
         with tempfile.TemporaryDirectory() as directory:
             leaf = Path(directory) / 'leaf'
             leaf.touch()
@@ -53,7 +140,7 @@ class DiagnosticTests(unittest.TestCase):
 
     def test_record_cap_keeps_slowest_and_failure_without_private_values(self):
         observer = diagnostic.PreconnectObservation()
-        host = SimpleNamespace(owner='not-a-uuid PRIVATE', journal=SimpleNamespace())
+        host = Host(owner='not-a-uuid PRIVATE', journal=SimpleNamespace())
         for index in range(100):
             def callback(unused):
                 if index == 0:
@@ -78,7 +165,7 @@ class DiagnosticTests(unittest.TestCase):
                        cleanup_confirmed=True, stdout_tail_unknown=False,
                        stderr_tail_unknown=False)
         child = dict(case=diagnostic.CASE, tests_run=1, failures=0, errors=0,
-                     skipped=0, unexpected_successes=0, observation=diagnostic.PreconnectObservation().report())
+                     skipped=0, unexpected_successes=0, failure_locations=[], omitted_failure_locations=0, failure_traceback_truncated=False, observation=diagnostic.PreconnectObservation().report())
         # No callback evidence is not an executed native diagnostic.
         self.assertFalse(diagnostic.receipt_passed(process, child))
         observer = diagnostic.PreconnectObservation()
@@ -86,7 +173,7 @@ class DiagnosticTests(unittest.TestCase):
         def measured(unused):
             observer.preconnect(journal)
             return False
-        observer.callback(measured, SimpleNamespace(owner=str(uuid.uuid4()), journal=journal))
+        observer.callback(measured, Host(owner=str(uuid.uuid4()), journal=journal))
         child['observation'] = observer.report()
         self.assertTrue(diagnostic.receipt_passed(process, child))
         self.assertFalse(diagnostic.receipt_passed(process, None))
@@ -98,6 +185,10 @@ class DiagnosticTests(unittest.TestCase):
             self.assertFalse(diagnostic.receipt_passed(process, dict(child, **{key: 1})))
         self.assertFalse(diagnostic.receipt_passed(process, dict(child, tests_run=0)))
         self.assertFalse(diagnostic.receipt_passed(process, dict(child, private='PRIVATE')))
+        self.assertFalse(diagnostic.receipt_passed(process, dict(child, failure_traceback_truncated=True)))
+        self.assertFalse(diagnostic.receipt_passed(process, dict(child, omitted_failure_locations=1)))
+        self.assertFalse(diagnostic.receipt_passed(process, dict(child,
+            observation=dict(child['observation'], omitted_host_callbacks=1))))
 
     def test_native_result_never_formats_traceback_or_skip_prose(self):
         result = diagnostic.ScalarResult()
@@ -119,7 +210,7 @@ class DiagnosticTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             journal = pipeline_journal.PipelineJournal(Path(directory) / 'synthetic.db')
             observer = diagnostic.PreconnectObservation(directory)
-            host = SimpleNamespace(owner=str(uuid.uuid4()), journal=journal)
+            host = Host(owner=str(uuid.uuid4()), journal=journal)
             with observer.installed():
                 with journal.operation_deadline(time.monotonic() - 1):
                     with self.assertRaisesRegex(ValueError, 'operation deadline exhausted'):
@@ -147,9 +238,9 @@ class DiagnosticTests(unittest.TestCase):
         journal = SimpleNamespace()
         observer = diagnostic.PreconnectObservation()
         observer.callback(lambda unused: observer.preconnect(journal),
-                          SimpleNamespace(owner=str(uuid.uuid4()), journal=journal))
+                          Host(owner=str(uuid.uuid4()), journal=journal))
         native = dict(case=diagnostic.CASE, tests_run=1, failures=0, errors=0,
-                      skipped=0, unexpected_successes=0, observation=observer.report())
+                      skipped=0, unexpected_successes=0, failure_locations=[], omitted_failure_locations=0, failure_traceback_truncated=False, observation=observer.report())
         facts = dict(status='passed', exit_code=0, started=True, cleanup_confirmed=True,
                      stdout_tail_unknown=False, stderr_tail_unknown=False,
                      stdout_bytes=0, stderr_bytes=0, duration_seconds=.1, argv=['PRIVATE'])
@@ -199,7 +290,7 @@ class DiagnosticTests(unittest.TestCase):
     def test_original_safe_exception_and_lstat_error_are_not_replaced(self):
         observer = diagnostic.PreconnectObservation()
         journal = SimpleNamespace()
-        host = SimpleNamespace(owner=str(uuid.uuid4()), journal=journal)
+        host = Host(owner=str(uuid.uuid4()), journal=journal)
         error = PermissionError('PRIVATE')
         def safe(unused):
             raise error

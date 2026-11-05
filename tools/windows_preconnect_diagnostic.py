@@ -18,6 +18,7 @@ import threading
 import time
 import unittest
 import uuid
+import weakref
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -39,6 +40,15 @@ _NUMBERS = ('sequence', 'wall', 'thread_cpu', 'process_cpu', 'safe_count',
             'outside_safe_preconnect_process_cpu', 'remaining_before_safe',
             'remaining_after_safe', 'remaining_preconnect')
 _BOOLS = ('failed', 'connected', 'wait_failed_before_connect')
+_FAILURE_FUNCTIONS = {
+    'tests.test_pipeline_watch': {
+        'WatchTests.setUp', 'WatchTests.start', 'WatchTests.stop', 'WatchTests.until',
+        'WatchTests.test_real_dispatch_adapter_to_six_roles_and_host_tests'},
+    'tests.test_pipeline_default_source': {'DefaultSourceTests.setUp'},
+    'task_tower.pipeline': {'_Host.cancelled', '_Host.run', '_Host.close', 'watch_tick'},
+    'task_tower.pipeline_journal': {'PipelineJournal.status', 'PipelineJournal._db',
+        'PipelineJournal._safe', 'PipelineJournal._wait_seconds'},
+}
 
 
 def _clock():
@@ -67,9 +77,9 @@ class PreconnectObservation:
         self.root = Path(fixture_root).absolute() if fixture_root is not None else None
         self.local = threading.local()
         self.lock = threading.Lock()
-        self.sequences = {}
+        self.sequences = weakref.WeakKeyDictionary()
         self.records = []
-        self.omitted_records = self.omitted_hosts = self.observation_errors = 0
+        self.omitted_records = self.omitted_host_callbacks = self.observation_errors = 0
         self.callbacks = 0
 
     def _observe(self, function, *args):
@@ -82,12 +92,18 @@ class PreconnectObservation:
     def _begin(self, host):
         if self.root is not None and not Path(host.journal.path).absolute().is_relative_to(self.root):
             return None
-        identity = id(host)
+        # Existing fixture observers can retain completed host objects. Reclaim
+        # completed slots even when GC cannot; inspect original flags unlocked.
         with self.lock:
-            if identity not in self.sequences and len(self.sequences) >= 32:
-                self.omitted_hosts += 1
+            tracked = list(self.sequences)
+        completed = [old for old in tracked if old is not host and old.done.is_set()]
+        with self.lock:
+            for old in completed:
+                self.sequences.pop(old, None)
+            if host not in self.sequences and len(self.sequences) >= 32:
+                self.omitted_host_callbacks += 1
                 return None
-            sequence = self.sequences[identity] = self.sequences.get(identity, 0) + 1
+            sequence = self.sequences[host] = self.sequences.get(host, 0) + 1
             self.callbacks += 1
         record = dict.fromkeys(_NUMBERS, 0)
         for key in ('preconnect_wall', 'preconnect_thread_cpu', 'preconnect_process_cpu',
@@ -221,7 +237,7 @@ class PreconnectObservation:
         with self.lock:
             report = dict(records=sorted((dict(r) for r in self.records), key=lambda r: r['sequence']),
                           callbacks=self.callbacks, omitted_records=self.omitted_records,
-                          omitted_hosts=self.omitted_hosts, observation_errors=self.observation_errors)
+                          omitted_host_callbacks=self.omitted_host_callbacks, observation_errors=self.observation_errors)
         # Byte bound as well as count bound; prioritize slow/failing calls here too.
         while len(encode_report(report)) > LIMIT - 4096:
             loser = min(range(len(report['records'])), key=lambda i: (
@@ -241,36 +257,76 @@ class ScalarResult(unittest.TestResult):
     def __init__(self):
         super().__init__()
         self.counts = dict(failures=0, errors=0, skipped=0, unexpected_successes=0)
+        self.failure_locations = []
+        self.omitted_failure_locations = 0
+        self.failure_traceback_truncated = False
+    def _locations(self, err, kind):
+        node = err[2]
+        for unused in range(32):
+            if node is None:
+                break
+            module = node.tb_frame.f_globals.get('__name__')
+            function = node.tb_frame.f_code.co_qualname
+            if (type(module) is str and module in _FAILURE_FUNCTIONS
+                    and function in _FAILURE_FUNCTIONS[module]
+                    and type(node.tb_lineno) is int and 0 < node.tb_lineno < 2**31
+                    and len(self.failure_locations) < 8):
+                self.failure_locations.append(dict(module=module, function=function,
+                                                   line=node.tb_lineno, kind=kind))
+            else:
+                self.omitted_failure_locations += 1
+            node = node.tb_next
+        if node is not None:
+            self.failure_traceback_truncated = True
     def addError(self, test, err):
         self.counts['errors'] += 1
+        self._locations(err, 'error')
     def addFailure(self, test, err):
         self.counts['failures'] += 1
+        self._locations(err, 'failure')
     def addSkip(self, test, reason):
         self.counts['skipped'] += 1
     def addUnexpectedSuccess(self, test):
         self.counts['unexpected_successes'] += 1
     def addExpectedFailure(self, test, err):
-        self.counts['failures'] += 1
+        self.addFailure(test, err)
     def addSubTest(self, test, subtest, err):
         if err is not None:
-            self.counts['failures' if issubclass(err[0], test.failureException) else 'errors'] += 1
+            (self.addFailure if issubclass(err[0], test.failureException) else self.addError)(test, err)
     def scalars(self):
-        return dict(tests_run=self.testsRun, **self.counts)
+        return dict(tests_run=self.testsRun, **self.counts,
+                    failure_locations=list(self.failure_locations),
+                    omitted_failure_locations=self.omitted_failure_locations,
+                    failure_traceback_truncated=self.failure_traceback_truncated)
 
 
 def _valid_child(child):
     if type(child) is not dict or set(child) != {
-            'case', 'tests_run', 'failures', 'errors', 'skipped', 'unexpected_successes', 'observation'}:
+            'case', 'tests_run', 'failures', 'errors', 'skipped', 'unexpected_successes', 'observation',
+            'failure_locations', 'omitted_failure_locations', 'failure_traceback_truncated'}:
         return False
+    if (type(child['failure_traceback_truncated']) is not bool
+            or type(child['omitted_failure_locations']) is not int
+            or not 0 <= child['omitted_failure_locations'] < 2**53
+            or type(child['failure_locations']) is not list or len(child['failure_locations']) > 8):
+        return False
+    for location in child['failure_locations']:
+        if (type(location) is not dict or set(location) != {'module', 'function', 'line', 'kind'}
+                or type(location['module']) is not str or location['module'] not in _FAILURE_FUNCTIONS
+                or type(location['function']) is not str
+                or location['function'] not in _FAILURE_FUNCTIONS[location['module']]
+                or type(location['line']) is not int or not 0 < location['line'] < 2**31
+                or type(location['kind']) is not str or location['kind'] not in {'failure', 'error'}):
+            return False
     if child['case'] != CASE or any(type(child[k]) is not int or not 0 <= child[k] <= 1000
                                   for k in ('tests_run', 'failures', 'errors', 'skipped', 'unexpected_successes')):
         return False
     observation = child['observation']
     if type(observation) is not dict or set(observation) != {
-            'records', 'callbacks', 'omitted_records', 'omitted_hosts', 'observation_errors'}:
+            'records', 'callbacks', 'omitted_records', 'omitted_host_callbacks', 'observation_errors'}:
         return False
     if any(type(observation[k]) is not int or not 0 <= observation[k] < 2**53
-           for k in ('callbacks', 'omitted_records', 'omitted_hosts', 'observation_errors')):
+           for k in ('callbacks', 'omitted_records', 'omitted_host_callbacks', 'observation_errors')):
         return False
     records = observation['records']
     if type(records) is not list or len(records) > 64:
@@ -296,10 +352,13 @@ def receipt_passed(process, child):
             and process.get('stdout_tail_unknown') is False and process.get('stderr_tail_unknown') is False
             and child['tests_run'] == 1 and not any(child[k] for k in (
                 'failures', 'errors', 'skipped', 'unexpected_successes'))
+            and not child['failure_locations'] and child['omitted_failure_locations'] == 0
+            and child['failure_traceback_truncated'] is False
             and child['observation']['callbacks'] > 0 and bool(child['observation']['records'])
             and any(r['owner_id'] is not None and r['preconnect_wall'] is not None
                     for r in child['observation']['records'])
-            and child['observation']['observation_errors'] == 0)
+            and child['observation']['observation_errors'] == 0
+            and child['observation']['omitted_host_callbacks'] == 0)
 
 
 def _child(output):
