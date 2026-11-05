@@ -42,3 +42,10 @@
 ## Task2 evidence boundary
 
 Baseline41964473875 passed without reproducing the historical delay. Independent causal review therefore scopes `tt-qrk.4.1` to duplicate-work optimization, not parent-bug closure. The150ms-per-original-walk virtual workload is predeclared in the spec and must not be tuned. Execute real validators, original one-second guard and real journal/status machinery; preserve all unsafe-path and exhaustion controls. After reviewed TDD, use the one changed-head diagnostic opportunity, then remove the branch-only research workflow before ordinary final PR/full-suite/main gates. Keep the parent unresolved if historical causation remains unproven.
+
+## Recorded completion before final PR
+
+- Task1: fourteen focused observer/runner tests pass; independent whole research approvals at5323781 and a6c8e59; one baseline and one changed-head hosted run completed, digest/source/EOF/cleanup verified. Failed local smoke remains failed history.
+- Task2 implementation: real budget regression RED at eight walks/1.2modeled seconds; GREEN at four walks/0.6seconds. Three new regressions pass.66existing targeted tests pass with one unchanged symlink-unavailable skip; independent source/security review approves with coverage limitations retained.
+- Hosted work count74to54lstat, native32.516to33.656seconds; this is not a demonstrated latency speedup or historical flake cure.
+- Branch-only research trigger removed. Final whole PR/full CI/expected-head merge/exact-main acceptance remain pending; child closure only after those gates. Parent tt-qrk.4 remains unresolved.
