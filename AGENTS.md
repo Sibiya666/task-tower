@@ -8,6 +8,8 @@ The shipped first step is a **read-only local Books adapter on one Windows machi
 
 Do not resume development of the old bespoke GitHub conveyor, pipeline/group runtime, PR worker or their pilot cards. PR43/67/68 were archived without merging; obsolete implementation Issues are cancelled as not_planned, not completed. Their branches, WIP, original receipts, claims/fences and journal identities must remain intact. Never delete state, replay unknown execution, adopt executable ownership from JSON or fabricate historical stage/process facts. Old docs/superpowers plans and executor/dispatcher/pipeline docs are historical compatibility references unless the user explicitly authorizes new scope.
 
+The user explicitly resumed bug tt-qrk.4 on2026-11-05: one bounded hosted Windows diagnostic and a justified correction are authorized, with every security check, assertion and timeout preserved. See the hosted-preconnect diagnostic spec/plan. This narrow bugfix exception does not authorize conveyor feature development or replaying old real tasks. The diagnostic is a branch-restricted additive CI job, not an autonomous worker; ordinary complete-suite and independent PR/main gates remain required. Never call a passing diagnostic proof of an unobserved cause.
+
 Beads does not itself prove that Task Tower has a persistent agent pool, automatic merge/main acceptance or unattended operation. Do not add such behavior to the Books adapter. The current implementation does not migrate GitHub cards or scan local Markdown ideas/library. VPS/HTTP/server, multi-machine sync and all macOS/Linux/WSL execution/CI/native work remain future scope; platform feature58/tasks59–62 and other explicitly retained future/research cards (including legacy scope66) are not cancelled implicitly.
 
 ## Development and integration
@@ -55,3 +57,7 @@ PowerShell 5.1 scripts with Cyrillic must be UTF-8 BOM. The desktop shortcut mus
 Keep execution_completed separate from accepted/done. Existing model/custom/check children strip GH_TOKEN/GITHUB_TOKEN case-insensitively; only the established fixed trusted host helpers may inherit host GitHub authentication. Never copy tokens into argv, task text, prompts, logs or public artifacts. Do not install tools, change model/account/auth or activate old workers implicitly.
 
 Inspect/read/write UTF-8 explicitly, including subprocess output decoding on Windows. Use ASCII-escaped JSON or verified code points when diagnosing Unicode source predicates; never edit based on lossy terminal rendering. Preserve source bytes, unknown-outcome fences, existing project authorization and private settings.
+
+## Residual CI timing investigation
+
+Baseline hosted diagnostic41964473875 passed without reproducing the historical one-second preconnection exhaustion. Child tt-qrk.4.1 covers only the independently reviewed duplicate-validation workload optimization and fixed150ms virtual-workload regression. Retain `_private_stat()` ancestry validation immediately before stat, every security predicate and the original operation deadline. Passing baseline/verification or accepted child delivery cannot close parent tt-qrk.4 while historical timing causation remains unresolved. The branch-only research trigger must not ship as a permanent CI job.

@@ -163,7 +163,6 @@ class PipelineJournal:
         self._wait_seconds()
     def _safe(self):
         for path in [self.path,*(Path(str(self.path)+s) for s in ('-journal','-wal','-shm'))]:
-            safe_config_path(path)
             try:_private_stat(path,transient=path!=self.path)
             except FileNotFoundError:pass
             if any(path.resolve().is_relative_to(c) for c in self.checkouts): raise ValueError('Private pipeline state inside checkout')
