@@ -14,6 +14,8 @@ Beads does not itself prove that Task Tower has a persistent agent pool, automat
 
 ## Development and integration
 
+The operator explicitly activated Windows chain tt-auq.1–tt-auq.7 on 2026-11-05. Read docs/beads-admission.md and its current spec/plan for task1. Admission uses a separate private operator policy; Books configuration is display-only and cannot grant execution rights. A readiness packet is an observation, never ownership or accepted/done. Task2 must recheck and atomically claim through Beads before effects; do not reconstruct executable state from packets or build a replacement queue. Continue dependency-ready authorized Windows children after real main/closure gates. Research, POSIX, VPS, migration and multi-machine cards remain deferred.
+
 - Read the current authorized Beads task and applicable spec/plan before changes. Use Superpowers brainstorming/planning/TDD/review/verification as applicable. A documentation correction needs relevant checks, not new implementation-mirroring tests.
 - Use isolated branches/worktrees; preserve user edits and other in-flight work. Canonical desktop code is overlay/ in this repository, never a second root copy.
 - Only claim authorized work. Beads claims and dependency readiness do not grant credential scopes, permission for another repository, model/account/auth changes or authority to run commands from task prose. Installation config and secrets stay outside source and model packets.
@@ -64,7 +66,7 @@ Baseline hosted diagnostic41964473875 passed without reproducing the historical 
 
 ## Backlog and known-risk release decision (2026-11-05)
 
-Beads is the sole canonical task/dependency/history source; the25 retained GitHub Issues are current reference cards, not another executable queue.29 future nodes (25 references plus4 local-delivery planning nodes) are deferred/unassigned and introduce no first-release blockers. Keep research, night/persistent delivery, multiple machines/VPS/HTTP, macOS/Linux/WSL and legacy requalification deferred until explicit phase scope/spec acceptance. Do not resurrect cancelled17/18 or old machine markers; preserve originals as inert history. See docs/backlog.md.
+Beads is the sole canonical task/dependency/history source; the25 retained GitHub Issues are current reference cards, not another executable queue.29 planning nodes (25 references plus4 local-delivery nodes) were initially deferred/unassigned without first-release blockers. The explicitly authorized tt-auq epic and seven Windows children are now active; the other21 remain deferred. Keep research, multiple machines/VPS/HTTP, macOS/Linux/WSL and legacy requalification deferred until explicit phase authorization/spec acceptance. Local night delivery may be developed through the authorized Windows chain but is not shipped merely by card activation. Do not resurrect cancelled17/18 or old machine markers; preserve originals as inert history. See docs/backlog.md.
 
 The user explicitly accepts unresolved tt-qrk.4 as NONBLOCKING for the first Windows release. Keep it open/blocked, never call it fixed from the optimization or green probes. All applicable CI, security checks, assertions/timeouts, independent head/base PR and exact-main gates remain required; this is no failed-CI waiver. docs/ci-known-issues.md records the boundary.
 
