@@ -17,6 +17,7 @@ from task_tower import pipeline
 from task_tower.executor_worker import _git
 from task_tower.github_tasks import replace_metadata
 from tests import test_pipeline_default_source as source_fixture
+from tests.fixtures.host_observation import HostObservation
 
 
 class WatchTests(unittest.TestCase):
@@ -55,23 +56,24 @@ class WatchTests(unittest.TestCase):
         self.journal.recover()
         self.journal.release_controller(state['owner']);self.config.pop('_watch')
 
-    def until(self,predicate,seconds=180):
+    def until(self,predicate,seconds=180,observer=None):
         deadline=time.monotonic()+seconds
         while time.monotonic()<deadline:
             pipeline.watch_tick(self.config,self.journal)
             if predicate():return
             time.sleep(.05)
-        self.fail('Watch condition timed out: '+str(self.journal.status()))
+        self.fail(observer.lazy_message(self.journal) if observer is not None else 'Watch condition timed out: '+str(self.journal.status()))
 
     @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native pipeline execution')
     def test_real_dispatch_adapter_to_six_roles_and_host_tests(self):
-        self.start()
-        self.until(lambda:any(r['state']=='ready_for_pr' for r in self.journal.status()['runs']))
-        run=self.journal.status()['runs'][0];history=self.journal.history(run['run_id'])
-        self.assertEqual(len([a for a in history['attempts'] if a['role']!='host_check']),6)
-        self.assertEqual(len(history['verdicts']),3)
-        self.assertEqual(len({a['instance_id'] for a in history['attempts']}),7)
-        self.assertEqual(len(pipeline.DeliveryJournal(self.args.dispatch_journal,readonly=True).rows()),1)
+        with HostObservation(self.root) as observation:
+            self.start()
+            self.until(lambda:any(r['state']=='ready_for_pr' for r in self.journal.status()['runs']),observer=observation)
+            run=self.journal.status()['runs'][0];history=self.journal.history(run['run_id'])
+            self.assertEqual(len([a for a in history['attempts'] if a['role']!='host_check']),6,observation.lazy_message(self.journal))
+            self.assertEqual(len(history['verdicts']),3,observation.lazy_message(self.journal))
+            self.assertEqual(len({a['instance_id'] for a in history['attempts']}),7,observation.lazy_message(self.journal))
+            self.assertEqual(len(pipeline.DeliveryJournal(self.args.dispatch_journal,readonly=True).rows()),1,observation.lazy_message(self.journal))
         before=self.journal.history(run['run_id']);self.stop();self.start()
         pipeline.watch_tick(self.config,self.journal)
         self.assertTrue(self.config['_watch']['dispatcher'].done.wait(30))
@@ -326,13 +328,14 @@ class WatchTests(unittest.TestCase):
         _git(f.profile['checkout'],'remote','add','origin','https://github.com/Owner/Repo.git')
         _,self.journal,self.config=pipeline._runtime(self.args)
         # Use actual default API factories, stop precisely between actions.
-        admission=pipeline._Host(self.args,'_dispatch',30,threading.Event())
-        self.assertTrue(admission.done.wait(30));self.assertFalse(admission.result['operational_failure']);admission.close()
-        for _ in range(25):
-            pipeline.work(self.config,self.journal)
-            run=self.journal.status()['runs'][0]
-            if len(self.journal.history(run['run_id'])['verdicts'])==3:break
-        self.assertEqual(len(self.journal.history(run['run_id'])['verdicts']),3)
+        with HostObservation(self.root) as observation:
+            admission=pipeline._Host(self.args,'_dispatch',30,threading.Event())
+            self.assertTrue(admission.done.wait(30),observation.lazy_message(self.journal));self.assertFalse(admission.result['operational_failure'],observation.lazy_message(self.journal));admission.close()
+            for _ in range(25):
+                pipeline.work(self.config,self.journal)
+                run=self.journal.status()['runs'][0]
+                if len(self.journal.history(run['run_id'])['verdicts'])==3:break
+            self.assertEqual(len(self.journal.history(run['run_id'])['verdicts']),3,observation.lazy_message(self.journal))
         remote=self.root/'remote.git';_git(f.profile['checkout'],'init','--bare',str(remote))
         value=json.loads(self.http.read_text());value.update(block_git=True,block_git_command='push',remote=str(remote),git_started=str(self.root/'git-started'))
         self.http.write_text(json.dumps(value))
@@ -366,9 +369,10 @@ class WatchTests(unittest.TestCase):
         f.profile['argv']=[str(Path(sys.executable).resolve()),str(wrapper)]
         self.executor.write_text(json.dumps(dict(version=1,profiles={'local':f.profile},allowlist=f.executor['allowlist'])))
         _,self.journal,self.config=pipeline._runtime(self.args)
-        admission=pipeline._Host(self.args,'_dispatch',30,threading.Event())
-        self.assertTrue(admission.done.wait(30));self.assertFalse(admission.result['operational_failure']);admission.close()
-        self.assertEqual(pipeline.work(self.config,self.journal)['status'],'ready')
+        with HostObservation(self.root) as observation:
+            admission=pipeline._Host(self.args,'_dispatch',30,threading.Event())
+            self.assertTrue(admission.done.wait(30),observation.lazy_message(self.journal));self.assertFalse(admission.result['operational_failure'],observation.lazy_message(self.journal));admission.close()
+            self.assertEqual(pipeline.work(self.config,self.journal)['status'],'ready',observation.lazy_message(self.journal))
         original_init=pipeline._Host.__init__;original_close=pipeline._Host.close
         observed=[];outcomes=[];stoppers=[]
         def initialize(host,*args,**kwargs):
@@ -501,13 +505,14 @@ with j.owner(sys.argv[2]):
         remote=self.root/'remote.git';_git(f.profile['checkout'],'init','--bare',str(remote))
         value=json.loads(self.http.read_text());value.update(remote=str(remote),prs=str(self.root/'prs.json'))
         self.http.write_text(json.dumps(value));_,self.journal,self.config=pipeline._runtime(self.args)
-        host=pipeline._Host(self.args,'_dispatch',30,threading.Event())
-        self.assertTrue(host.done.wait(30));self.assertFalse(host.result['operational_failure']);host.close()
-        for _ in range(25):
-            pipeline.work(self.config,self.journal);run=self.journal.status()['runs'][0]
-            self.assertNotIn(run['state'],('unknown','needs_input','timed_out'))
-            if len(self.journal.history(run['run_id'])['verdicts'])==3:return run
-        self.fail('Three actual independent stages not accepted')
+        with HostObservation(self.root) as observation:
+            host=pipeline._Host(self.args,'_dispatch',30,threading.Event())
+            self.assertTrue(host.done.wait(30),observation.lazy_message(self.journal));self.assertFalse(host.result['operational_failure'],observation.lazy_message(self.journal));host.close()
+            for _ in range(25):
+                pipeline.work(self.config,self.journal);run=self.journal.status()['runs'][0]
+                self.assertNotIn(run['state'],('unknown','needs_input','timed_out'),observation.lazy_message(self.journal))
+                if len(self.journal.history(run['run_id'])['verdicts'])==3:return run
+            self.fail(observation.lazy_message(self.journal))
 
     @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native pipeline execution')
     def test_distinct_worker_processes_commit_push_and_create_one_pr(self):
