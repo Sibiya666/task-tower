@@ -11,6 +11,8 @@ Parent Beads bug: `tt-qrk.4`. This is test-fixture observability, not developmen
 
 Do not assume a shared cause. The separate C:/D: docs-test fixture error is corrected in PR79 and does not explain these observations. Preserve original CI logs/manifests/events and do not run another blind retry.
 
+PR80 head66ca CI41937740286 now records a `ValueError` escaping `cancelled()` during the fourth preparation helper. The runner returned `unknown` after containment, and all nine shutdown proofs were true. The callback duration1.156s does not prove deadline exhaustion; exit1 does not prove an independent child crash. The exact raise site remains unknown.
+
 ## Narrow implementation
 
 Create `tests/fixtures/host_observation.py` and `tests/test_host_observation.py`. Change only diagnostic wiring/messages in the named WatchTests/precondition helpers, including `accepted_publication()`. No production pipeline, journal, supervisor, clock, task admission, authority, timeout, test expectation, retry or cleanup-control changes.
@@ -26,6 +28,7 @@ Normal passing-path observations must be minimal. Prepare reports only when an a
 - At most32 host records and16 error records, with explicit omitted counters. Keep only known scalar fields, UUIDs, state/stage/reason, status/exit/PID, timestamps, duration, hashes and cleanup flags.
 - No environment, profiles, request/task prose, admission/manifest bodies or raw database dump. Redact GitHub credential values case-insensitively if an exception/result string could contain one. Bound strings before formatting.
 - A valid ASCII-escaped JSON failure report is at most16KiB. Prune records and include truncation/omission flags rather than produce invalid truncated JSON or allocate an unbounded message.
+- On an already observed exception only, permit bounded traceback locations using fixed allowlisted repository module/function identifiers and numeric source line numbers, never traceback text, source lines, locals, absolute paths or exception messages. Bound traversal and retained locations. Permit at most three explicit cause links, known exception class identifiers and numeric SQLite error codes, correlated with the observed host UUID and callback sequence. Preserve the16-error and16KiB caps, original exception identity and unchanged passing path; do not add hooks or journal reads.
 - Do not change the native measured cancellation phase in `owned_role_with_delayed_cancel_read`; observe its initial preparation only. Observe publication preparation only before the blocked-Git portion. The watcher test may carry the observer through its existing precondition wait, with the same180-second limit.
 - In `accepted_publication()`, observe only its admission host and existing25-iteration preparation loop. Preserve the forbidden-state assertion, status/history reads, three-verdict return condition, returned run and normal close. Return inside the context so restoration finishes before either caller performs publication actions or sets `lost_post=True`.
 

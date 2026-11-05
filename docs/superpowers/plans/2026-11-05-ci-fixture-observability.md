@@ -45,3 +45,7 @@
 ## Evidence-driven amendment: fourth preparation helper
 
 Actual PR80 CI41935061044 failed in `accepted_publication()` before intentional lost-response injection; the failing helper was outside the original observer scopes. Independent read-only design review approved a preparation-only extension. Preserve its admission assertions, 25 iterations, forbidden states, three-verdict return and normal close. Exit the context before caller publication actions. Run the newly affected native caller once with bounded EOF/cleanup/source identity evidence, then obtain fresh whole-diff approval and new-head CI; do not retry the failed head or claim the cause fixed.
+
+## Evidence-driven amendment: exception origin
+
+PR80 CI41937740286 captured a real cancellation-callback `ValueError`, successful containment and true shutdown proofs, but not its raise site. Independent source analysis approved enriching existing error records only: bounded static repository module/function IDs and line numbers, up to three explicit cause types/numeric SQLite codes, host UUID/callback sequence. No traceback formatting, source/locals/paths/messages, new hooks or passing-path work. Meaningful TDD injects representative chains, checks privacy/caps and unchanged exception re-raising. This is diagnostic fidelity, not a reproduced CI cause or a production fix.

@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 import tempfile
 import threading
+import sqlite3
+import types
 import unittest
 from unittest.mock import patch
 
@@ -254,3 +256,164 @@ class HostObservationTests(unittest.TestCase):
         self.assertIsNone(saved['result'])
         self.assertEqual(originals, (pipeline._Host.__init__, pipeline._Host.run, pipeline._Host.cancelled,
                                     pipeline._Host.close, pipeline.PipelineJournal.status, pipeline._shutdown))
+
+    def test_error_locations_use_real_raise_site_and_callback_identity(self):
+        seen, errors = [], []
+
+        def status(journal):
+            if not seen:
+                seen.append(True)
+                return dict(runs=[])
+            try:
+                with journal.operation_deadline(0):
+                    journal._wait_seconds()
+            except ValueError as error:
+                errors.append(error)
+                raise
+
+        def runner(*args, cancel_requested, **kwargs):
+            self.assertFalse(cancel_requested())
+            try:
+                cancel_requested()
+            except ValueError as error:
+                self.assertIs(error, errors[0])
+            return dict(status='failed', cleanup_confirmed=True)
+
+        with self.host_environment(runner, status), self.observation() as observation:
+            host = self.host()
+            self.assertTrue(host.done.wait(2))
+            host.close()
+        report = json.loads(observation.message())
+        record = report['errors'][0]
+        self.assertIn('host_owner_id', record)
+        self.assertEqual(record['host_owner_id'], host.owner)
+        self.assertEqual(record['callback_sequence'], 2)
+        self.assertEqual(record['locations'][-1]['module'], 'task_tower.pipeline_journal')
+        self.assertEqual(record['locations'][-1]['function'], 'PipelineJournal._wait_seconds')
+        self.assertGreater(record['locations'][-1]['line'], 0)
+        self.assertEqual(report['hosts'][0]['callback_count'], 2)
+
+    def test_explicit_causes_are_bounded_and_implicit_context_is_private(self):
+        private = 'GhP_NEVER_EXPORT_\u2603'
+        sqlite_error = sqlite3.OperationalError(private)
+        sqlite_error.sqlite_errorcode = 5
+        root = ValueError(private)
+        root.__cause__ = sqlite_error
+        sqlite_error.__cause__ = RuntimeError(private)
+        sqlite_error.__cause__.__cause__ = OSError(private)
+        sqlite_error.__cause__.__cause__.__cause__ = TypeError(private)
+        root.__context__ = PermissionError(private)
+
+        def status(journal):
+            raise root
+
+        def runner(*args, cancel_requested, **kwargs):
+            try:
+                cancel_requested()
+            except ValueError as caught:
+                self.assertIs(caught, root)
+            return dict(status='failed', cleanup_confirmed=True)
+
+        with self.host_environment(runner, status), self.observation() as observation:
+            host = self.host()
+            self.assertTrue(host.done.wait(2))
+            host.close()
+        message = observation.message()
+        record = json.loads(message)['errors'][0]
+        self.assertIn('causes', record)
+        self.assertEqual([cause['type'] for cause in record['causes']],
+                         ['sqlite3.OperationalError', 'RuntimeError', 'OSError'])
+        self.assertEqual(record['causes'][0]['sqlite_errorcode'], 5)
+        self.assertTrue(record['causes_truncated'])
+        self.assertNotIn('PermissionError', message)
+        self.assertNotIn('NEVER_EXPORT', message)
+        self.assertNotIn(str(self.root), message)
+        self.assertNotIn('HostObservationTests', message)
+        self.assertNotIn('"status"', json.dumps(record['locations']))
+        message.encode('ascii')
+
+    def test_cyclic_error_chain_unknown_types_and_invalid_sqlite_code_are_safe(self):
+        class PrivateError(Exception):
+            def __str__(self):
+                raise AssertionError('must not format exception')
+
+        root = ValueError('private')
+        cause = PrivateError('private')
+        root.__cause__ = cause
+        cause.__cause__ = root
+        cause.sqlite_errorcode = 'GhP_NEVER_EXPORT'
+        with self.observation() as observation:
+            observation._error('cancelled', root)
+        record = json.loads(observation.message())['errors'][0]
+        self.assertIn('causes', record)
+        self.assertEqual([child['type'] for child in record['causes']], ['Exception'])
+        self.assertTrue(record['causes_truncated'])
+        self.assertNotIn('sqlite_errorcode', record['causes'][0])
+
+    def test_error_discriminator_bookkeeping_failure_preserves_exception_identity(self):
+        root = ValueError('private')
+        caught_errors = []
+
+        def runner(*args, cancel_requested, **kwargs):
+            try:
+                cancel_requested()
+            except ValueError as error:
+                caught_errors.append(error)
+            return dict(status='failed', cleanup_confirmed=True)
+
+        def status(journal):
+            raise root
+
+        with self.host_environment(runner, status), self.observation() as observation:
+            with patch.object(observation, '_error', side_effect=TypeError('private bookkeeping failure')):
+                host = self.host()
+                self.assertTrue(host.done.wait(2))
+                host.close()
+        self.assertEqual(caught_errors, [root])
+        self.assertGreater(json.loads(observation.message())['observation_errors'], 0)
+
+    def test_traceback_traversal_and_retained_locations_and_json_remain_bounded(self):
+        journal = pipeline.PipelineJournal(self.root / 'synthetic.db')
+        with journal.operation_deadline(0):
+            try:
+                journal._wait_seconds()
+            except ValueError as caught:
+                frame = caught.__traceback__.tb_next
+        # Repeat a real production frame without recursion/native processes/DB I/O.
+        traceback = None
+        for _ in range(40):
+            traceback = types.TracebackType(traceback, frame.tb_frame, frame.tb_lasti, frame.tb_lineno)
+        error = ValueError('GhP_NEVER_EXPORT')
+        error.__traceback__ = traceback
+        cause = error
+        for _ in range(3):
+            child = ValueError('GhP_NEVER_EXPORT')
+            child.__traceback__ = traceback
+            cause.__cause__ = child
+            cause = child
+        with self.observation() as observation:
+            observation._error('cancelled', error)
+            first = json.loads(observation.message())['errors'][0]
+            self.assertEqual(len(first['locations']), 8)
+            self.assertEqual(first['omitted_locations'], 24)
+            self.assertTrue(first['traceback_truncated'])
+            for _ in range(24):
+                observation._error('cancelled', error)
+        message = observation.message()
+        report = json.loads(message)
+        self.assertLessEqual(len(message.encode('ascii')), 16384)
+        self.assertTrue(report['truncated'])
+        self.assertGreater(report['omitted_errors'], 9)
+        self.assertNotIn('NEVER_EXPORT', message)
+
+    def test_sqlite_error_code_excludes_bool_string_and_oversize_values(self):
+        with self.observation() as observation:
+            for code in (True, 'GhP_NEVER_EXPORT', 2**100):
+                error = sqlite3.OperationalError('private')
+                error.sqlite_errorcode = code
+                observation._error('cancelled', error)
+        records = json.loads(observation.message())['errors']
+        self.assertEqual(len(records), 3)
+        for record in records:
+            self.assertEqual(record['type'], 'sqlite3.OperationalError')
+            self.assertNotIn('sqlite_errorcode', record)

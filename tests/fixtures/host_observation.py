@@ -9,6 +9,7 @@ import json
 import math
 from pathlib import Path
 import re
+import sqlite3
 import threading
 import time
 import uuid
@@ -33,6 +34,58 @@ _ERROR_TYPES = {getattr(builtins, name): name for name in (
     'ValueError', 'OSError', 'KeyError', 'TypeError', 'AttributeError',
     'RuntimeError', 'TimeoutError', 'PermissionError', 'FileNotFoundError',
     'AssertionError', 'KeyboardInterrupt', 'SystemExit')}
+_SQLITE_TYPES = {getattr(sqlite3, name): 'sqlite3.' + name for name in (
+    'Error', 'InterfaceError', 'DatabaseError', 'DataError', 'OperationalError',
+    'IntegrityError', 'InternalError', 'ProgrammingError', 'NotSupportedError')}
+_ERROR_TYPES.update(_SQLITE_TYPES)
+# Static identifiers for the ordinary cancelled -> validated status call path.
+# Never copy filenames, source, locals, traceback text or arbitrary identifiers.
+_ERROR_FUNCTIONS = {
+    'task_tower.pipeline': {'_Host.cancelled'},
+    'task_tower.pipeline_journal': {
+        'PipelineJournal.status', 'PipelineJournal._db', 'PipelineJournal._safe',
+        'PipelineJournal._wait_seconds', 'PipelineJournal.operation_deadline',
+        'PipelineJournal._assert_existing', 'PipelineJournal._validate_db',
+        'PipelineJournal._run', 'PipelineJournal._host_directory',
+        'PipelineJournal._components', 'PipelineJournal._limits',
+        'PipelineJournal._admission', 'PipelineJournal._artifacts',
+        'PipelineJournal._intent', 'PipelineJournal._effect_observation',
+        'PipelineJournal._receipt_body', 'PipelineJournal._health',
+        '_json', '_dump', '_sha', '_integer', '_neutral', '_neutral.<locals>.walk',
+    },
+    'task_tower.executor_queue': {'_private_stat', '_uuid', 'validate_request'},
+    'task_tower.project_connections': {'safe_config_path'},
+    'task_tower.pipeline_inputs': {
+        'canonical_json', 'digest_manifest', 'validate_stage_manifest', '_relative',
+    },
+}
+
+
+def _error_locations(error):
+    record = dict(type=_ERROR_TYPES.get(type(error), 'Exception'), locations=[],
+                  omitted_locations=0, traceback_truncated=False)
+    if type(error) in _SQLITE_TYPES:
+        code = getattr(error, 'sqlite_errorcode', None)
+        if type(code) is int and 0 <= code <= 2**31 - 1:
+            record['sqlite_errorcode'] = code
+    node = BaseException.__traceback__.__get__(error)
+    for _ in range(32):
+        if node is None:
+            break
+        module = node.tb_frame.f_globals.get('__name__')
+        function = node.tb_frame.f_code.co_qualname
+        if (type(module) is str and len(module) <= 64 and module in _ERROR_FUNCTIONS
+                and len(function) <= 80 and function in _ERROR_FUNCTIONS[module]
+                and 0 < node.tb_lineno <= 2**31 - 1):
+            record['locations'].append(dict(module=module, function=function, line=node.tb_lineno))
+            if len(record['locations']) > 8:
+                record['locations'].pop(0)
+                record['omitted_locations'] += 1
+        else:
+            record['omitted_locations'] += 1
+        node = node.tb_next
+    record['traceback_truncated'] = node is not None
+    return record
 
 
 def _scalars(value):
@@ -131,8 +184,29 @@ class HostObservation:
     def _error(self, where, error):
         if not self._active:
             return
-        record = dict(where=where, type=_ERROR_TYPES.get(type(error), 'Exception'))
         with self._lock:
+            if len(self._errors) >= 16:
+                self._omitted_errors += 1
+                return
+        # Error path only. Traverse at most 32 traceback nodes per exception and
+        # three explicit causes, with identity cycle detection. No __context__.
+        record = _error_locations(error)
+        record.update(where=where, causes=[], causes_truncated=False)
+        seen = {id(error)}
+        cause = BaseException.__cause__.__get__(error)
+        for _ in range(3):
+            if cause is None or id(cause) in seen:
+                break
+            seen.add(id(cause))
+            record['causes'].append(_error_locations(cause))
+            cause = BaseException.__cause__.__get__(cause)
+        record['causes_truncated'] = cause is not None
+        host = getattr(self._local, 'host', None)
+        if host is not None:
+            record['host_owner_id'] = _scalars({'owner_id': getattr(host, 'owner', None)}).get('owner_id')
+        with self._lock:
+            if where == 'cancelled' and host in self._hosts:
+                record['callback_sequence'] = self._hosts[host]['callback_count'] + 1
             if len(self._errors) < 16:
                 self._errors.append(record)
             else:
