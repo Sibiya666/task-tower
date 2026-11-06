@@ -1,3 +1,5 @@
+> **HISTORICAL / SUPERSEDED (2026-11-06).** Current user decision: [Beads + Superpowers + ready-made Codex](../../current-direction.md). The old Windows qualification programme and B-to-C routing below are not operative instructions or prerequisites. Preserve this dated record; do not resume its plans, launches or task claims automatically. Later wording below such as "current authority", "next step" or approvals records the historical state only.
+
 # Windows Harness Qualification B Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.

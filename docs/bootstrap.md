@@ -1,15 +1,10 @@
 # Запуск после clone
 
-**Текущий вход:** [согласованная единая спецификация](superpowers/specs/2026-11-05-task-tower-unified-design.md), решение пользователя «согласую» от 2026-11-05. Сначала конкретный независимо принятый план B и квалификация установленного Windows 10 исполнителя, затем C до результата в книге. Состав агентов определяется задачей, независимость проверок сохраняется. Admission `.1` accepted; `.2` blocked у исходного владельца `task-tower-beads-stages`, PR85 Draft/HOLD. Одобрение требований само по себе не означает публикацию/приёмку main или квалификацию runtime. Bootstrap ниже описывает интерактивный/исторический интерфейс, а не готовый unattended executor.
-
-**Historical compatibility recipe — not the current execution path:** shared-worker pipeline handoff was configured separately using an existing private
-pipeline installation; bootstrap does not install it or start a service. See the
-[Windows operator profile](shared-conveyor.md#windows-pipeline-handoff). It does
-not import legacy execution results as accepted stage receipts.
+**Текущий вход:** [Beads + Superpowers + готовый Codex](current-direction.md), решение пользователя от 2026-11-06. Использовать существующие инструменты и разрешения. Старые Windows-планы не являются предварительными условиями запуска или разработки. Ниже описан существующий bootstrap-интерфейс; он не устанавливает постоянную службу и не возобновляет исторический worker/pipeline.
 
 Установите Python 3.11+ и выбранный harness обычным способом. Bootstrap не устанавливает программы, не покупает доступ и не читает ключи или файлы авторизации.
 
-Историческая GitHub-интеграция описана в [настройке GitHub CLI, авторизации и Project](github-setup.md): для того режима Project создаётся/подключается до импорта Issues. Эти инструкции не являются текущей очередью Beads и не разрешают новое подключение/изменение авторизации. Локальный интерактивный режим ниже не означает полной готовности GitHub или qualification B.
+Историческая GitHub-интеграция описана в [настройке GitHub CLI, авторизации и Project](github-setup.md): для того режима Project создаётся/подключается до импорта Issues. Эти инструкции не являются текущей очередью Beads и не разрешают новое подключение/изменение авторизации. Локальный интерактивный режим ниже не доказывает автоматическую интеграцию с GitHub; реальные приёмки сохраняются.
 
 Из папки клона:
 
