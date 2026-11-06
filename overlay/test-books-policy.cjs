@@ -42,6 +42,6 @@ test('typed Beads source result survives without changing acceptance and rejects
   const rows=p.buildRows([parent,normalized],{book:'tasks'});a.equal(rows.find(x=>x.id===parent.id).progress.accepted,0);
  }
  a.deepEqual(p.normalizeEnvelope(env([bead]),now).entries[0].result_evidence,{status:'missing'});
- for(const value of [null,[],{status:'missing',token:'PRIVATE'}, {...record,token:'PRIVATE'}, {...record,version:true}, {...record,pr:true}, {...record,pr:0}, {...record,pr:1.5}, {...record,pr:Number.MAX_SAFE_INTEGER+1}, {...record,main_sha:'A'.repeat(40)}, {status:'accepted'}])a.throws(()=>p.normalizeEnvelope(env([{...bead,result_evidence:value}]),now));
+ for(const value of [null,[],{status:'missing',token:'PRIVATE'}, {...record,token:'PRIVATE'}, {...record,version:true}, {...record,pr:true}, {...record,pr:0}, {...record,pr:1.5}, {...record,pr:Number.MAX_SAFE_INTEGER+1}, {...record,main_sha:'A'.repeat(40)}, {...record,main_sha:'a'.repeat(40)+'\n'}, {status:'accepted'}])a.throws(()=>p.normalizeEnvelope(env([{...bead,result_evidence:value}]),now));
  a.throws(()=>p.normalizeEnvelope(env([issue(1,{result_evidence:record})]),now));
 });
