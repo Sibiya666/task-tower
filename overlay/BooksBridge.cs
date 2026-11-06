@@ -160,6 +160,16 @@ public sealed class BooksBridge : IDisposable
     {
         if(value is int)return (int)value;if(value is long)return (long)value;throw new FormatException();
     }
+    static void ValidateResult(object value)
+    {
+        var result=value as Dictionary<string,object>;if(result==null)throw new FormatException();
+        object statusValue;if(!result.TryGetValue("status",out statusValue))throw new FormatException();
+        string status=statusValue as string;
+        if(new[]{"missing","unavailable"}.Contains(status) && result.Count==1)return;
+        if(status!="recorded" || result.Count!=4 || new[]{"status","version","pr","main_sha"}.Any(k=>!result.ContainsKey(k)))throw new FormatException();
+        long number=Integer(result["pr"]);
+        if(Integer(result["version"])!=1 || number<1 || number>9007199254740991L || !(result["main_sha"] is string) || !Regex.IsMatch((string)result["main_sha"],@"\A[a-f0-9]{40}\z"))throw new FormatException();
+    }
     static Dictionary<string,object> Parse(string raw)
     {
         // JavaScriptSerializer otherwise silently overwrites duplicate keys.
@@ -192,7 +202,7 @@ public sealed class BooksBridge : IDisposable
         if(value["fetched_at"]!=null && !(value["fetched_at"] is string))throw new FormatException();
         var entries=value["entries"] as object[];var errors=value["errors"] as object[];
         if(entries==null || entries.Length>10000 || errors==null)throw new FormatException();
-        var fields=new HashSet<string>("id repository number project book title source status remote_state verification description phase blockers blocked_by results history relationships stages remote_attempt created_at updated_at capture path commit artifact_state declaration_source issues milestone available migrations source_kind bead_id assignee".Split(' '));
+        var fields=new HashSet<string>("id repository number project book title source status remote_state verification description phase blockers blocked_by results history relationships stages remote_attempt created_at updated_at capture path commit artifact_state declaration_source issues milestone available migrations source_kind bead_id assignee result_evidence".Split(' '));
         foreach(var item in entries){
             var entry=item as Dictionary<string,object>;
             if(entry==null || entry.Keys.Any(k=>!fields.Contains(k)))throw new FormatException();
@@ -201,6 +211,10 @@ public sealed class BooksBridge : IDisposable
             object kind;
             bool local=entry.TryGetValue("source_kind",out kind) && (kind as string)=="beads";
             if(entry.ContainsKey("source_kind") && !local)throw new FormatException();
+            object resultEvidence;if(entry.TryGetValue("result_evidence",out resultEvidence)){
+                if(!local || (string)entry["book"]!="tasks")throw new FormatException();
+                ValidateResult(resultEvidence);
+            }
             if(local && (!localScopes.Contains(repo+"\n"+(string)entry["project"]) || !entry.ContainsKey("source") || entry["source"]!=null))throw new FormatException();
             bool inert=(string)entry["book"]=="library" && entry.ContainsKey("available") && entry["available"] is bool && !(bool)entry["available"] && entry.ContainsKey("source") && entry["source"]==null;
             if(!repositories.Contains(repo) || (!inert && !local && (!entry.ContainsKey("source") || !(entry["source"] is string) || !IsAllowedSource((string)entry["source"]))))throw new FormatException();
