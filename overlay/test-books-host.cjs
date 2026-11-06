@@ -20,7 +20,8 @@ test('host integrates the trusted books bridge without changing composition or c
 test('compiled native boundary: allowlist, quoting, progressive read, timeout, invalid streams and cleanup', {timeout:90000}, ()=>{
   const bridge=path.join(__dirname,'BooksBridge.cs');
   assert.ok(fs.existsSync(bridge),'BooksBridge production boundary is missing');
-  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'books native Ю '));
+  const tempRoot=fs.realpathSync(os.tmpdir());
+  const dir=fs.mkdtempSync(path.join(tempRoot,'books native Ю '));
   const python=path.join(os.homedir(),'.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe');
   const helper=path.join(dir,'helper.py');
   fs.writeFileSync(helper,String.raw`import json,sys,time,os
@@ -198,10 +199,16 @@ public static class NativeBooksTest {
   const ps=path.join(dir,'run.ps1');
   const q=s=>`'${s.replaceAll("'","''")}'`;
   fs.writeFileSync(ps,`\uFEFF$ErrorActionPreference='Stop'\nAdd-Type -Path @(${q(bridge)},${q(harnessPath)}) -ReferencedAssemblies System.dll,System.Core.dll,System.Web.Extensions.dll\n[NativeBooksTest]::Run(${q(python)},${q(helper)},${q(dir)},${q(path.dirname(__dirname))})\n`,'utf8');
+  let completed=false;
   try{
     const env={...process.env};for(const key of Object.keys(env))if(['TASK_TOWER_BEADS','TASK_TOWER_CONNECTIONS','GH_TOKEN','GITHUB_TOKEN'].includes(key.toUpperCase()))delete env[key];
-    const result=spawnSync('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-File',ps],{env,encoding:'utf8',timeout:85000,maxBuffer:2000000});
+    env.TEMP=dir;env.TMP=dir;env.TMPDIR=dir;env.PYTHONDONTWRITEBYTECODE='1';
+    const result=spawnSync('C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-File',ps],{env,encoding:'utf8',timeout:85000,maxBuffer:2000000});
     assert.equal(result.status,0,`${result.stdout}\n${result.stderr}\n${result.error||''}`);
     assert.match(result.stdout,/native books harness passed/);
-  }finally{fs.rmSync(dir,{recursive:true,force:true});}
+    completed=true;
+  }finally{
+    if(completed){assert.equal(path.dirname(fs.realpathSync(dir)),tempRoot);fs.rmSync(dir,{recursive:true,force:true});}
+    else console.error('Native harness evidence retained at '+dir);
+  }
 });
