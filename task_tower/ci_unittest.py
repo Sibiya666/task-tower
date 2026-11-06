@@ -30,6 +30,42 @@ def _ids(values):
     return values
 
 
+def _costs(values):
+    if (not isinstance(values, dict)
+            or any(not isinstance(key, str) or not key
+                   or type(cost) is not int or not 1 <= cost <= 86400
+                   for key, cost in values.items())):
+        raise ValueError('Invalid unittest cost hints')
+    return values
+
+
+def load_costs():
+    def unique_keys(pairs):
+        values = {}
+        for key, value in pairs:
+            if key in values:
+                raise ValueError('Duplicate unittest cost identity')
+            values[key] = value
+        return values
+
+    path = Path(__file__).with_name('ci_unittest_costs.json')
+    return _costs(json.loads(path.read_text(encoding='utf-8'), object_pairs_hook=unique_keys))
+
+
+def schedule(ids, count, costs):
+    _coordinates(0, count)
+    if not isinstance(ids, list) or any(not isinstance(value, str) for value in ids):
+        raise ValueError('Malformed discovery identities')
+    _ids(sorted(ids))
+    _costs(costs)
+    groups, loads = [[] for _ in range(count)], [0] * count
+    for identity in sorted(ids, key=lambda value: (-costs.get(value, 1), value)):
+        index = min(range(count), key=lambda value: (loads[value], value))
+        groups[index].append(identity)
+        loads[index] += costs.get(identity, 1)
+    return [sorted(group) for group in groups]
+
+
 def discover(start_directory):
     loader = unittest.TestLoader()
     suite = loader.discover(str(start_directory))
@@ -61,8 +97,9 @@ def partition(suite, index, count):
     if any(not isinstance(case.id(), str) or not case.id() for case in leaves):
         raise ValueError('Malformed discovery identity')
     leaves.sort(key=lambda case: case.id())
-    _ids([case.id() for case in leaves])
-    return leaves, leaves[index::count]
+    ids = _ids([case.id() for case in leaves])
+    selected = set(schedule(ids, count, load_costs())[index])
+    return leaves, [case for case in leaves if case.id() in selected]
 
 
 def verify(manifests, source_sha, count):
@@ -72,12 +109,14 @@ def verify(manifests, source_sha, count):
     if not isinstance(manifests, list) or len(manifests) != count:
         raise ValueError('Missing or extra shard manifests')
     inventory, indices, selected = None, set(), []
+    costs, prescribed = load_costs(), None
     for row in manifests:
         if not isinstance(row, dict):
             raise ValueError('Malformed shard manifest')
         index = row.get('index')
         _coordinates(index, count)
-        if (type(row.get('version')) is not int or row['version'] != 1 or type(row.get('count')) is not int
+        if (type(row.get('version')) is not int or row['version'] != 2
+                or row.get('schedule') != 'duration-balanced-v1' or type(row.get('count')) is not int
                 or row['count'] != count or row.get('source_sha') != source_sha
                 or row.get('mode') != 'execution' or row.get('successful') is not True
                 or index in indices):
@@ -85,7 +124,8 @@ def verify(manifests, source_sha, count):
         ids = _ids(row.get('all_ids'))
         if inventory is None:
             inventory = ids
-        if ids != inventory or row.get('selected_ids') != ids[index::count]:
+            prescribed = schedule(ids, count, costs)
+        if ids != inventory or row.get('selected_ids') != prescribed[index]:
             raise ValueError('Shard discovery or selection drift')
         indices.add(index)
         selected.extend(row['selected_ids'])
@@ -147,7 +187,8 @@ def main(argv=None):
         suite = discover(args.start_directory)
         all_cases, selected = partition(suite, args.index, args.count)
         ids = [case.id() for case in all_cases]
-        manifest = dict(version=1, source_sha=sha, count=args.count, index=args.index,
+        manifest = dict(version=2, schedule='duration-balanced-v1', source_sha=sha,
+                        count=args.count, index=args.index,
                         all_ids=ids, selected_ids=[case.id() for case in selected],
                         inventory_sha256=hashlib.sha256(json.dumps(ids).encode('utf-8')).hexdigest(),
                         mode='inventory' if args.list else 'execution', successful=None)
