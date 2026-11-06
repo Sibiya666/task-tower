@@ -198,7 +198,7 @@ public static class NativeBooksTest {
   const harnessPath=path.join(dir,'Harness.cs');fs.writeFileSync(harnessPath,harness);
   const ps=path.join(dir,'run.ps1');
   const q=s=>`'${s.replaceAll("'","''")}'`;
-  fs.writeFileSync(ps,`\uFEFF$ErrorActionPreference='Stop'\nAdd-Type -Path @(${q(bridge)},${q(harnessPath)}) -ReferencedAssemblies System.dll,System.Core.dll,System.Web.Extensions.dll\n[NativeBooksTest]::Run(${q(python)},${q(helper)},${q(dir)},${q(path.dirname(__dirname))})\n`,'utf8');
+  fs.writeFileSync(ps,`\uFEFF$ErrorActionPreference='Stop'\n$OutputEncoding=[System.Text.UTF8Encoding]::new($false);[Console]::OutputEncoding=$OutputEncoding\nAdd-Type -Path @(${q(bridge)},${q(harnessPath)}) -ReferencedAssemblies System.dll,System.Core.dll,System.Web.Extensions.dll\n[NativeBooksTest]::Run(${q(python)},${q(helper)},${q(dir)},${q(path.dirname(__dirname))})\n`,'utf8');
   let completed=false;
   try{
     const env={...process.env};for(const key of Object.keys(env))if(['TASK_TOWER_BEADS','TASK_TOWER_CONNECTIONS','GH_TOKEN','GITHUB_TOKEN'].includes(key.toUpperCase()))delete env[key];
