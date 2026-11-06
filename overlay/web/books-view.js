@@ -34,10 +34,20 @@ if(!paged.total)el('p','Нет записей для выбранных филь
 for(const error of snapshot?.errors||[])el('p',`${error.project}: ${error.error}`,modal);restore();if(focusKey)modal.querySelector(`[data-filter="${focusKey}"]`)?.focus();}
 function detailValue(value){if(value===undefined||value===null||value===''||(Array.isArray(value)&&!value.length))return 'Не записано';if(value?.status==='unavailable')return 'Недоступно';return typeof value==='object'?JSON.stringify(value,null,2):String(value)}
 function detailField(key,value,parent,label=key){el('h3',label,parent);const field=el('pre',detailValue(value),parent);field.dataset.field=key;}
+function resultDetail(e,parent){
+ const wrap=el('section',undefined,parent);wrap.dataset.field='result_evidence';
+ el('h3','Свидетельства результата',wrap);el('p','Сведения Beads; запись не подтверждает приёмку.',wrap);
+ const result=e.result_evidence;
+ if(result?.status!=='recorded'){el('p',result?.status==='unavailable'?'Недоступно':'Не записано',wrap);return}
+ el('pre',`PR #${result.pr}\nmain ${result.main_sha}`,wrap);
+ const root='https://github.com/'+e.repository+'/';
+ source(root+'pull/'+result.pr,e,wrap);
+ source(root+'blob/'+result.main_sha+'/docs/beads-results/'+e.bead_id+'.md',e,wrap);
+}
 function renderDetail(){button('Назад к записям',modal,backDetail).dataset.detailBack='true';const d=el('article',undefined,modal);d.id='books-detail';const e=snapshot?.entries.find(x=>x.id===selection);if(!e){el('h2',selection,d);el('p','Недоступно: выбранная запись отсутствует в текущем снимке',d);return}el('h2',e.title||e.path||e.id,d);el('p',e.id,d);
 const localLabels={description:'Описание',assignee:'Исполнитель',status:'Статус Beads',blocked_by:'Зависит от',parent:'Родительская задача',sub_issues:'Подзадачи',milestone:'Этап'};
-const required=e.source_kind==='beads'?['description','assignee','status','blocked_by','history']:e.book==='library'?['repository','path','commit','artifact_state','available','declaration_source','issues','milestone']:['description','status','verification','remote_state','phase','blockers','blocked_by','results','history','migrations','capture','stages','remote_attempt','repository'];
-for(const key of required){if(key==='history'&&e.source_kind==='beads'){const wrap=el('section',undefined,d);wrap.dataset.field='history';el('h3','Хронология Beads',wrap);const list=el('ol',undefined,wrap);for(const event of e.history||[])el('li',`${event.at||''} · ${event.actor||''} · ${event.operation||''}${event.status?' → '+event.status:''}`,list);if(!e.history?.length)el('p','Событий в текущем снимке нет',wrap);}else detailField(key,e[key],d,e.source_kind==='beads'?(localLabels[key]||key):key);}
+const required=e.source_kind==='beads'?['description','assignee','status','blocked_by','history','result_evidence']:e.book==='library'?['repository','path','commit','artifact_state','available','declaration_source','issues','milestone']:['description','status','verification','remote_state','phase','blockers','blocked_by','results','history','migrations','capture','stages','remote_attempt','repository'];
+for(const key of required){if(key==='result_evidence'&&e.source_kind==='beads'){resultDetail(e,d);}else if(key==='history'&&e.source_kind==='beads'){const wrap=el('section',undefined,d);wrap.dataset.field='history';el('h3','Хронология Beads',wrap);const list=el('ol',undefined,wrap);for(const event of e.history||[])el('li',`${event.at||''} · ${event.actor||''} · ${event.operation||''}${event.status?' → '+event.status:''}`,list);if(!e.history?.length)el('p','Событий в текущем снимке нет',wrap);}else detailField(key,e[key],d,e.source_kind==='beads'?(localLabels[key]||key):key);}
 if(e.book!=='library'){el('h3','relationships',d);for(const key of ['parent','sub_issues','milestone'])detailField(key,e.relationships?.[key],d,e.source_kind==='beads'?(localLabels[key]||key):key)}
 source(e.source,e,d);if(e.book==='library'){el('h3','Версии и декларации',d);for(const v of snapshot.entries.filter(x=>x.book==='library'&&x.repository===e.repository&&x.path===e.path)){button(`${v.commit} · Заявлено: ${v.artifact_state}`,d,()=>{selection=v.id;render()});el('p',v.declaration_source||'Декларация отсутствует',d)}}}
 function backDetail(){selection=null;render();modal.scrollTop=0;[...modal.querySelectorAll('.books-card')].find(x=>x.dataset.id===detailInvoker)?.querySelector('button:last-child')?.focus()}

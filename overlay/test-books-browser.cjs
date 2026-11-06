@@ -79,3 +79,24 @@ test('local Beads source shows actor chronology without fake GitHub or file link
  assert.match(await p.locator('[data-field="assignee"]').textContent(),/worker-a/);
  }finally{await b.close()}
 });
+
+test('Beads result detail shows source disclaimer and only two derived safe references',async()=>{
+ const b=await chromium.launch({headless:true,channel:'msedge'});
+ try{const p=await b.newPage();await p.addInitScript(()=>{window.actions=[];window.chrome={webview:{postMessage:v=>actions.push(v),addEventListener:()=>{}}}});
+ await p.goto('file:///'+path.join(__dirname,'web/index.html').replaceAll('\\','/'));await p.keyboard.press('Control+b');
+ const card={id:'o/r:beads:local:tt-x6t',repository:'o/r',project:'local',book:'tasks',source_kind:'beads',bead_id:'tt-x6t',source:null,title:'Result',status:'closed',remote_state:'closed',verification:'not_required',assignee:'worker',history:[{actor:'worker',operation:'close'}],relationships:{parent:null,sub_issues:[],milestone:null}};
+ for(const [evidence,label] of [[undefined,'Не записано'],[{status:'unavailable'},'Недоступно'],[{status:'recorded',version:1,pr:103,main_sha:'a'.repeat(40)},'a'.repeat(40)]]){
+  await p.evaluate(v=>BooksView.acceptSnapshot(v),frame([{...card,...(evidence?{result_evidence:evidence}:{})}],{final:true,state:'ready'}));
+  await p.getByRole('button',{name:'Подробнее',exact:true}).click();
+  const result=p.locator('[data-field="result_evidence"]');assert.match(await result.textContent(),/Сведения Beads/);assert.ok((await result.textContent()).includes(label));
+  assert.match(await result.textContent(),/не подтверждает приёмку/);
+  const links=result.getByRole('button',{name:'Открыть источник',exact:true});
+  assert.equal(await links.count(),evidence?.status==='recorded'?2:0);
+  if(evidence?.status==='recorded'){
+   await links.nth(0).click();await links.nth(1).click();
+   assert.deepEqual(await p.evaluate(()=>actions.filter(x=>x.action==='books-open-source')), [{action:'books-open-source',url:'https://github.com/o/r/pull/103'},{action:'books-open-source',url:'https://github.com/o/r/blob/'+'a'.repeat(40)+'/docs/beads-results/tt-x6t.md'}]);
+  }
+  assert.equal(await result.locator('a,img,script').count(),0);await p.keyboard.press('Escape');
+ }
+ }finally{await b.close()}
+});

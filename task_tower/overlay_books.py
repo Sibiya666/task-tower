@@ -13,7 +13,7 @@ FRAME_LIMIT = 8 * 1024 * 1024
 STREAM_LIMIT = 64 * 1024 * 1024
 FRAME_COUNT = 32
 ENTRY_LIMIT = 10000
-ENTRY_FIELDS = frozenset('id repository number project book title source status remote_state verification description phase blockers blocked_by results history relationships stages remote_attempt created_at updated_at capture path commit artifact_state declaration_source issues milestone available migrations source_kind bead_id assignee'.split())
+ENTRY_FIELDS = frozenset('id repository number project book title source status remote_state verification description phase blockers blocked_by results history relationships stages remote_attempt created_at updated_at capture path commit artifact_state declaration_source issues milestone available migrations source_kind bead_id assignee result_evidence'.split())
 
 
 def _migrations(value):
@@ -45,6 +45,10 @@ def _public(report):
     if not isinstance(rows, list) or len(rows) > ENTRY_LIMIT: raise ValueError()
     rows = [{key: deepcopy(value) for key, value in row.items() if key in ENTRY_FIELDS} for row in rows]
     for row in rows:
+        if 'result_evidence' in row:
+            from .beads_books import validate_result
+            if row.get('source_kind') != 'beads' or row.get('book') != 'tasks': raise ValueError('Invalid result source')
+            row['result_evidence'] = validate_result(row['result_evidence'])
         if 'migrations' in row: row['migrations'] = _migrations(row['migrations'])
     errors = [{key: row[key] for key in ('project', 'source', 'error')} for row in report['errors']]
     if any(not isinstance(value, str) for row in errors for value in row.values()): raise ValueError()

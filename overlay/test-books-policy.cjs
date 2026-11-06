@@ -31,3 +31,17 @@ test('local Beads cards retain hierarchy and chronology without navigable privat
  a.throws(()=>p.normalizeEnvelope(env([{...card,id:'o/r#1'}]),now));
  a.throws(()=>p.normalizeEnvelope(env([{...card,source:'file:///PRIVATE'}]),now));
 });
+
+test('typed Beads source result survives without changing acceptance and rejects any extra payload',()=>{
+ const bead={id:'o/r:beads:local:tt-x6t',repository:'o/r',project:'local',book:'tasks',source_kind:'beads',bead_id:'tt-x6t',source:null,title:'Result',status:'closed',remote_state:'closed',verification:'not_required',relationships:{parent:null,sub_issues:[],milestone:null}};
+ const record={status:'recorded',version:1,pr:103,main_sha:'a'.repeat(40)};
+ for(const evidence of [{status:'missing'},{status:'unavailable'},record]){
+  const normalized=p.normalizeEnvelope(env([{...bead,result_evidence:evidence}]),now).entries[0];
+  a.deepEqual(normalized.result_evidence,evidence);a.equal(normalized.status,'closed');a.equal(normalized.verification,'not_required');
+  const parent={...bead,id:'o/r:beads:local:tt-parent',bead_id:'tt-parent',relationships:{parent:null,sub_issues:[{id:bead.id}],milestone:null}};
+  const rows=p.buildRows([parent,normalized],{book:'tasks'});a.equal(rows.find(x=>x.id===parent.id).progress.accepted,0);
+ }
+ a.deepEqual(p.normalizeEnvelope(env([bead]),now).entries[0].result_evidence,{status:'missing'});
+ for(const value of [null,[],{status:'missing',token:'PRIVATE'}, {...record,token:'PRIVATE'}, {...record,version:true}, {...record,pr:true}, {...record,pr:0}, {...record,pr:1.5}, {...record,pr:Number.MAX_SAFE_INTEGER+1}, {...record,main_sha:'A'.repeat(40)}, {status:'accepted'}])a.throws(()=>p.normalizeEnvelope(env([{...bead,result_evidence:value}]),now));
+ a.throws(()=>p.normalizeEnvelope(env([issue(1,{result_evidence:record})]),now));
+});

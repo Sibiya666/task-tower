@@ -63,6 +63,11 @@ elif mode=='totalcap':
   value=frame(i+1,i==9);value['entries'][0]['description']='x'*(7*1024*1024);send(value)
 elif mode=='beads':
  value=frame(1,True,'ready');value['entries']=[dict(id='owner/repo:beads:local:tt-a',repository='owner/repo',project='local',book='tasks',title='Beads task',source_kind='beads',bead_id='tt-a',source=None,status='closed',verification='not_required',history=[dict(at='2026-11-04T18:00:00Z',actor='worker',operation='close')])];send(value)
+elif mode=='beadsresult':
+ sys.path.insert(0,os.getcwd())
+ from task_tower.beads_books import project_rows
+ notes='PRIVATE\nTASK_TOWER_PUBLIC_RESULT_V1_BEGIN\n'+json.dumps(dict(version=1,pr=103,main_sha='a'*40))+'\nTASK_TOWER_PUBLIC_RESULT_V1_END\nPRIVATE'
+ value=frame(1,True,'ready');value['entries']=project_rows('local','owner/repo',[dict(id='tt-a',title='Result',status='closed',notes=notes)],[]);send(value)
 elif mode=='ready': send(frame(1,True,'ready'))
 else:
  send(frame(1));send(frame(2,library=True))
@@ -94,6 +99,33 @@ public static class NativeBooksTest {
   await local.RefreshAsync(Start("beads",Path.Combine(dir,"beads")),s=>{},5000);
   Check(Parse(local.LatestJson)["state"].ToString()=="ready","configured local source accepted");
   Check(!local.IsAllowedSource("file:///PRIVATE"),"no private file navigation");
+  await local.RefreshAsync(Start("beadsresult",Path.Combine(dir,"beadsresult")),s=>{},5000);
+  var resultFrame=Parse(local.LatestJson);Check(resultFrame["state"].ToString()=="ready" && !(resultFrame.ContainsKey("stale") && (bool)resultFrame["stale"]),"typed result producer admitted");
+  var resultRow=(Dictionary<string,object>)((object[])resultFrame["entries"])[0];
+  var evidence=(Dictionary<string,object>)resultRow["result_evidence"];
+  Check(evidence.Count==4 && evidence["status"].ToString()=="recorded" && IntegerForTest(evidence["pr"])==103,"typed source record survives native bridge");
+  Check(resultRow["status"].ToString()=="closed" && resultRow["verification"].ToString()=="not_required" && !local.LatestJson.Contains("PRIVATE"),"record does not imply acceptance or expose notes");
+  var validateResult=typeof(BooksBridge).GetMethod("Frame",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic);
+  Action<object,bool> checkResult=(candidate,allowed)=>{
+   resultRow["result_evidence"]=candidate;bool accepted=true;try{validateResult.Invoke(local,new object[]{json.Serialize(resultFrame),(long)0});}catch{accepted=false;}
+   Check(accepted==allowed,"exact nested result validation");
+  };
+  checkResult(new Dictionary<string,object>{{"status","missing"}},true);
+  checkResult(new Dictionary<string,object>{{"status","unavailable"}},true);
+  foreach(object candidate in new object[]{null,new object[0],new Dictionary<string,object>{{"status","accepted"}},new Dictionary<string,object>{{"status","missing"},{"token","PRIVATE"}}})checkResult(candidate,false);
+  foreach(string key in new[]{"status","version","pr","main_sha"}){
+   var invalidResult=new Dictionary<string,object>(evidence);invalidResult.Remove(key);checkResult(invalidResult,false);
+  }
+  foreach(object bad in new object[]{true,0,-1,1.5,9007199254740992L,"103"}){
+   var invalidResult=new Dictionary<string,object>(evidence);invalidResult["pr"]=bad;checkResult(invalidResult,false);
+  }
+  foreach(object bad in new object[]{true,2,"1"}){var badVersion=new Dictionary<string,object>(evidence);badVersion["version"]=bad;checkResult(badVersion,false);}
+  foreach(object bad in new object[]{null,"PRIVATE",new string('A',40),new string('a',41)}){var badSha=new Dictionary<string,object>(evidence);badSha["main_sha"]=bad;checkResult(badSha,false);}
+  var extraResult=new Dictionary<string,object>(evidence);extraResult["url"]="file:///PRIVATE";checkResult(extraResult,false);
+  checkResult(evidence,true);
+  bool fractionalRejected=false;try{validateResult.Invoke(local,new object[]{json.Serialize(resultFrame).Replace("\"pr\":103","\"pr\":1.0"),(long)0});}catch{fractionalRejected=true;}Check(fractionalRejected,"JSON float pr rejected");
+  resultRow.Remove("result_evidence");validateResult.Invoke(local,new object[]{json.Serialize(resultFrame),(long)0});
+  resultRow["result_evidence"]=evidence;resultRow.Remove("source_kind");resultRow["number"]=1;resultRow["id"]="owner/repo#1";resultRow["source"]="https://github.com/owner/repo/issues/1";checkResult(evidence,false);
   await local.RefreshAsync(Start("malformed",Path.Combine(dir,"badlocal")),s=>{},5000);
   var staleLocal=(Dictionary<string,object>)((object[])Parse(local.LatestJson)["entries"])[0];
   Check(staleLocal["verification"].ToString()=="not_required","stale local state is not acceptance proof");
@@ -104,7 +136,7 @@ public static class NativeBooksTest {
  }
 
  using(var actualHelper=new BooksBridge(new string[0],new string[0])){
-  var info=BooksBridge.HelperStartInfo(python,rootDir);info.EnvironmentVariables.Remove("TASK_TOWER_CONNECTIONS");
+  var info=BooksBridge.HelperStartInfo(python,rootDir);info.EnvironmentVariables.Remove("TASK_TOWER_CONNECTIONS");info.EnvironmentVariables.Remove("TASK_TOWER_BEADS");
   Check(info.Arguments=="-m task_tower.overlay_books" && !info.UseShellExecute && info.WorkingDirectory==Path.GetFullPath(rootDir),"fixed canonical module invocation");
   await actualHelper.RefreshAsync(info,s=>{},5000);Check(Parse(actualHelper.LatestJson)["state"].ToString()=="unconfigured","actual canonical module helper");
  }
@@ -160,13 +192,15 @@ public static class NativeBooksTest {
  bool alive=false;try{using(var child=Process.GetProcessById(childId))alive=!child.HasExited;}catch(ArgumentException){}Check(!alive,"closed helper actually reaped");
  Console.WriteLine("native books harness passed");
  }
+ static long IntegerForTest(object value){return Convert.ToInt64(value);}
 }`;
   const harnessPath=path.join(dir,'Harness.cs');fs.writeFileSync(harnessPath,harness);
   const ps=path.join(dir,'run.ps1');
   const q=s=>`'${s.replaceAll("'","''")}'`;
   fs.writeFileSync(ps,`\uFEFF$ErrorActionPreference='Stop'\nAdd-Type -Path @(${q(bridge)},${q(harnessPath)}) -ReferencedAssemblies System.dll,System.Core.dll,System.Web.Extensions.dll\n[NativeBooksTest]::Run(${q(python)},${q(helper)},${q(dir)},${q(path.dirname(__dirname))})\n`,'utf8');
   try{
-    const result=spawnSync('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-File',ps],{encoding:'utf8',timeout:85000,maxBuffer:2000000});
+    const env={...process.env};for(const key of Object.keys(env))if(['TASK_TOWER_BEADS','TASK_TOWER_CONNECTIONS','GH_TOKEN','GITHUB_TOKEN'].includes(key.toUpperCase()))delete env[key];
+    const result=spawnSync('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-File',ps],{env,encoding:'utf8',timeout:85000,maxBuffer:2000000});
     assert.equal(result.status,0,`${result.stdout}\n${result.stderr}\n${result.error||''}`);
     assert.match(result.stdout,/native books harness passed/);
   }finally{fs.rmSync(dir,{recursive:true,force:true});}

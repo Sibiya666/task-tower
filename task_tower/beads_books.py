@@ -13,6 +13,40 @@ from .processes import run_command
 BEAD = r"[A-Za-z0-9][A-Za-z0-9_.-]{0,199}"
 PROJECT = r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}"
 ROW_LIMIT, EVENT_LIMIT = 1000, 5000
+RESULT_BEGIN = 'TASK_TOWER_PUBLIC_RESULT_V1_BEGIN'
+RESULT_END = 'TASK_TOWER_PUBLIC_RESULT_V1_END'
+
+
+def validate_result(value):
+    """Validate the complete public schema, never sanitize an invalid record."""
+    if not isinstance(value, dict): raise ValueError('Invalid public result')
+    status = value.get('status')
+    if status in ('missing', 'unavailable') and set(value) == {'status'}:
+        return dict(status=status)
+    if (status != 'recorded' or set(value) != {'status', 'version', 'pr', 'main_sha'}
+            or type(value['version']) is not int or value['version'] != 1
+            or type(value['pr']) is not int or not 1 <= value['pr'] <= 9007199254740991
+            or not isinstance(value['main_sha'], str) or not re.fullmatch('[a-f0-9]{40}', value['main_sha'])):
+        raise ValueError('Invalid public result')
+    return dict(status='recorded', version=1, pr=value['pr'], main_sha=value['main_sha'])
+
+
+def project_result(notes):
+    """Extract one explicit bounded block; all other notes remain private."""
+    if not isinstance(notes, str): return dict(status='unavailable')
+    lines = notes.split('\n')
+    begins = [i for i, line in enumerate(lines) if line.removesuffix('\r') == RESULT_BEGIN]
+    ends = [i for i, line in enumerate(lines) if line.removesuffix('\r') == RESULT_END]
+    if not begins and not ends: return dict(status='missing')
+    if len(begins) != 1 or len(ends) != 1 or begins[0] >= ends[0]: return dict(status='unavailable')
+    raw = '\n'.join(lines[begins[0]+1:ends[0]]) + '\n'
+    try:
+        if len(raw.encode('utf-8')) > 4096: raise ValueError('Result limit')
+        value = _json(raw)
+        if not isinstance(value, dict) or set(value) != {'version', 'pr', 'main_sha'}: raise ValueError('Invalid result')
+        return validate_result(dict(value, status='recorded'))
+    except (ValueError, UnicodeError, RecursionError):
+        return dict(status='unavailable')
 
 def _json(raw):
     def unique(pairs):
@@ -66,6 +100,7 @@ def project_rows(project,repository,rows,events):
             source_kind='beads',bead_id=bead,title=_text(row['title']),status='closed' if state=='done' else state,
             remote_state=state,verification='not_required',description=_text(row.get('description',''),32768),
             assignee=_text(row.get('assignee',''),256),phase=_text(row.get('issue_type','task'),64),
+            result_evidence=project_result(row.get('notes','')),
             blockers=[],blocked_by=[],results=[],history=[],relationships=dict(parent=None,sub_issues=[],milestone=None))
         for key in ('created_at','updated_at'):
             if key in row: entry[key]=_text(row[key],128)
@@ -137,7 +172,8 @@ def read_projects(path,*,reader=None,on_update=None):
                 last={event.get('issue_id'):event.get('issue') for event in events}
                 fields=('status','title','description','assignee','created_at','updated_at')
                 current=all(isinstance(last.get(row['id']),dict) and
-                    all((row.get(key) or '')==(last[row['id']].get(key) or '') for key in fields) for row in rows)
+                    all((row.get(key) or '')==(last[row['id']].get(key) or '') for key in fields) and
+                    project_result(row.get('notes',''))==project_result(last[row['id']].get('notes','')) for row in rows)
                 if (sequences!=list(range(1,len(events)+1))
                         or any(row['id'] not in created for row in rows) or not current):
                     error('Beads chronology is partial; earlier changes are unavailable')

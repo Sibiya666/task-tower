@@ -42,6 +42,12 @@ const issueId=/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+#[1-9]\d*$/;
 function positive(v){if(!Number.isSafeInteger(v)||v<1)fail();return v;}
 const repositoryId=/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const beadIdentity=/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+:beads:[A-Za-z0-9][A-Za-z0-9_.-]{0,99}:[A-Za-z0-9][A-Za-z0-9_.-]{0,199}$/;
+function resultEvidence(v){
+ if(!plain(v))fail();
+ if(['missing','unavailable'].includes(v.status)&&Object.keys(v).length===1)return {status:v.status};
+ if(v.status!=='recorded'||Object.keys(v).length!==4||!['status','version','pr','main_sha'].every(k=>own(v,k))||v.version!==1||typeof v.main_sha!=='string'||! /^[a-f0-9]{40}$/.test(v.main_sha))fail();
+ return {status:'recorded',version:1,pr:positive(v.pr),main_sha:v.main_sha};
+}
 function qualified(v){text(v,2048);if(beadIdentity.test(v))return v;if(!issueId.test(v)||!Number.isSafeInteger(Number(v.slice(v.lastIndexOf('#')+1))))fail();return v;}
 function relation(v,type){
  if(v===undefined)return {status:'unavailable'};
@@ -59,6 +65,7 @@ function relation(v,type){
 }
 function entry(v){
  if(!plain(v))fail();
+ if(own(v,'result_evidence')&&(v.source_kind!=='beads'||v.book!=='tasks'))fail();
  const e={id:text(v.id,2048),project:text(v.project,2048),book:text(v.book,32),repository:text(v.repository,2048)};
  if(!repositoryId.test(e.repository)||!['ideas','tasks','library'].includes(e.book))fail();
  // Every copied scalar is validated before assignment; structured fields use dedicated projections.
@@ -75,6 +82,7 @@ function entry(v){
    e.source_kind='beads';e.bead_id=text(v.bead_id,200);
    if(e.book!=='tasks'||e.source!==null||!beadIdentity.test(e.id)||e.id!==e.repository+':beads:'+e.project+':'+e.bead_id||v.verification!=='not_required'||e.status==='done')fail();
    if(own(v,'assignee'))e.assignee=text(v.assignee,256);
+   e.result_evidence=own(v,'result_evidence')?resultEvidence(v.result_evidence):{status:'missing'};
   }else{qualified(e.id);e.number=positive(v.number);if(e.id!==e.repository+'#'+e.number)fail();}
   e.verification=text(v.verification,32);if(!['pending','verified','unverified','not_required'].includes(e.verification))fail();
   if(own(v,'remote_state'))e.remote_state=text(v.remote_state,32,true);
