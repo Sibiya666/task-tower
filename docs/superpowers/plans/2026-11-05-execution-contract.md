@@ -1,6 +1,6 @@
 # Execution contract and navigation Implementation Plan
 
-> **SUPERSEDED — исторический план этапа A; не исполнять его инструкции ниже.** Текущая authority — [единая спецификация](../specs/2026-11-05-task-tower-unified-design.md), согласованная пользователем «согласую» 2026-11-05. Её qualification-first и состав агентов по задаче заменяют прежний порядок и обязательную шестёрку. Содержимое и незавершённые checkboxes сохранены как история, не новая очередь или принятый план B. `.1` accepted; `.2` blocked у исходного владельца `task-tower-beads-stages`, PR85 Draft/HOLD; все security/CI/independent PR/main gates сохранены. Пакет не опубликован и не принят в main.
+> **ИСТОРИЯ / ЗАМЕНЕНО решением 2026-11-06.** Действующий маршрут: [Beads + Superpowers + готовый Codex](../../current-direction.md). Прежние Windows-квалификация, план B и порядок этапов ниже не действуют. Весь последующий текст, включая старые approvals, слова «текущая authority» и «следующий шаг», сохранён как датированный материал; не возобновлять по нему исполнение или claims. Независимые проверки, безопасность и PR/main gates сохраняются в актуальном AGENTS.md.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
