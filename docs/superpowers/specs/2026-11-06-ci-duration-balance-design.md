@@ -2,7 +2,7 @@
 
 Date: 2026-11-06
 Parent: tt-qrk (owner task-tower-ci-wait-coordinator)
-Status: independently reviewed APPROVE; awaiting human design approval
+Status: independently reviewed APPROVE; human approved design and implementation on 2026-11-06
 Base: 6f5afb95c76a14e3ea422ccdcd376ef78cbd66e8
 
 ## Intent and evidence
@@ -15,7 +15,7 @@ Exact merge 087fab3f684f70be8206aa5eb7ac2d9f3c5acf1d run 42266696012 attempt 1 u
 
 ## Approaches
 
-Recommended coordinator choice, awaiting human approval: source-controlled rounded cost hints plus deterministic greedy balancing. It targets the measured imbalance without network or artifact input during CI.
+Human-approved coordinator recommendation: source-controlled rounded cost hints plus deterministic greedy balancing. It targets the measured imbalance without network or artifact input during CI.
 
 Alternatives considered: hashing IDs changes placement without using cost; module-only buckets may leave large modules dominating one job. Dynamic downloaded timing history adds availability and provenance dependencies. Altering tests, sleeps, security checks or deadlines is out of scope.
 
