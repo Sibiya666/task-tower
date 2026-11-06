@@ -1,0 +1,35 @@
+name: Temporary PR97 documentation diagnosis
+on:
+  push:
+    branches: [codex/ci-docs-pr97-diagnostic]
+    paths: [.github/workflows/ci-docs-pr97-diagnostic.yml]
+permissions:
+  contents: read
+jobs:
+  observe:
+    if: github.repository == 'Sibiya666/task-tower' && github.ref == 'refs/heads/codex/ci-docs-pr97-diagnostic'
+    runs-on: windows-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: instrumentation
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/checkout@v4
+        with:
+          ref: caddddd6da41847b20737cf7a40fe89b8c4e6d70
+          path: target
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Observe original exact-merge validator once
+        run: python instrumentation/tools/ci_docs_pr97_diagnostic.py --target target --report "$env:RUNNER_TEMP/pr97-diagnostic.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pr97-diagnostic-${{ github.run_id }}
+          path: ${{ runner.temp }}/pr97-diagnostic.json
+          if-no-files-found: error
