@@ -4,6 +4,8 @@ import io
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import math
+import sys
+from pathlib import Path
 import time
 from urllib.parse import parse_qs, urlsplit
 
@@ -32,8 +34,14 @@ class _DeadlineReader(io.RawIOBase):
         return self.connection.recv_into(buffer)
 
 
-def make_server(store,connectors,*,host='127.0.0.1',port=8765,poll_seconds=2):
-    if host!='127.0.0.1':raise ValueError('loopback_required')
+def make_server(store,connectors,*,host='127.0.0.1',port=8765,poll_seconds=2,container_network=False):
+    # Docker bridge publishing cannot reach a namespace-local loopback socket.
+    # The packaged deployment opts in; Compose restricts HOST publication to loopback.
+    if type(container_network) is not bool:raise ValueError('invalid_container_network')
+    if container_network and (sys.platform!='linux' or not Path('/.dockerenv').is_file()):
+        raise ValueError('container_namespace_required')
+    if host!='127.0.0.1' and not (container_network and host=='0.0.0.0'):
+        raise ValueError('loopback_required')
     if type(port) is not int or not 0<=port<=65535:raise ValueError('invalid_port')
     if type(poll_seconds) not in (int,float) or not math.isfinite(poll_seconds) or not .1<=poll_seconds<=60:
         raise ValueError('invalid_poll_interval')

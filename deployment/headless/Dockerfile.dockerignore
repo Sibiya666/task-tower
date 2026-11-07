@@ -1,0 +1,9 @@
+# Default deny: no Git metadata, executors, config, runtime, DBs or logs.
+**
+!task_tower/
+!task_tower/**/
+!task_tower/**/*.py
+!deployment/
+!deployment/headless/
+!deployment/headless/Dockerfile
+!deployment/headless/Dockerfile.dockerignore

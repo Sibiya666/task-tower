@@ -2,7 +2,8 @@
 
 The service and host connector implement fixed executor/reviewer commands and
 opt-in trusted GitHub delivery through exact-main verification and native owner
-closure. Deployment and the real autonomous pilot remain Stage 6 work. Model
+closure. The Linux deployment is an explicit opt-in. Container smoke and fixture results
+are separate from acceptance of the real autonomous pilot. Model
 completion and `awaiting_merge` do not mean accepted delivery. No UI is required
 or verified. Implementation and fixture checks do not claim a delivered pilot.
 
@@ -240,3 +241,88 @@ they do not establish autonomous release acceptance. Authentic bounded app-serve
 and native-data evidence must be reported with its actual limits. UI/manual
 window checks remain deferred; applicable automated/security/CI and independent
 PR/main gates remain mandatory.
+
+## Linux Docker deployment (Stage 6)
+
+Build and launch only this Compose project explicitly; no host installation,
+autostart, canonical migration or backlog import is performed:
+
+```console
+docker compose -p task-tower-headless -f deployment/headless/compose.yaml build
+python deployment/headless/smoke.py --image task-tower-headless:stage6 --receipt <outside-source-receipt.json>
+```
+
+The image pins the Task 1 Debian amd64 manifest and Beads 1.3.4 archive/binary
+checksums. Python 3.13.5, Git, libc and CA packages come from the immutable signed
+Debian snapshot `20261104T212339Z`; embedded Dolt ships in that pinned bd binary.
+The Docker frontend is digest-pinned too. The Dockerfile-specific default-deny
+ignore permits only Python source and the build definition; Git metadata,
+installation configuration, runtime, DBs, logs and executor repositories are
+excluded. Build downloads these pinned public dependencies; runtime does not
+download tools. No `latest`, model authorization or Docker socket is used.
+
+The smoke creates two new UUID-named volumes, provisions one private random API
+token through stdin, initializes a fresh native database, imports only its approved
+fixture, claims through authenticated HTTP, checks native owner/history and
+restarts its own idle service to verify persistent attempt identity. It then stops
+its container and retains the container/volumes plus a sanitized JSON receipt.
+It never mounts host directories or touches a canonical database. A failed smoke
+is a failure, and its retained volumes are not a replacement production database.
+The smoke is also one bounded PR CI job; it does not replace the four complete
+Windows unittest shards or change the exact-main Windows artifact identity.
+
+For an operator-approved pilot, provision **new dedicated** Compose volumes before
+`up`. Use an ephemeral provisioning container from the built image with only those
+two named volumes and network disabled. Initialize bd only in a new empty project
+under `/data/beads`; use `bd init --prefix <approved-prefix> --non-interactive
+--skip-agents --skip-hooks`. Do not run init against an existing database. Create
+`/data/runtime/service.json` and a private alphanumeric token file of 32–256 bytes
+(mode 0600, owned by the service user); pass secrets through stdin/private files,
+never argv, environment, source or public receipts. The configuration must contain
+only approved project paths and immutable plan digests. Example shape (replace the
+digest and token with private operator-provisioned values):
+
+```json
+{
+  "version": 1,
+  "executable": "/usr/local/bin/bd",
+  "projects": {"pilot": "/data/beads/pilot"},
+  "journal": "/data/runtime/service.sqlite3",
+  "connectors": {"host1": {"token_file": "/data/runtime/token", "projects": ["pilot"]}},
+  "approved_plans": {"pilot": ["<approved-plan-sha256>"]},
+  "delivery_projects": {"pilot": "Sibiya666/task-tower"},
+  "port": 8765,
+  "poll_seconds": 2,
+  "max_active_tasks": 2
+}
+```
+
+HOME is `/data/runtime/home`: embedded Dolt needs writable user state even for
+native ready/show. Keep that directory in the runtime volume. Compose mounts only
+`/data/beads` and `/data/runtime`, keeps the image filesystem read-only, bounds PIDs,
+drops all capabilities and sets no-new-privileges. It publishes exclusively
+`127.0.0.1:${TASK_TOWER_PORT:-8765}`. Inside the separate Linux network namespace,
+`--container-network` explicitly binds 0.0.0.0 so Docker bridge forwarding can reach
+the API; that option rejects non-Linux/non-Docker hosts. Ordinary host service
+invocation still binds only 127.0.0.1. Do not publish another host interface, use
+host networking or attach untrusted containers to this API network.
+
+```console
+docker compose -p task-tower-headless -f deployment/headless/compose.yaml up -d --no-build
+python -m task_tower.connector.cli work --config <private-host-connector-config>
+docker compose -p task-tower-headless -f deployment/headless/compose.yaml stop
+```
+
+Configure the host connector with `http://127.0.0.1:<published-port>`, the matching
+private token and only the approved pilot assignment. Repositories, worktrees,
+Codex authorization and trusted GitHub credentials stay on the host. Neither
+model processes nor Docker receive the trusted helper's GitHub tokens. The
+connector creates the real author, each fresh reviewer and postmerge reviewer;
+manual verdict transfer or merge cannot count as the autonomous pilot. Preserve
+actual bead/attempt/thread/turn/PR/H/B/M/CI/closure identities in the acceptance
+receipt. Do not mark the release delivered from this configuration or a fake E2E.
+
+The canonical backlog remains unchanged. Any later native backup/restore and
+single-writer switch requires its own explicit authorization and proof that no
+other writer or live claim is affected. Never copy the active canonical database,
+mount it simultaneously on host/container, or clear an unknown-effect fence.

@@ -97,13 +97,15 @@ def load_config(path):
 def main(argv=None):
     parser=argparse.ArgumentParser(description='Foreground loopback Beads service')
     parser.add_argument('--config',required=True)
+    parser.add_argument('--container-network',action='store_true',help='Linux Docker namespace only; host publishing must be loopback')
     try:
         args=parser.parse_args(argv)
         config=load_config(args.config)
         beads=Beads(config['executable'],config['projects'])
         store=Store(config['journal'],beads,approved_plans=config['approved_plans'],delivery_projects=config['delivery_projects'],max_active_tasks=config['max_active_tasks'])
         try:
-            server=make_server(store,config['connectors'],port=config['port'],poll_seconds=config['poll_seconds'])
+            server=make_server(store,config['connectors'],host='0.0.0.0' if args.container_network else '127.0.0.1',
+                               port=config['port'],poll_seconds=config['poll_seconds'],container_network=args.container_network)
             try:server.serve_forever()
             except KeyboardInterrupt:pass
             finally:server.server_close()
