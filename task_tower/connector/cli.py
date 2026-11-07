@@ -21,7 +21,7 @@ from .app_server import AppServer,DecisionRequired
 from .client import APIClient,Connector,LifecycleConnector
 from ..service.beads import strict_json,identity,bead_id
 from ..service.cli import read_token,_absolute
-from ..service.store import encoded
+from ..service.store import encoded,plan_digest
 
 def load_config(path):
     path=_absolute(str(path))
@@ -56,6 +56,12 @@ def main(argv=None):
     for name in ('run','work','resume'):
         action=sub.add_parser(name);action.add_argument('--config',required=True)
         if name=='resume':action.add_argument('attempt_id')
+    ready=sub.add_parser('ready')
+    ready.add_argument('--project-id',required=True);ready.add_argument('--config',required=True)
+    plan=sub.add_parser('plan');plans=plan.add_subparsers(dest='plan_action',required=True)
+    action=plans.add_parser('import')
+    for flag in ('project-id','request-id','digest','plan-file','config'):
+        action.add_argument('--'+flag,required=True)
     decision=sub.add_parser('decision');ds=decision.add_subparsers(dest='decision_action',required=True)
     for name in ('list','respond'):
         action=ds.add_parser(name);action.add_argument('--config',required=True)
@@ -63,6 +69,22 @@ def main(argv=None):
     store=app=connector=None;command=None
     try:
         args=parser.parse_args(argv);cfg=load_config(args.config)
+        if args.action in ('ready','plan'):
+            identity(args.project_id)
+            if args.project_id not in cfg['projects']:raise ValueError('project_forbidden')
+            api=APIClient(cfg['endpoint'],cfg['connector_id'],read_token(cfg['token_file']))
+            if args.action=='ready':value=api.ready(args.project_id)
+            else:
+                identity(args.request_id)
+                if re.fullmatch('[0-9a-f]{64}',args.digest) is None:raise ValueError('invalid_digest')
+                with Path(args.plan_file).open('rb') as stream:raw=stream.read(65537)
+                if len(raw)>65536:raise ValueError('plan_file_limit')
+                plan=strict_json(raw.decode('utf-8'))
+                if plan_digest(plan)!=args.digest:raise ValueError('plan_digest_mismatch')
+                value=api.request('POST','/v1/plans/import',dict(version=1,project_id=args.project_id,
+                    request_id=args.request_id,digest=args.digest,plan=plan))['batch']
+            print(json.dumps(value,ensure_ascii=True,allow_nan=False))
+            return 0 if args.action=='ready' or value.get('state')=='published' else 4
         if args.action in ('decision','resume'):
             api=APIClient(cfg['endpoint'],cfg['connector_id'],read_token(cfg['token_file']))
             if args.action=='resume':value=api.resume(args.attempt_id)
