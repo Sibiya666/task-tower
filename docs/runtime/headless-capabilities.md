@@ -30,7 +30,8 @@ newline-delimited JSON on stdin/stdout, with separate private stderr capture.
 Do not use `daemon`, `proxy`, or connect to the desktop's app-server. This probe
 used the existing account/model/policy without configuration overrides. It removed
 `GH_TOKEN` and `GITHUB_TOKEN` case-insensitively from the child environment.
-No token was read or supplied in arguments. Background Windows process launch
+Neither GitHub variable was forwarded to the child or supplied in its arguments.
+Background Windows process launch
 used `CREATE_NO_WINDOW`; `Start-Process` launchers must use `-WindowStyle Hidden`.
 
 Observed inherited settings were `gpt-6.1-sol`, provider `openai`, approval policy
