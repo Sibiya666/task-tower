@@ -98,14 +98,24 @@ class AcceptanceIntegration(unittest.TestCase):
             c=None
             try:
                 c=LifecycleConnector(local,api,None,lambda *args,**kw:self.fail('model launched for fixed host delivery'),delivery=d)
+                # This boundary fixture owns the retained author process it closes.
+                import queue
+                author=dict(version=1,kind='execute',command_id='fixture-author',attempt_id=self.a['attempt_id'],project_id='p',base_sha=B,input={'text':'approved implementation'},source=self.a['source'])
+                local.receive(author);local.update('fixture-author',phase='completed',thread_id='author',turn_id='fixture-turn')
+                class OwnedAuthor:
+                    closed=False
+                    def close(author):author.closed=True
+                owned=OwnedAuthor();worker=dict(queue=queue.Queue(4),apps={'fixture-author':owned},replies={},busy=False,reserved=0)
+                c.workers[self.a['attempt_id']]=worker;worker['thread']=threading.Thread(target=c._work,args=(self.a['attempt_id'],worker),daemon=True);worker['thread'].start()
                 end=time.monotonic()+5
                 while time.monotonic()<end:
                     c.tick()
-                    if self.s.attempt(self.a['attempt_id'])['phase']=='accepted' and local.commands() and local.commands()[0]['phase']=='completed':break
+                    if self.s.attempt(self.a['attempt_id'])['phase']=='accepted' and any(d['command'].get('kind')=='deliver' and d['phase']=='completed' for d in local.commands()):break
                     time.sleep(.01)
                 self.assertEqual(self.s.attempt(self.a['attempt_id'])['phase'],'accepted',errors)
                 self.assertEqual(self.h.native.rows['pilot-0']['status'],'closed')
-                self.assertEqual(local.commands()[0]['phase'],'completed',errors)
+                result=next(d for d in local.commands() if d['command'].get('kind')=='deliver')
+                self.assertEqual(result['phase'],'completed',errors);self.assertTrue(owned.closed);self.assertIs(result['cleanup_confirmed'],True)
                 self.assertEqual(local.db.execute('SELECT count(*) FROM repository_delivery').fetchone()[0],0)
             finally:
                 if c is not None:c.close()
@@ -201,6 +211,27 @@ class AcceptanceIntegration(unittest.TestCase):
         self.assertEqual(actions[0]['changes']['correction_count'],3)
         self.assertEqual([x['kind'] for x in actions[1:]],['quiesce'])
 
+    def test_unknown_resource_binding_stops_before_remote_acceptance_effect(self):
+        import tempfile,threading
+        from pathlib import Path
+        from task_tower.connector.store import ConnectorStore
+        from task_tower.connector.delivery import Delivery
+        from tests.test_headless_delivery import Host
+        temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup)
+        local=ConnectorStore(Path(temp.name)/'journal','host1');self.addCleanup(local.close)
+        command=self.h.commands(self.a)[-1];local.receive(command);outer=self;accepted=[]
+        class API:
+            def validate_command(api,key):return outer.s.validate_lifecycle_command(key,'host1')
+            def send_event(api,event):return outer.s.record_event(event)
+            def accept(api,key,request_id,merge,proof):accepted.append(1);return outer.s.accept_delivery(request_id,key,'host1',merge,proof)
+        class GitHub(Host):
+            def prepare_pr(host,a):host.pr['branch']='codex/headless-'+a['attempt_id'];return super().prepare_pr(a)
+            def verify_main(host,a,merge):return evidence(a)
+        d=Delivery(GitHub(),local,{'p':REPO})
+        with self.assertRaises(ValueError):d.run(command,API(),threading.Event())
+        self.assertEqual(accepted,[]);self.assertEqual(self.h.native.rows['pilot-0']['status'],'in_progress')
+        self.assertEqual(local.cleanup_reservations(),{self.a['attempt_id']})
+
 
 class DeliveryCapacityTests(unittest.TestCase):
     def scenario(self,mode):
@@ -218,8 +249,9 @@ class DeliveryCapacityTests(unittest.TestCase):
         store.receive(author);store.update('author-cmd',phase='completed',thread_id='author',turn_id='author-turn')
         class RetainedAuthor:
             closed=False
+            allow_cleanup=False
             def close(self):
-                if mode=='unknown-cleanup':raise RuntimeError('cleanup unknown')
+                if mode=='unknown-cleanup' and not self.allow_cleanup:raise RuntimeError('cleanup unknown')
                 self.closed=True
         retained=RetainedAuthor();started=threading.Event()
         class Wire:
@@ -264,6 +296,21 @@ class DeliveryCapacityTests(unittest.TestCase):
             self.assertIs(store.command('deliver-cmd')['cleanup_confirmed'],False)
         else:
             self.assertFalse(retained.closed);self.assertFalse(started.is_set());self.assertTrue(c._occupied(worker))
+        if getattr(self,'known_quiesce_probe',False):
+            retained.allow_cleanup=True
+            control=dict(version=1,kind='quiesce',command_id='known-owned-stop',attempt_id='attempt',project_id='p',base_sha=B)
+            commands.insert(0,control);end=time.monotonic()+2
+            while time.monotonic()<end:
+                c.tick();time.sleep(.01)
+                if any(d['command']['command_id']=='known-owned-stop' and d['phase']=='completed' for d in store.commands()):break
+            self.assertTrue(retained.closed);self.assertEqual(store.command('known-owned-stop')['phase'],'completed')
+            self.assertIs(store.command('deliver-cmd')['cleanup_confirmed'],True)
+            commands.remove(control);c.close();store.close()
+            reopened=ConnectorStore(root/'journal','delivery-capacity-'+mode);self.addCleanup(reopened.close)
+            new=LifecycleConnector(reopened,API(),Trees(),lambda cwd,request_handler=None:AppServer(reopened,transport=Wire(),request_handler=request_handler),max_active_tasks=1,delivery=Delivered());self.addCleanup(new.close)
+            end=time.monotonic()+2
+            while not started.is_set() and time.monotonic()<end:new.tick();time.sleep(.01)
+            self.assertTrue(started.is_set());self.assertEqual(deliveries,[1])
         if getattr(self,'known_restart_probe',False):
             c.close();store.close()
             reopened=ConnectorStore(root/'journal','delivery-capacity-'+mode);self.addCleanup(reopened.close)
@@ -326,3 +373,163 @@ class DurableCleanupAdmissionTests(unittest.TestCase):
 
     def test_successful_known_cleanup_journal_reopen_admits_next_without_replaying_delivery(self):
         self.known_restart_probe=True;self.scenario('accepted')
+
+
+class AcceptanceIntentFaultTests(unittest.TestCase):
+    def scenario(self,mode,unrelated_unknown=False):
+        import contextlib,tempfile,threading,time,json,queue
+        from pathlib import Path
+        from tests.test_service_lifecycle import LifecycleTests
+        from tests.test_headless_delivery import Host
+        from task_tower.connector.store import ConnectorStore
+        from task_tower.connector.client import LifecycleConnector,APIClient
+        from task_tower.connector.app_server import AppServer
+        from task_tower.connector.delivery import Delivery
+        from task_tower.service.api import make_server
+        with contextlib.ExitStack() as cleanup:
+            h=LifecycleTests('runTest');h.setUp();cleanup.callback(h.doCleanups);service=h.s;service.delivery_projects={'p':REPO}
+            a=h.claim();aid=a['attempt_id'];service.start_lifecycle(aid,'host1',B)
+            reason={};original_native=h.beads.runner
+            def native(argv,cwd,timeout,env):
+                args=argv[argv.index('--actor')+2:]
+                if args[0]=='history':return [dict(id='close-event',issue_id=a['bead_id'],event_type='closed',actor=a['actor'],new_value=reason['value'])]
+                if args[0]=='close':reason['value']=args[args.index('--reason')+1]
+                return original_native(argv,cwd,timeout,env)
+            h.beads.runner=native
+            temp=tempfile.TemporaryDirectory();cleanup.callback(temp.cleanup);root=Path(temp.name)
+            local=ConnectorStore(root/'connector','host1');cleanup.callback(local.close)
+            if unrelated_unknown:
+                old=dict(version=1,kind='quiesce',command_id='unrelated-fence',attempt_id='unrelated',project_id='p',base_sha=B)
+                local.receive(old);local.update('unrelated-fence',phase='needs_reconciliation',cleanup_confirmed=False,cleanup_resources=['lost-owned-resource'])
+            if mode=='confirmation-write-failure':
+                local.db.execute("CREATE TRIGGER fail_confirmation BEFORE UPDATE ON inbox WHEN NEW.data LIKE '%\"cleanup_confirmed\":true%' AND OLD.data LIKE '%\"cleanup_confirmed\":false%' BEGIN SELECT RAISE(ABORT,'fixture confirmation failure'); END")
+            server=make_server(service,{'host1':dict(token='A'*32,projects=['p'])},port=0);thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+            def stop_server():server.shutdown();server.server_close();thread.join(3)
+            cleanup.callback(stop_server)
+            accepting=threading.Event();allow_cleanup=threading.Event();next_started=threading.Event();second_id=[None];author_threads=[];wires=[];intents=[];accept_calls=[]
+            healthy=mode in ('success','lost-reply-readback-ok')
+            class Client(APIClient):
+                def accept(api,key,request_id,merge,proof):
+                    accept_calls.append(request_id);intents.append(local.command(request_id).get('cleanup_confirmed'));accepting.set()
+                    if mode=='rejected-before-effect':raise ConnectionError('accept request unavailable before service effect')
+                    result=super().accept(key,request_id,merge,proof)
+                    if mode in ('lost-reply-readback-down','lost-reply-readback-ok'):raise ConnectionError('lost accept response')
+                    return result
+                def request(api,method,path,body=None):
+                    if mode=='lost-reply-readback-down' and accepting.is_set() and method=='GET' and path.startswith('/v1/attempts/'):
+                        raise ConnectionError('readback unavailable')
+                    return super().request(method,path,body)
+            api=Client('http://127.0.0.1:'+str(server.server_port),'host1','A'*32)
+            class Trees:
+                current=dict(base_sha=B,head_sha=H,diff='whole approved initial diff')
+                def prepare(t,project,attempt,base):return dict(path=str(root/attempt))
+                def prepare_revision(t,project,attempt,base,update):
+                    t.current=dict(base_sha=base,head_sha='e'*40,diff='whole corrected diff after upstream change')
+                    return t.prepare(project,attempt,base)
+                def prepare_review(t,project,attempt,head):return dict(path=str(root/('review-'+attempt)))
+                def source(t,*args):return dict(t.current)
+            trees=Trees()
+            class Wire:
+                serial=0
+                def __init__(wire,cwd):wire.cwd=Path(cwd);wire.pending=[];wire.thread=None;wire.closed=False;wires.append(wire)
+                def request(wire,method,params):
+                    if method=='thread/start':
+                        Wire.serial+=1;wire.thread='actual-fixture-thread-'+str(Wire.serial);return {'thread':{'id':wire.thread}}
+                    if method=='turn/start':
+                        turn='turn-'+str(Wire.serial)+'-'+str(len(author_threads))
+                        if wire.cwd.name==second_id[0]:next_started.set();return {'turn':{'id':turn}}
+                        review=wire.cwd.name.startswith('review-')
+                        if review:
+                            output=json.dumps(dict(verdict='approve',findings=[],head_sha=trees.current['head_sha'],base_sha=trees.current['base_sha'],reviewer_thread_id=wire.thread))
+                        else:author_threads.append(params['threadId']);output='Approved implementation and checks completed'
+                        wire.pending.append(dict(method='turn/completed',params=dict(threadId=wire.thread,turn=dict(id=turn,status='completed',items=[dict(type='agentMessage',text=output)]))))
+                        return {'turn':{'id':turn}}
+                    raise AssertionError(method)
+                def notifications(wire):result=wire.pending;wire.pending=[];return result
+                def close(wire):
+                    if wire.cwd.name==aid and accepting.is_set() and not healthy and mode!='confirmation-write-failure' and not allow_cleanup.is_set():raise RuntimeError('owned author cleanup unconfirmed')
+                    wire.closed=True
+            class GitHub(Host):
+                prepares=0
+                def prepare_pr(host,attempt):
+                    host.prepares+=1;host.pr.update(branch='codex/headless-'+aid,head_sha=attempt['head_sha'],base_sha='d'*40 if host.prepares==1 else attempt['base_sha'])
+                    for check in host.checks:check['head_sha']=attempt['head_sha']
+                    return super().prepare_pr(attempt)
+                def verify_main(host,attempt,merge):return evidence(attempt)
+            host=GitHub();delivery=Delivery(host,local,{'p':REPO});production_run=delivery.run
+            if mode=='after-run-interruption':
+                def interrupted(*args):
+                    result=production_run(*args)
+                    if result is not None:raise ConnectionError('interruption after run before local cleanup')
+                    return result
+                delivery.run=interrupted
+            c=LifecycleConnector(local,api,trees,lambda cwd,request_handler=None:AppServer(local,transport=Wire(cwd),request_handler=request_handler),max_active_tasks=2 if unrelated_unknown else 1,delivery=delivery);cleanup.callback(c.close)
+            end=time.monotonic()+8;final=None
+            while time.monotonic()<end:
+                c.tick();time.sleep(.005)
+                final=next((d for d in local.commands() if d['command'].get('kind')=='deliver' and d['command']['attempt']['base_sha']=='d'*40),None)
+                if final and final['phase'] in ('completed','needs_reconciliation') and not c.workers[aid]['busy']:break
+            self.assertIsNotNone(final);self.assertEqual(len(author_threads),2);self.assertEqual(author_threads[0],author_threads[1])
+            current=service.attempt(aid);self.assertEqual(current['base_sha'],'d'*40);self.assertEqual(len(current['review_threads']),2)
+            self.assertEqual(host.calls.count('merge'),1);self.assertEqual(host.prepares,2);self.assertEqual(len(accept_calls),1)
+            if healthy:self.assertEqual(final['phase'],'completed')
+            else:self.assertEqual(final['phase'],'needs_reconciliation')
+            if mode=='rejected-before-effect':self.assertEqual(h.native.rows[a['bead_id']]['status'],'in_progress')
+            else:self.assertEqual(h.native.rows[a['bead_id']]['status'],'closed')
+            superseded=[d for d in local.commands() if d['command'].get('kind')=='deliver' and d['command']['attempt']['base_sha']==B]
+            self.assertEqual(len(superseded),1);self.assertIsNot(superseded[0].get('cleanup_confirmed'),False)
+            owner=next(d['command']['command_id'] for d in local.commands() if d['command'].get('kind')=='execute' and d['command']['attempt_id']==aid)
+            self.assertEqual(final['cleanup_resources'],[owner]);self.assertEqual(superseded[0]['cleanup_resources'],[owner])
+            c.close();local.close()
+            reopened=ConnectorStore(root/'connector','host1');cleanup.callback(reopened.close)
+            b=h.claim(1);second_id[0]=b['attempt_id'];service.start_lifecycle(b['attempt_id'],'host1',M)
+            # New model process and connector after real SAME-journal reopen.
+            new=LifecycleConnector(reopened,api,trees,lambda cwd,request_handler=None:AppServer(reopened,transport=Wire(cwd),request_handler=request_handler),max_active_tasks=1,delivery=Delivery(host,reopened,{'p':REPO}));cleanup.callback(new.close)
+            for _ in range(12):new.tick();time.sleep(.01)
+            if not healthy or unrelated_unknown:
+                self.assertFalse(next_started.is_set(),'lost accept/readback/cleanup must retain durable capacity across restart')
+            else:self.assertTrue(next_started.is_set())
+            self.assertEqual(host.calls.count('merge'),1);self.assertEqual(len(accept_calls),1)
+            self.assertEqual(intents,[False],'reservation must be durable BEFORE remote acceptance effect')
+            if not healthy:
+                self.assertIn(aid,reopened.cleanup_reservations())
+                allow_cleanup.set()
+                owned=[wire for wire in wires if wire.cwd.name==aid]
+                for wire in owned:wire.close()
+                self.assertTrue(all(wire.closed for wire in owned))
+                if mode=='confirmation-write-failure':reopened.db.execute('DROP TRIGGER fail_confirmation')
+                binding=reopened.command(final['command']['command_id'])['cleanup_resources']
+                reopened.confirm_cleanup(aid,set(binding))  # Explicit known-owned cleanup evidence, no PID guess/replay.
+            if unrelated_unknown:
+                self.assertIs(reopened.command('unrelated-fence')['cleanup_confirmed'],False)
+                new.max_active_tasks=2
+            end=time.monotonic()+2
+            while not next_started.is_set() and time.monotonic()<end:new.tick();time.sleep(.005)
+            self.assertTrue(next_started.is_set());self.assertEqual(host.calls.count('merge'),1);self.assertEqual(len(accept_calls),1)
+    def test_lost_accept_reply_and_unavailable_readback_reopen_retains_slot(self):self.scenario('lost-reply-readback-down')
+    def test_fault_matrix_reject_interrupt_cleanup_and_confirmation_failure(self):
+        for mode in ('rejected-before-effect','after-run-interruption','cleanup-failure','confirmation-write-failure'):
+            with self.subTest(mode=mode):self.scenario(mode)
+    def test_supersession_same_author_new_review_success_cleanup_reopen_admits_next(self):self.scenario('success')
+    def test_lost_reply_verified_readback_confirms_owned_cleanup_and_next_admission(self):self.scenario('lost-reply-readback-ok')
+    def test_successful_owned_cleanup_never_clears_unrelated_unknown_resource(self):self.scenario('success',unrelated_unknown=True)
+
+
+class OwnedCleanupEvidenceTests(unittest.TestCase):
+    scenario=DeliveryCapacityTests.scenario
+    def test_known_live_quiesce_confirms_bound_cleanup_and_reopen_admits_next(self):
+        self.known_quiesce_probe=True;self.scenario('unknown-cleanup')
+    def test_confirmation_cannot_clear_unmatched_resource_on_same_attempt_or_empty_proof(self):
+        import tempfile
+        from pathlib import Path
+        from task_tower.connector.store import ConnectorStore
+        temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup)
+        store=ConnectorStore(Path(temp.name)/'journal','owned-cleanup-proof');self.addCleanup(store.close)
+        for command,resource in [('old','lost-resource'),('current','known-resource')]:
+            store.receive(dict(version=1,kind='quiesce',command_id=command,attempt_id='attempt',project_id='p',base_sha=B))
+            store.update(command,phase='needs_reconciliation',cleanup_confirmed=False,cleanup_resources=[resource])
+        store.confirm_cleanup('attempt',set())
+        self.assertIs(store.command('old')['cleanup_confirmed'],False);self.assertIs(store.command('current')['cleanup_confirmed'],False)
+        store.confirm_cleanup('attempt',{'known-resource'})
+        self.assertIs(store.command('old')['cleanup_confirmed'],False);self.assertIs(store.command('current')['cleanup_confirmed'],True)
+        self.assertEqual(store.cleanup_reservations(),{'attempt'})

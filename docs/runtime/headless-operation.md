@@ -211,8 +211,16 @@ attempt accepted. The worker then closes its retained owned author transports
 and confirms cleanup before freeing local capacity. Unknown cleanup retains the
 app, occupancy and durable reconciliation fence. Admission unions live attempts
 with journaled unresolved cleanup reservations, counting an attempt once. These
-reservations survive a journal reopen/new connector and remain until explicit
-cleanup reconciliation; a closed Bead or restart cannot release them. Unbound
+reservations survive a journal reopen/new connector and remain until verified
+owned cleanup or explicit cleanup reconciliation; a closed Bead or restart
+cannot release them. Before remote acceptance can free a service slot, the
+connector durably records the cleanup reservation and its owned resource IDs.
+The resource identity stays with the actual retained transport across same-author
+corrections. Lost accept/readback responses and confirmation-write failure retain
+the fence. Delivery, known-live quiesce and controlled shutdown may confirm only
+resource IDs whose owned transports actually closed; empty or unmatched evidence
+cannot clear an old reservation. Confirmation appends a timestamped local receipt
+without changing the unknown command outcome or replaying delivery. Unbound
 controls cannot acknowledge unknown old-process cleanup. Known existing controls
 remain available when limits are full or lowered. A premerge supersession keeps
 the same author app for revision. No GitHub Issue is created as a duplicate of

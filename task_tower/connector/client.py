@@ -236,13 +236,17 @@ class LifecycleConnector(Connector):
                     if data['phase'] in ('executing','needs_input'):
                         self._poll_lifecycle(key,app,worker)
         finally:
+            closed=set();known=True
             for key,app in list(worker['apps'].items()):
                 try:
-                    app.close()
+                    app.close();closed.add(getattr(app,'resource_id',key))
                     if self.store.command(key)['phase'] in ('executing','needs_input','starting'):
                         self.store.lifecycle_transition(key,'needs_reconciliation','failed')
                 except Exception:
-                    self.store.lifecycle_transition(key,'needs_reconciliation','failed')
+                    known=False;self.store.lifecycle_transition(key,'needs_reconciliation','failed')
+            if known and closed:
+                try:self.store.confirm_cleanup(attempt,closed)
+                except Exception:pass  # Durable false remains fenced if its proof cannot commit.
             worker['apps'].clear()
 
     def _execute_lifecycle(self,command,worker):
@@ -250,24 +254,30 @@ class LifecycleConnector(Connector):
         try:
             self.api.validate_command(key)
             if kind=='deliver':
-                self.store.update(key,phase='starting')
+                resources=sorted({getattr(app,'resource_id',previous) for previous,app in worker['apps'].items()})
+                self.store.update(key,phase='starting',cleanup_resources=resources)
                 result=self.delivery.run(command,self.api,self.stop)
                 if result is not None:
                     if result.get('phase')!='accepted' or not result.get('canonical_close'):raise ValueError('confirmed_delivery_required')
                     self.store.update(key,cleanup_confirmed=False)
+                    closed=set()
                     for previous,app in list(worker['apps'].items()):
                         # close() verifies this owned transport's containment/readers;
                         # failure retains its app and occupancy plus the durable fence.
-                        app.close();worker['apps'].pop(previous);worker['replies'].pop(previous,None)
-                    self.store.update(key,cleanup_confirmed=True)
+                        app.close();closed.add(getattr(app,'resource_id',previous));worker['apps'].pop(previous);worker['replies'].pop(previous,None)
+                    self.store.confirm_cleanup(attempt,closed)
+                    if attempt in self.store.cleanup_reservations():raise ValueError('cleanup_binding_unknown')
                 self.store.update(key,phase='completed')
                 return
             if kind=='quiesce':
-                self.store.update(key,phase='starting')
+                if attempt in self.store.cleanup_reservations() and not worker['apps']:raise ValueError('cleanup_binding_unknown')
+                self.store.update(key,phase='starting');closed=set()
                 for previous,app in list(worker['apps'].items()):
-                    app.close();worker['apps'].pop(previous)
+                    app.close();closed.add(getattr(app,'resource_id',previous));worker['apps'].pop(previous);worker['replies'].pop(previous,None)
                     if self.store.command(previous)['phase'] in ('executing','needs_input'):
                         self.store.update(previous,phase='stopped')
+                self.store.confirm_cleanup(attempt,closed)
+                if attempt in self.store.cleanup_reservations():raise ValueError('cleanup_binding_unknown')
                 self.store.lifecycle_transition(key,'completed','quiescent');return
             if kind=='respond':
                 target=command['target_command_id'];app=worker['apps'].get(target);reply=worker['replies'].get(target)
@@ -318,6 +328,8 @@ class LifecycleConnector(Connector):
                 app=self.app_factory(tree['path'],request_handler=on_request);worker['apps'][key]=app
                 self.api.validate_command(key)
                 thread=app.create_thread(tree['path'],command_id=key)
+            if not hasattr(app,'resource_id'):app.resource_id=key
+            self.store.update(key,resource_id=app.resource_id)
             self.api.validate_command(key)
             result=app.start_turn(thread,key,command['input'])
             if result['phase']!='executing':raise ValueError('turn_start_unknown')

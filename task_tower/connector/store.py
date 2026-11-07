@@ -9,7 +9,7 @@ import hashlib
 import uuid
 from ..project_connections import safe_config_path
 from ..service.beads import identity
-from ..service.store import encoded
+from ..service.store import encoded,utc
 
 class ConnectorStore:
     def __init__(self,path,connector_id):
@@ -96,6 +96,23 @@ CREATE TABLE IF NOT EXISTS claims (key TEXT PRIMARY KEY,data TEXT NOT NULL);
             data=self.command(key);data.update(changes);self._save(data);return data
     def commands(self):
         with self.lock:return [json.loads(r[0]) for r in self.db.execute('SELECT data FROM inbox ORDER BY rowid')]
+    def confirm_cleanup(self,attempt,closed_resources):
+        # Caller supplies ONLY resources whose retained owned transport close()
+        # succeeded. No handle discovery, packet ordering, or phase inference.
+        identity(attempt);closed=set(closed_resources)
+        for key in closed:identity(key)
+        if not closed:return set()
+        confirmed=set()
+        with self.lock,self.db:
+            for row in self.db.execute('SELECT data FROM inbox').fetchall():
+                data=json.loads(row[0]);binding=data.get('cleanup_resources')
+                if (data['command']['attempt_id']!=attempt or data.get('cleanup_confirmed') is not False
+                        or not isinstance(binding,list) or not binding or not all(isinstance(r,str) and r in closed for r in binding)):continue
+                data['cleanup_confirmed']=True
+                data.setdefault('cleanup_history',[]).append(dict(kind='owned_transport_cleanup',resource_ids=list(binding),confirmed_at=utc()))
+                self._save(data);confirmed.add(data['command']['command_id'])
+        return confirmed
+
     def cleanup_reservations(self):
         # False is a durable unknown/pending cleanup fence, never inferred away
         # from process restart, a completed command, or a closed native task.

@@ -169,6 +169,10 @@ CREATE TABLE IF NOT EXISTS repository_delivery (repository TEXT PRIMARY KEY,atte
                 merge=self.merge_expected(r,p,a['head_sha'],a['base_sha'])
                 self._notify_merge(command,api,merge)
                 evidence=self.verify_main(r,p,merge['main_sha'])
+                # This commit MUST precede an acceptance effect that can free the
+                # service slot, including lost reply + unavailable GET readback.
+                self.store.update(key,cleanup_confirmed=False,acceptance_request_id=key)
+                if not self.store.command(key).get('cleanup_resources'):raise ValueError('cleanup_binding_unknown')
                 try:accepted=api.accept(a['attempt_id'],key,merge,evidence)
                 except Exception:
                     current=api.request('GET','/v1/attempts/'+a['attempt_id'])['attempt']
