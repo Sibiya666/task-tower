@@ -47,6 +47,9 @@ published approved task, not from arbitrary assignment prose. An empty list is
 valid for an operator CLI config. `projects` retains trusted host mappings
 `{project_id: {repository, worktree_root}}`; no path comes from the HTTP API.
 An optional connector `max_active_tasks` defaults to 2 and bounds local workers.
+Reactivating a stopped existing worker also requires a local slot. Queued model
+commands reserve capacity before consumption; respond/quiesce remain available
+for existing attempts when the limit is full or has been lowered.
 
 ```console
 python -m task_tower.connector.cli work --config <private-connector-config>

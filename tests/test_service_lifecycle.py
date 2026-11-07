@@ -403,3 +403,92 @@ class RunningCommandFenceTests(unittest.TestCase):
         self.emit(a,'disconnected')
         with self.assertRaises(ServiceError):self.s.validate_lifecycle_command(c['command_id'],'host1')
         self.assertEqual(self.s.active_count('host1'),1)
+
+class LocalCapacityAdmissionTests(unittest.TestCase):
+    """Real service2/connector1 admission; only owned RPC workers are held at a barrier."""
+    def setUp(self):
+        import queue,threading,uuid
+        from task_tower.connector.client import APIClient,LifecycleConnector,Connector
+        from task_tower.connector.store import ConnectorStore
+        from task_tower.service.api import make_server
+        LifecycleTests.setUp(self)
+        self.host='capacity-'+uuid.uuid4().hex
+        self.cs=ConnectorStore(self.root/'local',self.host);self.addCleanup(self.cs.close)
+        self.server=make_server(self.s,{self.host:dict(token='a'*40,projects=['p'])},port=0)
+        self.thread=threading.Thread(target=self.server.serve_forever,daemon=True);self.thread.start()
+        self.addCleanup(lambda:(self.server.shutdown(),self.server.server_close(),self.thread.join(2)))
+        self.api=APIClient('http://127.0.0.1:'+str(self.server.server_port),self.host,'a'*40)
+        self.c=LifecycleConnector(self.cs,self.api,None,None,max_active_tasks=1)
+        # Existing workers are deliberately held before queue consumption: this is
+        # the reservation window; no model or transport behavior is mocked here.
+        self.addCleanup(lambda:Connector.close(self.c))
+    def emit(self,a,kind,**payload):
+        import uuid
+        return self.api.send_event(dict(version=1,event_id=str(uuid.uuid4()),attempt_id=a['attempt_id'],connector_id=self.host,lifecycle=dict(kind=kind,**payload)))['attempt']
+    def worker(self):
+        import queue
+        return dict(queue=queue.Queue(4),apps={},replies={},busy=False,reserved=0)
+    def active(self,i):
+        a=self.s.claim_request('capacity-r'+str(i),'p','pilot-'+str(i),self.host)
+        self.api.dispatch(a['attempt_id'],BASE)
+        command=next(c for c in self.api.commands() if c['attempt_id']==a['attempt_id'])
+        self.cs.receive(command);self.cs.update(command['command_id'],phase='executing',thread_id='author'+str(i),turn_id='t'+str(i))
+        self.emit(a,'started',command_id=command['command_id'],thread_id='author'+str(i),turn_id='t'+str(i))
+        worker=self.worker();worker['apps'][command['command_id']]=object();self.c.workers[a['attempt_id']]=worker
+        return a,command,worker
+    def paused(self,i):
+        a,command,worker=self.active(i)
+        self.emit(a,'pause');stop=next(c for c in self.api.commands() if c['attempt_id']==a['attempt_id'])
+        self.emit(a,'quiescent',command_id=stop['command_id'])
+        worker['apps'].clear();self.cs.update(command['command_id'],phase='completed')
+        return a,command,worker
+    def test_service2_connector1_existing_idle_resume_waits_for_local_slot(self):
+        active,active_command,aw=self.active(0);paused,_,pw=self.paused(1)
+        self.api.resume(paused['attempt_id'])
+        revision=next(c for c in self.api.commands() if c['attempt_id']==paused['attempt_id'])
+        self.c.tick()
+        self.assertTrue(aw['apps']);self.assertTrue(pw['queue'].empty())
+        self.assertNotIn(revision['command_id'],self.c.seen)
+        self.assertFalse(any(d['command']['command_id']==revision['command_id'] for d in self.cs.commands()))
+        self.assertEqual(self.s.active_count(self.host),2)
+        self.emit(active,'pause');stop=next(c for c in self.api.commands() if c['attempt_id']==active['attempt_id'])
+        self.emit(active,'quiescent',command_id=stop['command_id'])
+        aw['apps'].clear();self.cs.update(active_command['command_id'],phase='completed')
+        self.c.tick();self.assertEqual(pw['queue'].qsize(),1)
+        self.assertIn(revision['command_id'],self.c.seen)
+        self.c.tick();self.assertEqual(pw['queue'].qsize(),1)
+    def test_queued_activation_reserves_slot_before_existing_idle_worker_consumes(self):
+        first,_,fw=self.paused(0);second,_,sw=self.paused(1)
+        self.api.resume(first['attempt_id']);self.api.resume(second['attempt_id'])
+        self.c.tick()
+        self.assertEqual(fw['queue'].qsize()+sw['queue'].qsize(),1)
+        self.assertEqual(len([d for d in self.cs.commands() if d['command']['kind']=='revise']),1)
+        # Repeated polling must retain the same reservation and defer the other ID.
+        self.c.tick()
+        self.assertEqual(fw['queue'].qsize()+sw['queue'].qsize(),1)
+        self.assertEqual(len([d for d in self.cs.commands() if d['command']['kind']=='revise']),1)
+    def test_quiesce_for_existing_idle_worker_is_not_blocked_by_full_capacity(self):
+        active,_,aw=self.active(0);paused,_,pw=self.paused(1)
+        self.api.resume(paused['attempt_id']);self.emit(paused,'pause')
+        stop=next(c for c in self.api.commands() if c['attempt_id']==paused['attempt_id'])
+        self.assertEqual(stop['kind'],'quiesce');self.c.tick()
+        self.assertEqual(pw['queue'].get_nowait()['command_id'],stop['command_id'])
+        self.assertTrue(aw['apps']);self.assertEqual(pw['reserved'],0)
+    def test_respond_after_limit_reduction_preserves_existing_active_attempts(self):
+        self.c.max_active_tasks=2
+        first,command,fw=self.active(0);second,_,sw=self.active(1)
+        self.c.max_active_tasks=1
+        request=dict(method='item/commandExecution/requestApproval',request_id=99,question='Explicit fixture?')
+        self.emit(first,'approval',command_id=command['command_id'],decision_id='capacity-decision',request=request)
+        self.cs.update(command['command_id'],phase='needs_input',decision=request)
+        class App:
+            def __init__(self):self.responses=[]
+            def respond(self,request,answer):self.responses.append((request,answer))
+        app=App();fw['apps'][command['command_id']]=app
+        self.api.respond('capacity-decision','decline')
+        reply=next(c for c in self.api.commands() if c['kind']=='respond')
+        self.c.tick()
+        self.assertEqual(self.cs.command(reply['command_id'])['phase'],'completed')
+        self.assertEqual(app.responses,[(request,'decline')])
+        self.assertTrue(fw['apps']);self.assertTrue(sw['apps'])
+        self.assertTrue(self.c.flush());self.assertEqual(self.s.attempt(first['attempt_id'])['phase'],'executing')

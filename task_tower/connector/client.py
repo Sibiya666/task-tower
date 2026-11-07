@@ -168,6 +168,10 @@ class LifecycleConnector(Connector):
         self.max_active_tasks=max_active_tasks;self.app_factory=app_factory
         self.workers={};self.worker_guard=threading.RLock();self.stop=threading.Event();self.seen=set()
 
+    @staticmethod
+    def _occupied(worker):
+        return bool(worker['apps']) or worker['busy'] or worker.get('reserved',0)>0
+
     def tick(self):
         self._deliver_async()
         try:commands=self.api.commands()
@@ -182,19 +186,25 @@ class LifecycleConnector(Connector):
                 self.seen.add(key);continue
             with self.worker_guard:
                 worker=self.workers.get(attempt)
-                active=sum(bool(w['apps']) or w['busy'] for w in self.workers.values())
-                if worker is None:
-                    if active>=self.max_active_tasks:continue
-                    worker=dict(queue=queue.Queue(4),apps={},replies={},busy=True)
+                execution=command['kind'] in ('execute','review','revise')
+                active=sum(self._occupied(w) for w in self.workers.values())
+                if execution and (worker is None or not self._occupied(worker)) and active>=self.max_active_tasks:
+                    continue
+                self.store.receive(command);self.seen.add(key)
+                new_worker=worker is None
+                if new_worker:
+                    worker=dict(queue=queue.Queue(4),apps={},replies={},busy=False,reserved=0)
                     self.workers[attempt]=worker
                     worker['thread']=threading.Thread(target=self._work,args=(attempt,worker),daemon=True)
-                    worker['thread'].start()
-                self.store.receive(command);self.seen.add(key)
-                if command['kind']=='respond':
-                    # RPC may be waiting for the initial turn/start ACK; its bounded
-                    # worker cannot consume a queued reply until that request returns.
-                    self._execute_lifecycle(command,worker)
-                else:worker['queue'].put_nowait(command)
+                # Reserve before enqueueing, including reactivation of a quiescent
+                # existing worker. A dequeue cannot open a gap before busy=True.
+                if execution:worker['reserved']=worker.get('reserved',0)+1
+                if command['kind']!='respond':worker['queue'].put_nowait(command)
+                if new_worker:worker['thread'].start()
+            if command['kind']=='respond':
+                # Do not hold admission's lock during bounded HTTP/RPC. Other live
+                # workers must keep draining notifications while a reply is sent.
+                self._execute_lifecycle(command,worker)
         return True
 
     def _work(self,attempt,worker):
@@ -204,9 +214,13 @@ class LifecycleConnector(Connector):
                 try:command=worker['queue'].get(timeout=.02)
                 except queue.Empty:command=None
                 if command is not None:
-                    worker['busy']=True
-                    self._execute_lifecycle(command,worker)
-                    worker['busy']=False
+                    with self.worker_guard:
+                        worker['busy']=True
+                        if command['kind'] in ('execute','review','revise'):
+                            worker['reserved']=max(0,worker.get('reserved',0)-1)
+                    try:self._execute_lifecycle(command,worker)
+                    finally:
+                        with self.worker_guard:worker['busy']=False
                 for key,app in list(worker['apps'].items()):
                     data=self.store.command(key)
                     if data['phase'] in ('executing','needs_input'):
