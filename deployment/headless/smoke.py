@@ -32,6 +32,15 @@ def run(image, receipt, docker='docker'):
     created=False
     try:
         evidence['image_id']=call('image','inspect',image,'--format','{{.Id}}')
+        audit="from pathlib import Path;import hashlib,json;root=Path('/app');print(json.dumps({p.relative_to(root).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in root.rglob('*') if p.is_file()},sort_keys=True))"
+        actual=json.loads(call('run','--rm','--network','none','--read-only','--cap-drop','ALL',
+                               '--security-opt','no-new-privileges','--entrypoint','python3',image,'-c',audit))
+        root=Path(__file__).resolve().parents[2]
+        expected={p.relative_to(root).as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
+                  for p in (root/'task_tower').rglob('*.py')}
+        if actual!=expected:raise RuntimeError('image_source_or_context_mismatch')
+        evidence['python_source_files']=len(actual)
+        evidence['source_manifest_sha256']=hashlib.sha256(json.dumps(actual,sort_keys=True).encode()).hexdigest()
         call('volume','create',beads);call('volume','create',runtime)
         # No host bind mounts; ephemeral input provisions a secret with mode0600.
         script="""import json,os,subprocess
