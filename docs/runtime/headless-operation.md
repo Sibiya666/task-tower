@@ -326,3 +326,11 @@ The canonical backlog remains unchanged. Any later native backup/restore and
 single-writer switch requires its own explicit authorization and proof that no
 other writer or live claim is affected. Never copy the active canonical database,
 mount it simultaneously on host/container, or clear an unknown-effect fence.
+
+
+Transport control queues remain bounded. Command output display deltas are not
+lifecycle evidence and are excluded before that queue; RPC responses, callbacks
+and turn completions are preserved. Oversize/malformed messages and control-queue
+overflow still fail closed. A fixed, payload-free transport failure reason is
+retained in the connector command journal with its reconciliation fence. This
+never authorizes replay of an unknown turn, merge or close.
