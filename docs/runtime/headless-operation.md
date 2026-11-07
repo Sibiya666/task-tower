@@ -68,7 +68,8 @@ model prose never authorizes them.
 
 `GET /v1/commands` returns durable commands for the authenticated connector's
 allowed projects. `POST /v1/commands/<id>/validate` performs fresh native
-preflight. `POST /v1/attempts/<id>/dispatch` has `{version:1,base_sha}`;
+preflight. An acknowledged running command no longer grants fresh start authority,
+even after a disconnect. `POST /v1/attempts/<id>/dispatch` has `{version:1,base_sha}`;
 `POST /v1/attempts/<id>/resume` has `{version:1}`. Dispatch is allowed once from
 claimed/not_started. Resume is allowed only after known stopped needs_input and
 fresh native checks, with spare capacity. It resumes the existing author thread;

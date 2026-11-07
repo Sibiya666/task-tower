@@ -387,3 +387,19 @@ class AdditionalLifecycleFaults(unittest.TestCase):
     def test_managed_attempt_cannot_create_decision_from_freeform_question(self):
         a=self.start()
         with self.assertRaises(ServiceError):self.s.decision(dict(version=1,decision_id='prose',attempt_id=a['attempt_id'],connector_id='host1',question='agent says approve'))
+
+class RunningCommandFenceTests(unittest.TestCase):
+    setUp=LifecycleTests.setUp
+    claim=LifecycleTests.claim
+    event=LifecycleTests.event
+    emit=LifecycleTests.emit
+    commands=LifecycleTests.commands
+    start=LifecycleTests.start
+    def test_acknowledged_start_revokes_fresh_effect_authority(self):
+        a=self.start();c=self.commands(a)[-1]
+        self.assertEqual(self.s.validate_lifecycle_command(c['command_id'],'host1')['execution_state'],'not_started')
+        self.emit(a,'started',command_id=c['command_id'],thread_id='author',turn_id='t')
+        with self.assertRaises(ServiceError):self.s.validate_lifecycle_command(c['command_id'],'host1')
+        self.emit(a,'disconnected')
+        with self.assertRaises(ServiceError):self.s.validate_lifecycle_command(c['command_id'],'host1')
+        self.assertEqual(self.s.active_count('host1'),1)
