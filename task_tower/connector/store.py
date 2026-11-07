@@ -42,9 +42,10 @@ CREATE TABLE IF NOT EXISTS claims (key TEXT PRIMARY KEY,data TEXT NOT NULL);
                 self.db.execute("INSERT OR IGNORE INTO metadata VALUES ('connector_id',?)",(connector_id,))
                 for row in self.db.execute('SELECT data FROM inbox').fetchall():
                     data=json.loads(row[0])
-                    if data['phase'] in ('queued','preparing','creating_thread','prepared','starting','executing'):
+                    if data['phase'] in ('queued','preparing','creating_thread','prepared','starting','executing') or (data['command'].get('kind') and data['phase']=='needs_input'):
                         data['phase']='needs_reconciliation';self._save(data)
-                        self.event(data['command']['attempt_id'],'needs_reconciliation','unknown')
+                        if data['command'].get('kind'):self.lifecycle_event(data['command']['attempt_id'],'failed',command_id=data['command']['command_id'])
+                        else:self.event(data['command']['attempt_id'],'needs_reconciliation','unknown')
         except BaseException:self.close();raise
     def close(self):
         with self.lock:
@@ -53,11 +54,17 @@ CREATE TABLE IF NOT EXISTS claims (key TEXT PRIMARY KEY,data TEXT NOT NULL);
             self.guards=[]
     def receive(self,command):
         fields={'version','command_id','attempt_id','project_id','base_sha','input'}
+        managed=isinstance(command,dict) and command.get('kind') in ('execute','review','revise','quiesce','respond')
+        if managed:
+            fields={'version','kind','command_id','attempt_id','project_id','base_sha'}
+            if command['kind'] in ('execute','review','revise'):fields|={'input','source'}
+            if command['kind']=='revise':fields.add('thread_id')
+            if command['kind']=='respond':fields|={'decision_id','target_command_id','request','answer'}
         if not isinstance(command,dict) or set(command)!=fields or type(command['version']) is not int or command['version']!=1:raise ValueError('invalid_command')
         for k in ('command_id','attempt_id','project_id'):identity(command[k])
         import re
         if not isinstance(command['base_sha'],str) or not re.fullmatch('[0-9a-f]{40}',command['base_sha']):raise ValueError('invalid_sha')
-        value=command['input']
+        value=command.get('input',{'text':'control'})
         if not isinstance(value,dict) or set(value)!={'text'} or not isinstance(value['text'],str) or not 1<=len(value['text'])<=32768:raise ValueError('invalid_input')
         fingerprint=encoded(command)
         with self.lock:
@@ -65,7 +72,12 @@ CREATE TABLE IF NOT EXISTS claims (key TEXT PRIMARY KEY,data TEXT NOT NULL);
             if row:
                 if row['fingerprint']!=fingerprint:raise ValueError('command_conflict')
                 return json.loads(row['data'])
-            if any(json.loads(x[0])['command']['attempt_id']==command['attempt_id'] for x in self.db.execute('SELECT data FROM inbox')):raise ValueError('attempt_already_assigned')
+            if not managed and any(json.loads(x[0])['command']['attempt_id']==command['attempt_id'] for x in self.db.execute('SELECT data FROM inbox')):raise ValueError('attempt_already_assigned')
+            if managed:
+                from .briefs import validate_source
+                if 'source' in command:validate_source(command['source'])
+                if command['kind']=='revise':identity(command['thread_id'])
+                if command['kind']=='respond' and command['answer'] not in ('approve','decline'):raise ValueError('invalid_answer')
             data=dict(command=command,phase='queued',thread_id=None,turn_id=None)
             with self.db:self.db.execute('INSERT INTO inbox VALUES (?,?,?)',(command['command_id'],fingerprint,encoded(data)))
             return data
@@ -116,3 +128,18 @@ CREATE TABLE IF NOT EXISTS claims (key TEXT PRIMARY KEY,data TEXT NOT NULL);
         with self.lock:
             row=self.db.execute('SELECT data FROM claims WHERE key=?',(encoded([project,bead]),)).fetchone()
             return json.loads(row[0]) if row else None
+
+    def lifecycle_event(self,attempt,kind,**payload):
+        identity(attempt)
+        event=dict(version=1,event_id=str(uuid.uuid4()),attempt_id=attempt,connector_id=self.connector_id,lifecycle=dict(kind=kind,**payload))
+        if len(encoded(event).encode('utf-8'))>65536:raise ValueError('event_body_limit')
+        with self.lock,self.db:self.db.execute('INSERT INTO outbox(event_id,data) VALUES (?,?)',(event['event_id'],encoded(event)))
+        return event
+
+    def lifecycle_transition(self,key,phase,kind,**payload):
+        with self.lock,self.db:
+            data=self.command(key);data['phase']=phase;self._save(data)
+            event=dict(version=1,event_id=str(uuid.uuid4()),attempt_id=data['command']['attempt_id'],connector_id=self.connector_id,lifecycle=dict(kind=kind,command_id=key,**payload))
+            if len(encoded(event).encode('utf-8'))>65536:raise ValueError('event_body_limit')
+            self.db.execute('INSERT INTO outbox(event_id,data) VALUES (?,?)',(event['event_id'],encoded(event)))
+            return data

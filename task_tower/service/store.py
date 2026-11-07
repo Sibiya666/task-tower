@@ -56,8 +56,13 @@ def validate_plan(plan):
     return tasks
 
 
-class Store:
-    def __init__(self,path,beads,*,approved_plans=None):
+from .lifecycle import LifecycleStore
+
+
+class Store(LifecycleStore):
+    def __init__(self,path,beads,*,approved_plans=None,max_active_tasks=2):
+        if type(max_active_tasks) is not int or not 1<=max_active_tasks<=32:raise ValueError('invalid_capacity')
+        self.max_active_tasks=max_active_tasks
         self.path=safe_config_path(Path(path).absolute())
         self.beads=beads
         self.approved_plans={p:frozenset(ds) for p,ds in (approved_plans or {}).items()}
@@ -82,6 +87,9 @@ class Store:
             self.db.execute('PRAGMA journal_mode=WAL')
             self.db.execute('PRAGMA synchronous=FULL')
             self.db.executescript("""
+                CREATE TABLE IF NOT EXISTS lifecycle_commands (
+                  command_id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL, connector_id TEXT NOT NULL,
+                  state TEXT NOT NULL, data TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS attempts (
                   attempt_id TEXT PRIMARY KEY, project_id TEXT NOT NULL, bead_id TEXT NOT NULL,
                   connector_id TEXT NOT NULL, actor TEXT NOT NULL, phase TEXT NOT NULL,
@@ -164,6 +172,7 @@ class Store:
                 with self.db:self.db.execute('INSERT INTO commands VALUES (?,?,?,?,?,?,?)',
                     (str(uuid.uuid4()),request_id,fingerprint,row['attempt_id'],data['phase'],encoded(data),utc()))
                 return data
+            if self.active_count(connector_id)>=self.max_active_tasks:raise ServiceError('connector_capacity')
             attempt_id=str(uuid.uuid4());actor='tower-'+attempt_id
             data=dict(attempt_id=attempt_id,project_id=project_id,bead_id=bead_id_,connector_id=connector_id,
                 actor=actor,phase='claim_pending',execution_state='not_started',connection_state='connected',
@@ -252,11 +261,12 @@ class Store:
                 or (status!='deferred' and row.get('defer_until'))):
             raise ServiceError('import_readback_mismatch')
 
-    def validate_execution(self,attempt_id,connector_id):
+    def validate_execution(self,attempt_id,connector_id,*,lifecycle=False):
         """Fresh native read-only boundary; cached attempt is never executable authority."""
         with self.lock:
             data=self.attempt(attempt_id,connector_id)
-            if data['phase']!='claimed' or data['execution_state']!='not_started':
+            allowed={'claimed','executing','reviewing','revising','needs_input'} if lifecycle else {'claimed'}
+            if data['phase'] not in allowed or (not lifecycle and data['execution_state']!='not_started'):
                 raise ServiceError('execution_fenced')
             deadline=time.monotonic()+30
             task=self._approved_task(data['project_id'],data['bead_id'])
@@ -274,6 +284,9 @@ class Store:
             return data
 
     def record_event(self,event):
+        if isinstance(event,dict) and 'lifecycle' in event:return self.record_lifecycle_event(event)
+        if isinstance(event,dict) and self.attempt(event.get('attempt_id'),event.get('connector_id')).get('managed'):
+            raise ServiceError('managed_event_required',403)
         required={'version','event_id','attempt_id','connector_id','phase','execution_state','connection_state'}
         if not isinstance(event,dict) or set(event) not in (required,required|{'execution'}) or type(event['version']) is not int or event['version']!=1:
             raise ServiceError('invalid_event',400)
@@ -327,7 +340,8 @@ class Store:
         if not isinstance(value['question'],str) or not 1<=len(value['question'])<=4096:
             raise ServiceError('invalid_question',400)
         with self.lock:
-            self.attempt(value['attempt_id'],value['connector_id'])
+            if self.attempt(value['attempt_id'],value['connector_id']).get('managed'):
+                raise ServiceError('structured_approval_required',403)
             row=self.db.execute('SELECT data FROM decisions WHERE decision_id=?',(value['decision_id'],)).fetchone()
             if row:
                 if row[0]!=encoded(value):raise ServiceError('decision_conflict')

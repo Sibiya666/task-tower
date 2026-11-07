@@ -9,6 +9,7 @@ pending commands are fenced. New effects require a fresh explicit assignment.
 """
 import argparse
 import hashlib
+import json
 import re
 from pathlib import Path
 import sys
@@ -16,7 +17,7 @@ import time
 from .store import ConnectorStore
 from .worktrees import Worktrees
 from .app_server import AppServer,DecisionRequired
-from .client import APIClient,Connector
+from .client import APIClient,Connector,LifecycleConnector
 from ..service.beads import strict_json,identity,bead_id
 from ..service.cli import read_token,_absolute
 from ..service.store import encoded
@@ -27,25 +28,44 @@ def load_config(path):
     if len(raw)>65536:raise ValueError('configuration_limit')
     value=strict_json(raw.decode('utf-8'))
     required={'version','connector_id','endpoint','token_file','journal','app_server','projects','assignment'}
-    if not isinstance(value,dict) or set(value)!=required or type(value['version']) is not int or value['version']!=1:raise ValueError('invalid_configuration')
+    if not isinstance(value,dict) or set(value) not in (required,required-{'assignment'}|{'assignments'},required-{'assignment'}|{'assignments','max_active_tasks'}) or type(value['version']) is not int or value['version']!=1:raise ValueError('invalid_configuration')
     identity(value['connector_id'])
     for k in ('token_file','journal','app_server'):value[k]=_absolute(value[k])
     if len({value[k] for k in ('token_file','journal','app_server')})!=3:raise ValueError('private_file_collision')
     if not isinstance(value['projects'],dict) or not 1<=len(value['projects'])<=32:raise ValueError('invalid_projects')
-    a=value['assignment']
-    if not isinstance(a,dict) or set(a)!={'project_id','bead_id','base_sha','input'}:raise ValueError('invalid_assignment')
-    identity(a['project_id']);bead_id(a['bead_id'])
-    if not isinstance(a['base_sha'],str) or re.fullmatch('[0-9a-f]{40}',a['base_sha']) is None:raise ValueError('exact_sha_required')
-    if not isinstance(a['input'],dict) or set(a['input'])!={'text'} or not isinstance(a['input']['text'],str) or not 1<=len(a['input']['text'])<=32768:raise ValueError('invalid_input')
-    if a['project_id'] not in value['projects']:raise ValueError('project_forbidden')
+    assignments=[value['assignment']] if 'assignment' in value else value['assignments']
+    if not isinstance(assignments,list) or len(assignments)>32:raise ValueError('invalid_assignments')
+    for a in assignments:
+        if not isinstance(a,dict) or set(a)!={'project_id','bead_id','base_sha','input'}:raise ValueError('invalid_assignment')
+        identity(a['project_id']);bead_id(a['bead_id'])
+        if not isinstance(a['base_sha'],str) or re.fullmatch('[0-9a-f]{40}',a['base_sha']) is None:raise ValueError('exact_sha_required')
+        if not isinstance(a['input'],dict) or set(a['input'])!={'text'} or not isinstance(a['input']['text'],str) or not 1<=len(a['input']['text'])<=32768:raise ValueError('invalid_input')
+        if a['project_id'] not in value['projects']:raise ValueError('project_forbidden')
+    value['assignments']=assignments
+    if type(value.get('max_active_tasks',2)) is not int or not 1<=value.get('max_active_tasks',2)<=32:raise ValueError('invalid_capacity')
     return value
 
 def main(argv=None):
     parser=argparse.ArgumentParser(description='Explicit host connector assignment; merge disabled')
-    sub=parser.add_subparsers(dest='action',required=True);run=sub.add_parser('run');run.add_argument('--config',required=True)
+    sub=parser.add_subparsers(dest='action',required=True)
+    for name in ('run','work','resume'):
+        action=sub.add_parser(name);action.add_argument('--config',required=True)
+        if name=='resume':action.add_argument('attempt_id')
+    decision=sub.add_parser('decision');ds=decision.add_subparsers(dest='decision_action',required=True)
+    for name in ('list','respond'):
+        action=ds.add_parser(name);action.add_argument('--config',required=True)
+        if name=='respond':action.add_argument('decision_id');action.add_argument('--answer',choices=('approve','decline'),required=True)
     store=app=connector=None;command=None
     try:
         args=parser.parse_args(argv);cfg=load_config(args.config)
+        if args.action in ('decision','resume'):
+            api=APIClient(cfg['endpoint'],cfg['connector_id'],read_token(cfg['token_file']))
+            if args.action=='resume':value=api.resume(args.attempt_id)
+            elif args.decision_action=='list':value=api.decisions()
+            else:value=api.respond(args.decision_id,args.answer)
+            print(json.dumps(value,ensure_ascii=True));return 0
+        if args.action=='work':return work(cfg)
+        if 'assignment' not in cfg:raise ValueError('legacy_assignment_required')
         store=ConnectorStore(cfg['journal'],cfg['connector_id'])
         trees=Worktrees(cfg['projects'],store)
         api=APIClient(cfg['endpoint'],cfg['connector_id'],read_token(cfg['token_file']))
@@ -97,5 +117,37 @@ def main(argv=None):
         if not cleanup:
             print('connector: owned process cleanup unconfirmed; reconciliation required',file=sys.stderr)
             return 4
+
+def work(cfg):
+    """Explicit foreground run. Only configured assignments may be admitted.
+
+    A blocked third claim waits in native Beads, never in a second task queue.
+    Inherited authorization/model/approval policies remain untouched.
+    """
+    store=ConnectorStore(cfg['journal'],cfg['connector_id']);connector=None
+    try:
+        trees=Worktrees(cfg['projects'],store)
+        api=APIClient(cfg['endpoint'],cfg['connector_id'],read_token(cfg['token_file']))
+        connector=LifecycleConnector(store,api,trees,lambda cwd,request_handler=None:AppServer(store,executable=cfg['app_server'],cwd=Path(cwd),request_handler=request_handler),max_active_tasks=cfg.get('max_active_tasks',2))
+        admitted=set();next_admission=0
+        while True:
+            connector.tick()
+            if time.monotonic()>=next_admission:
+                next_admission=time.monotonic()+2
+                for assignment in cfg['assignments']:
+                    key=(assignment['project_id'],assignment['bead_id'])
+                    if key in admitted:continue
+                    attempt=connector.claim(*key)
+                    if attempt is None:continue
+                    current=api.request('GET','/v1/attempts/'+identity(attempt['attempt_id']))['attempt']
+                    if current['phase']=='claimed' and not current.get('managed'):api.dispatch(current['attempt_id'],assignment['base_sha'])
+                    admitted.add(key)
+            time.sleep(.1)
+    except KeyboardInterrupt:return 4
+    finally:
+        # Keep journals open if containment cleanup is unconfirmed.
+        if connector is not None:connector.close()
+        store.close()
+
 
 if __name__=='__main__':raise SystemExit(main())

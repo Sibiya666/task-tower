@@ -142,6 +142,8 @@ def make_server(store,connectors,*,host='127.0.0.1',port=8765,poll_seconds=2):
                     if uri.path.startswith('/v1/attempts/') and not query:
                         attempt=self._owned(uri.path[len('/v1/attempts/'):],connector,entry)
                         self._send(200,dict(attempt=attempt));return
+                    if uri.path=='/v1/commands' and not query:
+                        self._send(200,dict(commands=[c for c in store.lifecycle_commands(connector) if c['project_id'] in entry['projects']],poll_seconds=poll_seconds));return
                     if uri.path=='/v1/decisions' and not query:
                         decisions=[d for d in store.decisions(connector)
                                    if store.attempt(d['attempt_id'],connector)['project_id'] in entry['projects']]
@@ -155,6 +157,22 @@ def make_server(store,connectors,*,host='127.0.0.1',port=8765,poll_seconds=2):
                     except ServiceError:pass
                 if 'connector_id' in body and body['connector_id']!=connector:
                     raise ServiceError('connector_forbidden',403)
+                if uri.path.startswith('/v1/commands/') and uri.path.endswith('/validate'):
+                    self._fields(body,set());key=uri.path[len('/v1/commands/'):-len('/validate')]
+                    a=store.validate_lifecycle_command(key,connector);self._project(entry,a['project_id'])
+                    self._send(200,dict(attempt=a));return
+                if uri.path.startswith('/v1/attempts/') and uri.path.endswith(('/dispatch','/resume')):
+                    dispatch=uri.path.endswith('/dispatch');suffix='/dispatch' if dispatch else '/resume'
+                    self._fields(body,{'base_sha'} if dispatch else set())
+                    key=uri.path[len('/v1/attempts/'):-len(suffix)];self._owned(key,connector,entry)
+                    a=store.start_lifecycle(key,connector,body['base_sha']) if dispatch else store.resume_lifecycle(key,connector)
+                    self._send(200,dict(attempt=a));return
+                if uri.path.startswith('/v1/decisions/') and uri.path.endswith('/respond'):
+                    self._fields(body,{'answer'});key=uri.path[len('/v1/decisions/'):-len('/respond')]
+                    d=next((d for d in store.decisions(connector) if d['decision_id']==key),None)
+                    if d is None:raise ServiceError('decision_not_found',404)
+                    self._owned(d['attempt_id'],connector,entry)
+                    self._send(200,dict(decision=store.respond_decision(key,connector,body['answer'])));return
                 if uri.path.startswith('/v1/attempts/') and uri.path.endswith('/validate'):
                     self._fields(body,set())
                     key=uri.path[len('/v1/attempts/'):-len('/validate')]
@@ -171,7 +189,7 @@ def make_server(store,connectors,*,host='127.0.0.1',port=8765,poll_seconds=2):
                     result=store.import_plan(body['request_id'],body['project_id'],body['digest'],body['plan'])
                     self._send(200,dict(batch=result));return
                 if uri.path=='/v1/events':
-                    self._fields(body,{'event_id','attempt_id','connector_id','phase','execution_state','connection_state'} | ({'execution'} if 'execution' in body else set()))
+                    self._fields(body,{'event_id','attempt_id','connector_id','lifecycle'} if 'lifecycle' in body else {'event_id','attempt_id','connector_id','phase','execution_state','connection_state'} | ({'execution'} if 'execution' in body else set()))
                     self._owned(body['attempt_id'],connector,entry)
                     self._send(200,dict(attempt=store.record_event(body)));return
                 if uri.path=='/v1/decisions':
