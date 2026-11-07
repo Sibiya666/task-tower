@@ -201,7 +201,9 @@ class PipelineJournal:
                 if write: db.execute('BEGIN IMMEDIATE')
                 else:
                     db.execute('PRAGMA query_only=ON')
-                    if getattr(self,'_operation_deadline',None) is not None:db.execute('BEGIN')
+                    # Validate related tables and project results from one snapshot.
+                    # Otherwise a concurrent submit can look like an orphan event.
+                    db.execute('BEGIN')
                 app=db.execute('PRAGMA application_id').fetchone()[0]; version=db.execute('PRAGMA user_version').fetchone()[0]
                 objects={(r[0],r[1],r[2]) for r in db.execute("SELECT type,name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%'")}
                 if write and initialize and app==0 and version==0 and not objects:
