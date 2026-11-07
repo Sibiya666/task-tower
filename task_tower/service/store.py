@@ -1,7 +1,7 @@
 """Single-owner SQLite delivery journal. Native Beads remains the only task engine.
 
 Pending external effects are fenced on restart, never automatically replayed.
-No method in this stage accepts delivery, closes a task, or runs a command.
+Trusted typed delivery acceptance is implemented by the acceptance mixin.
 """
 from datetime import datetime, timezone
 import hashlib
@@ -57,11 +57,14 @@ def validate_plan(plan):
 
 
 from .lifecycle import LifecycleStore
+from .acceptance import AcceptanceStore
 
 
-class Store(LifecycleStore):
-    def __init__(self,path,beads,*,approved_plans=None,max_active_tasks=2):
+class Store(LifecycleStore,AcceptanceStore):
+    def __init__(self,path,beads,*,approved_plans=None,max_active_tasks=2,delivery_projects=None):
         if type(max_active_tasks) is not int or not 1<=max_active_tasks<=32:raise ValueError('invalid_capacity')
+        self.delivery_projects=dict(delivery_projects or {})
+        if any(p not in beads.projects or not isinstance(r,str) or __import__('re').fullmatch(r'[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9_][A-Za-z0-9_.-]*',r) is None for p,r in self.delivery_projects.items()):raise ValueError('invalid_delivery_scope')
         self.max_active_tasks=max_active_tasks
         self.path=safe_config_path(Path(path).absolute())
         self.beads=beads
@@ -87,6 +90,8 @@ class Store(LifecycleStore):
             self.db.execute('PRAGMA journal_mode=WAL')
             self.db.execute('PRAGMA synchronous=FULL')
             self.db.executescript("""
+                CREATE TABLE IF NOT EXISTS acceptance_effects (attempt_id TEXT PRIMARY KEY,request_id TEXT UNIQUE NOT NULL,fingerprint TEXT NOT NULL,state TEXT NOT NULL,data TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS acceptance_repository (repository TEXT PRIMARY KEY,attempt_id TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS lifecycle_commands (
                   command_id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL, connector_id TEXT NOT NULL,
                   state TEXT NOT NULL, data TEXT NOT NULL);
@@ -261,12 +266,12 @@ class Store(LifecycleStore):
                 or (status!='deferred' and row.get('defer_until'))):
             raise ServiceError('import_readback_mismatch')
 
-    def validate_execution(self,attempt_id,connector_id,*,lifecycle=False):
+    def validate_execution(self,attempt_id,connector_id,*,lifecycle=False,delivery=False):
         """Fresh native read-only boundary; cached attempt is never executable authority."""
         with self.lock:
             data=self.attempt(attempt_id,connector_id)
-            allowed={'claimed','executing','reviewing','revising','needs_input'} if lifecycle else {'claimed'}
-            if data['phase'] not in allowed or (not lifecycle and data['execution_state']!='not_started'):
+            allowed={'awaiting_merge','postmerge'} if delivery else {'claimed','executing','reviewing','revising','needs_input'} if lifecycle else {'claimed'}
+            if data['phase'] not in allowed or (not lifecycle and not delivery and data['execution_state']!='not_started'):
                 raise ServiceError('execution_fenced')
             deadline=time.monotonic()+30
             task=self._approved_task(data['project_id'],data['bead_id'])

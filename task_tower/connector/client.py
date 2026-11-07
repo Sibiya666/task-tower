@@ -1,6 +1,6 @@
 """Bounded authenticated loopback transport and explicit assignment execution.
 
-No role scheduler, review approval, merge or task closure is implemented here.
+Managed commands use fixed role workers and an optional trusted delivery adapter.
 """
 import http.client
 import io
@@ -56,6 +56,7 @@ class APIClient:
             if response.status!=200 or value.get('version')!=1 or 'error' in value:raise ConnectionError('api_request_rejected')
             return value
         finally:connection.close()
+    def accept(self,key,request_id,merge,evidence):return self.request('POST','/v1/attempts/'+quote(identity(key),safe='')+'/accept',dict(version=1,request_id=request_id,merge=merge,evidence=evidence))['attempt']
     def ready(self,project):return self.request('GET','/v1/ready?project_id='+quote(identity(project),safe=''))['ready']
     def claim(self,body):return self.request('POST','/v1/claims',body)['attempt']
     def validate(self,attempt):return self.request('POST','/v1/attempts/'+quote(identity(attempt),safe='')+'/validate',{'version':1})['attempt']
@@ -162,10 +163,10 @@ class LifecycleConnector(Connector):
     Control-plane HTTP and delivery never run on a live RPC polling thread. These
     fixed workers are transport owners, not model-selected assistants/schedulers.
     """
-    def __init__(self,store,api,worktrees,app_factory,*,max_active_tasks=2):
+    def __init__(self,store,api,worktrees,app_factory,*,max_active_tasks=2,delivery=None):
         super().__init__(store,api,None,worktrees)
         if type(max_active_tasks) is not int or not 1<=max_active_tasks<=32:raise ValueError('invalid_capacity')
-        self.max_active_tasks=max_active_tasks;self.app_factory=app_factory
+        self.max_active_tasks=max_active_tasks;self.app_factory=app_factory;self.delivery=delivery
         self.workers={};self.worker_guard=threading.RLock();self.stop=threading.Event();self.seen=set()
 
     @staticmethod
@@ -180,13 +181,17 @@ class LifecycleConnector(Connector):
         for command in commands:
             key=command['command_id'];attempt=command['attempt_id']
             if key in self.seen:continue
+            if command['kind']=='deliver':
+                if self.delivery is None:continue
+                try:self.api.validate_command(key)
+                except Exception:continue  # No host effect or local consumption before repo admission.
             # Replay returns durable local outcome; no second start/response.
             prior=next((d for d in self.store.commands() if d['command']['command_id']==key),None)
             if prior is not None:
                 self.seen.add(key);continue
             with self.worker_guard:
                 worker=self.workers.get(attempt)
-                execution=command['kind'] in ('execute','review','revise')
+                execution=command['kind'] in ('execute','review','revise','deliver')
                 active=sum(self._occupied(w) for w in self.workers.values())
                 if execution and (worker is None or not self._occupied(worker)) and active>=self.max_active_tasks:
                     continue
@@ -216,7 +221,7 @@ class LifecycleConnector(Connector):
                 if command is not None:
                     with self.worker_guard:
                         worker['busy']=True
-                        if command['kind'] in ('execute','review','revise'):
+                        if command['kind'] in ('execute','review','revise','deliver'):
                             worker['reserved']=max(0,worker.get('reserved',0)-1)
                     try:self._execute_lifecycle(command,worker)
                     finally:
@@ -239,6 +244,11 @@ class LifecycleConnector(Connector):
         key=command['command_id'];kind=command['kind'];attempt=command['attempt_id']
         try:
             self.api.validate_command(key)
+            if kind=='deliver':
+                self.store.update(key,phase='starting')
+                self.delivery.run(command,self.api,self.stop)
+                self.store.update(key,phase='completed')
+                return
             if kind=='quiesce':
                 self.store.update(key,phase='starting')
                 for previous,app in list(worker['apps'].items()):
@@ -276,6 +286,8 @@ class LifecycleConnector(Connector):
                 source=self.worktrees.source(command['project_id'],attempt,command['base_sha'])
                 if source!=command['source']:raise ValueError('source_changed_before_review')
                 tree=self.worktrees.prepare_review(command['project_id'],attempt+'-r-'+key[:12],source['head_sha'])
+            elif kind=='revise' and command.get('update_base'):
+                tree=self.worktrees.prepare_revision(command['project_id'],attempt,command['base_sha'],command['update_base'])
             else:tree=self.worktrees.prepare(command['project_id'],attempt,command['base_sha'])
             self.api.validate_command(key)
             if kind=='revise':

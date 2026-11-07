@@ -1,9 +1,10 @@
-# Headless operation through the review boundary
+# Headless execution and trusted delivery
 
-Stage 4 adds fixed executor/reviewer lifecycle commands to the accepted Beads
-service and host connector. GitHub delivery, accepted main, task closure,
-deployment and an autonomous pilot belong to later stages. Model completion and
-`awaiting_merge` do not mean accepted delivery. No UI is required or verified.
+The service and host connector implement fixed executor/reviewer commands and
+opt-in trusted GitHub delivery through exact-main verification and native owner
+closure. Deployment and the real autonomous pilot remain Stage 6 work. Model
+completion and `awaiting_merge` do not mean accepted delivery. No UI is required
+or verified. Implementation and fixture checks do not claim a delivered pilot.
 
 ## Authority and persistence
 
@@ -19,8 +20,8 @@ The managed path below is explicitly started in the foreground. It neither
 installs a service nor registers autostart. Use the already installed Python and
 Codex executable; no model, account, approval policy or sandbox override is sent.
 Keep all configuration, tokens and journals outside source. Model/custom/check
-children receive no GH_TOKEN/GITHUB_TOKEN regardless of case; only later fixed
-trusted host helpers may use host GitHub authentication.
+children receive no GH_TOKEN/GITHUB_TOKEN regardless of case; only fixed trusted
+host GitHub operations may use existing host authentication.
 
 ## Configuration and invocation
 
@@ -102,8 +103,9 @@ The only accepted review result is strict JSON with exactly `verdict`
 Approval requires no findings; changes_requested requires findings. Duplicate
 JSON keys, extra fields, stale SHA, reused/self/invented reviewer identities and
 prose approvals are rejected. Only the authenticated trusted connector binds the
-model result to its actual command/thread/turn. Task 4 stops at awaiting_merge;
-it cannot publish GitHub status, merge or close native tasks.
+model result to its actual command/thread/turn. Without explicit delivery
+configuration, work remains at awaiting_merge. Model processes never publish
+GitHub status, merge or close native tasks.
 
 ## Decisions, outages and stops
 
@@ -135,10 +137,80 @@ results fail closed without truncating the reviewed diff. Inspect retained
 private journals and reconcile; do not replay a fenced command or clear another
 actor's native claim. Transport receipts are not PR/main acceptance receipts.
 
+## Trusted delivery (Stage 5)
+
+Both private service and connector configurations may explicitly include
+`delivery_projects: {project_id: "owner/repository"}`. Omit it to retain the
+review boundary. Each project must already exist in the respective trusted
+configuration. This mapping grants no new credential scope and cannot come
+from a task, model result, HTTP-supplied path or display configuration. Existing
+host credentials are resolved only by the fixed host adapter. The legacy single
+assignment `run` command remains an execution-only path.
+
+Independent approval queues a durable `deliver` command. The connector verifies
+its service assignment and reserves the repository before consuming it. Service
+and connector journals both retain repository ownership through merge and main
+acceptance, including uncertain outcomes. Other repositories can continue; a
+busy repository's unstarted command stays queued. No background deployment or
+second task scheduler is created.
+
+The fixed host operations validate all origin fetch/push URLs against the
+allowlist, push only the owned deterministic branch, and create/reuse its PR to
+main. They require the actual H/B, independent recorded reviewer, all current CI
+and protection. Only the complete expected docs shard matrix may skip. The
+adapter publishes a real `task-tower/pr-acceptance` status bound to the independent
+verdict, verifies its actual creator/id/description, and re-reads H/B and
+mergeability before expected-head protected merge. No native human approval is
+invented, and no protection setting is modified.
+
+A changed base invalidates review, consumes one of the existing three correction
+cycles and returns to the same author thread. A bounded fresh fetch prepares a
+merge in the owned worktree; the executor resolves conflicts and commits it.
+Even a clean upstream merge is left for that executor to commit. Other dirty
+worktrees and unknown update intents remain fenced. New actual source requires
+new CI and a fresh reviewer. A fourth correction requires input and known
+quiescence, as in the execution lifecycle.
+
+Merge intent is committed before the merge request. A lost response causes GET
+readback, never another merge request. Verified merge facts emit one durable
+`merged` event and move the service attempt to `postmerge` while CI is pending.
+No branch/main push check is inferred: the existing PR and postmerge workflows
+are the applicable routes. A postmerge failure leaves Beads open and cannot
+cause re-merge.
+
+Main verification starts with a successful fresh origin/main fetch (60 seconds)
+and local exact SHA/two-parent checks (10 seconds). Failed fetch stops before
+source polling, discovery, a reviewer or acceptance publication. The adapter
+checks actual run/repository/PR chronology, latest run attempt, complete job
+outcomes, artifact provenance and GitHub ZIP digests. Runtime acceptance requires
+all four exact-M manifests, complete execution counts, prescribed exact-once
+selections and fresh checkout discovery through the source-bound verifier, plus
+the complete authentic runtime merge-event. A docs artifact instead requires
+fresh bounded source validation and skipped runtime shards; its typed receipt
+retains `documentation.validation` and `runtime_tests:not_run`.
+
+A fresh owned postmerge app-server reviews the complete actual main diff and
+original criteria in a separate immutable checkout. Its thread must differ from
+all author/premerge threads. Unknown starts, changes requested, source drift,
+unsupported callbacks or approval requests stop for reconciliation; they are
+never automatically approved or converted into acceptance. This bounded MVP
+adds no automatic recovery of such a postmerge review. Existing execution-stage
+structured decisions and explicit CLI responses remain available.
+
+`POST /v1/attempts/<id>/accept` is an authenticated fixed-connector route with
+`{version:1,request_id,merge,evidence}`. The service validates the owned phase,
+repository, H/B/M and typed receipt, then durably saves accepted evidence and a
+close intent before native owner-close. Acceptance requires readback of the
+closed task, preserved owner and the exact native history event carrying the
+receipt reason. Lost close/HTTP responses read back the existing result first;
+an ambiguous outcome retains reconciliation and cannot repeat native close.
+Only confirmed canonical closure releases the acceptance lease and marks the
+attempt accepted. No GitHub Issue is created as a duplicate of Beads.
+
 ## Verification
 
 ```console
-python -m unittest tests.test_service_lifecycle -v
+python -m unittest tests.test_headless_delivery tests.test_headless_acceptance tests.test_service_lifecycle -v
 python -m unittest tests.test_service_beads tests.test_service_store tests.test_service_api tests.test_connector_rpc tests.test_connector_worktrees tests.test_connector_recovery -v
 python -m unittest discover -s tests -v
 ```

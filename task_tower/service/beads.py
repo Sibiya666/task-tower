@@ -133,6 +133,12 @@ class Beads:
             raise ServiceError('claim_readback_mismatch')
         return row
 
+    def history(self,project,bead):
+        bead_id(bead)
+        rows=self._run(project,'task-tower-service',['history',bead,'--events','--limit','100'])
+        if not isinstance(rows,list) or len(rows)>100 or any(not isinstance(r,dict) for r in rows):raise ServiceError('native_invalid_history')
+        return rows
+
     def close(self, project, bead, actor, reason):
         # Caller supplies separately verified acceptance; this primitive grants none.
         self.project(project);bead_id(bead);identity(actor)

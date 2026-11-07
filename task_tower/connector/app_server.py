@@ -175,7 +175,7 @@ class AppServer:
         self.store.update(command_id,phase='starting')
         try:
             text=input['text']
-            if data['command'].get('kind')=='review':text+='\nYour actual reviewer_thread_id: '+thread_id
+            if data['command'].get('kind') in ('review','main_review'):text+='\nYour actual reviewer_thread_id: '+thread_id
             result=self.transport.request('turn/start',{'threadId':thread_id,'input':[dict(type='text',text=text)]})
             key=result['turn']['id']
             if not isinstance(key,str) or not key:raise RpcError('invalid_turn')

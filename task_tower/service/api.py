@@ -157,6 +157,10 @@ def make_server(store,connectors,*,host='127.0.0.1',port=8765,poll_seconds=2):
                     except ServiceError:pass
                 if 'connector_id' in body and body['connector_id']!=connector:
                     raise ServiceError('connector_forbidden',403)
+                if uri.path.startswith('/v1/attempts/') and uri.path.endswith('/accept'):
+                    self._fields(body,{'request_id','merge','evidence'})
+                    key=uri.path[len('/v1/attempts/'):-len('/accept')];self._owned(key,connector,entry)
+                    self._send(200,dict(attempt=store.accept_delivery(body['request_id'],key,connector,body['merge'],body['evidence'])));return
                 if uri.path.startswith('/v1/commands/') and uri.path.endswith('/validate'):
                     self._fields(body,set());key=uri.path[len('/v1/commands/'):-len('/validate')]
                     a=store.validate_lifecycle_command(key,connector);self._project(entry,a['project_id'])
