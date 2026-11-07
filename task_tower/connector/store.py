@@ -9,7 +9,7 @@ import hashlib
 import uuid
 from ..project_connections import safe_config_path
 from ..service.beads import identity
-from ..service.store import encoded
+from ..service.store import encoded,utc
 
 class ConnectorStore:
     def __init__(self,path,connector_id):
@@ -44,7 +44,8 @@ CREATE TABLE IF NOT EXISTS claims (key TEXT PRIMARY KEY,data TEXT NOT NULL);
                     data=json.loads(row[0])
                     if data['phase'] in ('queued','preparing','creating_thread','prepared','starting','executing') or (data['command'].get('kind') and data['phase']=='needs_input'):
                         data['phase']='needs_reconciliation';self._save(data)
-                        if data['command'].get('kind'):self.lifecycle_event(data['command']['attempt_id'],'failed',command_id=data['command']['command_id'])
+                        if data['command'].get('kind')=='main_review':pass
+                        elif data['command'].get('kind'):self.lifecycle_event(data['command']['attempt_id'],'failed',command_id=data['command']['command_id'])
                         else:self.event(data['command']['attempt_id'],'needs_reconciliation','unknown')
         except BaseException:self.close();raise
     def close(self):
@@ -54,11 +55,14 @@ CREATE TABLE IF NOT EXISTS claims (key TEXT PRIMARY KEY,data TEXT NOT NULL);
             self.guards=[]
     def receive(self,command):
         fields={'version','command_id','attempt_id','project_id','base_sha','input'}
-        managed=isinstance(command,dict) and command.get('kind') in ('execute','review','revise','quiesce','respond')
+        managed=isinstance(command,dict) and command.get('kind') in ('execute','review','revise','quiesce','respond','deliver','main_review')
         if managed:
             fields={'version','kind','command_id','attempt_id','project_id','base_sha'}
-            if command['kind'] in ('execute','review','revise'):fields|={'input','source'}
-            if command['kind']=='revise':fields.add('thread_id')
+            if command['kind'] in ('execute','review','revise','main_review'):fields|={'input','source'}
+            if command['kind']=='deliver':fields.add('attempt')
+            if command['kind']=='revise':
+                fields.add('thread_id')
+                if 'update_base' in command:fields.add('update_base')
             if command['kind']=='respond':fields|={'decision_id','target_command_id','request','answer'}
         if not isinstance(command,dict) or set(command)!=fields or type(command['version']) is not int or command['version']!=1:raise ValueError('invalid_command')
         for k in ('command_id','attempt_id','project_id'):identity(command[k])
@@ -92,6 +96,30 @@ CREATE TABLE IF NOT EXISTS claims (key TEXT PRIMARY KEY,data TEXT NOT NULL);
             data=self.command(key);data.update(changes);self._save(data);return data
     def commands(self):
         with self.lock:return [json.loads(r[0]) for r in self.db.execute('SELECT data FROM inbox ORDER BY rowid')]
+    def confirm_cleanup(self,attempt,closed_resources):
+        # Caller supplies ONLY resources whose retained owned transport close()
+        # succeeded. No handle discovery, packet ordering, or phase inference.
+        identity(attempt);closed=set(closed_resources)
+        for key in closed:identity(key)
+        if not closed:return set()
+        confirmed=set()
+        with self.lock,self.db:
+            for row in self.db.execute('SELECT data FROM inbox').fetchall():
+                data=json.loads(row[0]);binding=data.get('cleanup_resources')
+                if (data['command']['attempt_id']!=attempt or data.get('cleanup_confirmed') is not False
+                        or not isinstance(binding,list) or not binding or not all(isinstance(r,str) and r in closed for r in binding)):continue
+                data['cleanup_confirmed']=True
+                data.setdefault('cleanup_history',[]).append(dict(kind='owned_transport_cleanup',resource_ids=list(binding),confirmed_at=utc()))
+                self._save(data);confirmed.add(data['command']['command_id'])
+        return confirmed
+
+    def cleanup_reservations(self):
+        # False is a durable unknown/pending cleanup fence, never inferred away
+        # from process restart, a completed command, or a closed native task.
+        with self.lock:
+            return {data['command']['attempt_id'] for row in self.db.execute('SELECT data FROM inbox')
+                    if (data:=json.loads(row[0])).get('cleanup_confirmed') is False}
+
     def event(self,attempt,phase,state):
         identity(attempt)
         event=dict(version=1,event_id=str(uuid.uuid4()),attempt_id=attempt,connector_id=self.connector_id,phase=phase,execution_state=state,connection_state='connected')

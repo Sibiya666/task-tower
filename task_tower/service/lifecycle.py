@@ -65,6 +65,21 @@ def advance(attempt,event,policy):
         elif a.get('author_thread_id') not in (None,thread):raise ServiceError('author_thread_changed')
         else:a['author_thread_id']=thread
         a.update(thread_id=thread,turn_id=turn,execution_state='running',connection_state='connected')
+    elif kind=='merged':
+        m=event['merge']
+        if a['phase']!='awaiting_merge' or not isinstance(m,dict) or set(m)!={'repository','pr_number','head_sha','base_sha','main_sha'}:raise ServiceError('merge_fenced')
+        if (m['head_sha'],m['base_sha'])!=(a['head_sha'],a['base_sha']) or type(m['pr_number']) is not int or m['pr_number']<1:raise ServiceError('merge_identity_mismatch')
+        validate_source(dict(head_sha=m['main_sha'],base_sha=a['base_sha'],diff=''))
+        a.update(phase='postmerge',**m)
+    elif kind=='delivery_changed':
+        if a['phase']!='awaiting_merge':raise ServiceError('delivery_change_fenced')
+        new=event['base_sha'];validate_source(dict(base_sha=new,head_sha=a['head_sha'],diff=''))
+        if new==a['base_sha']:raise ServiceError('base_unchanged')
+        if a.get('correction_count',0)>=3:pause()
+        else:
+            update=dict(old_base_sha=a['base_sha'],new_base_sha=new)
+            a.update(base_sha=new,phase='revising',correction_count=a.get('correction_count',0)+1,review=None)
+            issue('revise',thread_id=a['author_thread_id'],update_base=update)
     elif kind=='completed':
         if a['phase'] not in ('executing','revising','reviewing') or a.get('execution_state')!='running':raise ServiceError('completion_fenced')
         if (event['thread_id'],event['turn_id'])!=(a.get('thread_id'),a.get('turn_id')):raise ServiceError('completion_identity_mismatch')
@@ -72,7 +87,8 @@ def advance(attempt,event,policy):
         a['execution_state']='completed'
         if a['phase']=='reviewing':
             verdict=validate_review(event['result'],a['source'],a['thread_id']);a['review']=verdict
-            if verdict['verdict']=='approve':a['phase']='awaiting_merge'
+            if verdict['verdict']=='approve':
+                a['phase']='awaiting_merge';issue('deliver')
             elif a.get('correction_count',0)>=3:pause()
             else:
                 a['correction_count']=a.get('correction_count',0)+1;a['phase']='revising'
@@ -124,11 +140,15 @@ class LifecycleStore:
             row=self.db.execute("SELECT * FROM lifecycle_commands WHERE command_id=? AND connector_id=? AND state='queued'",(key,connector)).fetchone()
             if row is None:raise ServiceError('command_fenced')
             a=self.attempt(row['attempt_id'],connector);c=json.loads(row['data'])
-            if c['kind'] not in ('respond','quiesce') and (a.get('active_command_id')!=key or a['phase'] not in ('executing','revising','reviewing') or a['execution_state']!='not_started'):
+            if c['kind']=='deliver':
+                if a['phase'] not in ('awaiting_merge','postmerge') or a.get('active_command_id')!=key:raise ServiceError('delivery_fenced')
+            elif c['kind'] not in ('respond','quiesce') and (a.get('active_command_id')!=key or a['phase'] not in ('executing','revising','reviewing') or a['execution_state']!='not_started'):
                 raise ServiceError('command_superseded')
             if c['kind']=='respond' and (a['phase']!='needs_input' or a.get('quiescent')):raise ServiceError('response_fenced')
             if c['kind']=='quiesce' and a['phase']!='needs_input':raise ServiceError('quiescence_fenced')
-            if c['kind']!='quiesce':self._native_lifecycle(a)
+            if c['kind']=='deliver':
+                self.validate_execution(a['attempt_id'],a['connector_id'],delivery=True);self.reserve_delivery(a)
+            elif c['kind']!='quiesce':self._native_lifecycle(a)
             return a
 
     def respond_decision(self,key,connector,answer):
@@ -160,7 +180,7 @@ class LifecycleStore:
         if not isinstance(payload,dict):raise ServiceError('invalid_lifecycle_event',400)
         kind=payload.get('kind')
         expected={'dispatch':{'base_sha'},'resume':set(),'pause':set(),'disconnected':set(),'failed':{'command_id'},
-                  'quiescent':{'command_id'},'started':{'command_id','thread_id','turn_id'},
+                  'merged':{'command_id','merge'},'delivery_changed':{'command_id','base_sha'},'quiescent':{'command_id'},'started':{'command_id','thread_id','turn_id'},
                   'completed':{'command_id','thread_id','turn_id','result'},
                   'approval':{'command_id','decision_id','request'},'responded':{'command_id'}}
         if kind not in expected or set(payload)!={'kind'}|expected[kind]|({'source'} if kind=='completed' and 'source' in payload else set()):
@@ -191,6 +211,8 @@ class LifecycleStore:
                 elif kind=='responded' or (kind=='failed' and command['kind']=='respond'):
                     if command['kind']!='respond':raise ServiceError('response_fenced')
                 elif command['command_id']!=a.get('active_command_id'):raise ServiceError('command_superseded')
+                if kind=='merged' and (command['kind']!='deliver' or not isinstance(payload['merge'],dict) or payload['merge'].get('repository')!=self.delivery_projects.get(a['project_id'])):raise ServiceError('merge_fenced')
+                if kind=='delivery_changed' and command['kind']!='deliver':raise ServiceError('delivery_change_fenced')
                 if kind=='started' and a.get('execution_state')=='running':raise ServiceError('already_started')
             decision=None
             if kind=='approval':
@@ -213,18 +235,22 @@ class LifecycleStore:
             outgoing=[]
             for action in actions[1:]:
                 action=dict(action,version=1,command_id=str(uuid.uuid4()),attempt_id=a['attempt_id'],project_id=a['project_id'],base_sha=a['base_sha'])
-                if action['kind']!='quiesce':
+                if action['kind']=='deliver':
+                    action['attempt']=dict(copy.deepcopy(a),approved_task=self._approved_task(a['project_id'],a['bead_id']))
+                elif action['kind']!='quiesce':
                     task=self._approved_task(a['project_id'],a['bead_id'])
                     source=a.get('source',dict(base_sha=a['base_sha'],head_sha=a['base_sha'],diff=''))
                     brief=build_brief(task,'reviewer' if action['kind']=='review' else 'executor',source)
                     action['input']=brief['input'];action['source']=source
-                    if action['kind']=='revise':action['input']['text']+='\nAddress independent findings:\n'+encoded(a.get('review',{}).get('findings',[]))
+                    if action['kind']=='revise':
+                        action['input']['text']+='\nAddress independent findings:\n'+encoded((a.get('review') or {}).get('findings',[]))
+                        if action.get('update_base'):action['input']['text']+='\nUpstream main changed. Resolve the trusted connector prepared merge (including any conflicts) in this SAME author worktree, commit, and repeat checks. New base: '+a['base_sha']
                 outgoing.append(action);a['active_command_id']=action['command_id']
-                if action['kind']!='quiesce':a['execution_state']='not_started'
+                if action['kind'] not in ('quiesce','deliver'):a['execution_state']='not_started'
             with self.db:
                 self.db.execute('INSERT INTO events VALUES (?,?,?,?,?)',(event['event_id'],fingerprint,a['attempt_id'],encoded(a),utc()))
                 self._save_attempt(a)
-                if command and kind in ('completed','quiescent','failed','responded'):
+                if command and kind in ('completed','quiescent','failed','responded','delivery_changed'):
                     self.db.execute("UPDATE lifecycle_commands SET state='acknowledged' WHERE command_id=?",(command['command_id'],))
                 if decision:self.db.execute('INSERT INTO decisions VALUES (?,?,?,?,?)',
                     (decision['decision_id'],event['connector_id'],a['attempt_id'],encoded(decision),utc()))
@@ -232,6 +258,7 @@ class LifecycleStore:
                     row=self.db.execute('SELECT data FROM decisions WHERE decision_id=?',(command['decision_id'],)).fetchone()
                     d=json.loads(row[0]);d['status']='answered'
                     self.db.execute('UPDATE decisions SET data=? WHERE decision_id=?',(encoded(d),command['decision_id']))
+                if kind=='delivery_changed':self.db.execute('DELETE FROM acceptance_repository WHERE attempt_id=?',(a['attempt_id'],))
                 if kind=='pause':self.db.execute("UPDATE lifecycle_commands SET state='superseded' WHERE attempt_id=? AND state='queued'",(a['attempt_id'],))
                 for c in outgoing:self.db.execute('INSERT INTO lifecycle_commands VALUES (?,?,?,?,?)',
                     (c['command_id'],a['attempt_id'],event['connector_id'],'queued',encoded(c)))

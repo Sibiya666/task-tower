@@ -63,7 +63,7 @@ def load_config(path):
     if len(raw)>65536:raise ValueError('config_limit')
     value=strict_json(raw.decode('utf-8'))
     required={'version','executable','projects','journal','connectors','approved_plans','port','poll_seconds'}
-    if not isinstance(value,dict) or set(value) not in (required,required|{'max_active_tasks'}) or type(value['version']) is not int or value['version']!=1:
+    if not isinstance(value,dict) or set(value)-{'max_active_tasks','delivery_projects'} != required or type(value['version']) is not int or value['version']!=1:
         raise ValueError('invalid_configuration')
     exe=_absolute(value['executable']);journal=_absolute(value['journal'])
     if not isinstance(value['projects'],dict) or not 1<=len(value['projects'])<=32:
@@ -91,7 +91,7 @@ def load_config(path):
                 or any(not isinstance(d,str) or re.fullmatch('[0-9a-f]{64}',d) is None for d in digests)):
             raise ValueError('invalid_approvals')
     return dict(executable=exe,projects=projects,journal=journal,connectors=connectors,
-                approved_plans=approved,max_active_tasks=value.get('max_active_tasks',2),port=value['port'],poll_seconds=value['poll_seconds'])
+                approved_plans=approved,delivery_projects=value.get('delivery_projects',{}),max_active_tasks=value.get('max_active_tasks',2),port=value['port'],poll_seconds=value['poll_seconds'])
 
 
 def main(argv=None):
@@ -101,7 +101,7 @@ def main(argv=None):
         args=parser.parse_args(argv)
         config=load_config(args.config)
         beads=Beads(config['executable'],config['projects'])
-        store=Store(config['journal'],beads,approved_plans=config['approved_plans'],max_active_tasks=config['max_active_tasks'])
+        store=Store(config['journal'],beads,approved_plans=config['approved_plans'],delivery_projects=config['delivery_projects'],max_active_tasks=config['max_active_tasks'])
         try:
             server=make_server(store,config['connectors'],port=config['port'],poll_seconds=config['poll_seconds'])
             try:server.serve_forever()

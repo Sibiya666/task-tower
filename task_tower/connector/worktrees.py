@@ -30,7 +30,28 @@ class Worktrees:
             return text if raw else text.strip()
     def prepare(self,project_id,attempt_id,base_sha):return self._prepare(project_id,attempt_id,base_sha,False)
     def prepare_review(self,project_id,attempt_id,base_sha):return self._prepare(project_id,attempt_id,base_sha,True)
-    def _prepare(self,project,attempt,sha,review):
+    def prepare_revision(self,project,attempt,base_sha,update_base=None):
+        if update_base is not None:
+            if set(update_base)!={'old_base_sha','new_base_sha'} or update_base['new_base_sha']!=base_sha:raise ValueError('invalid_base_update')
+            old=update_base['old_base_sha'];tree=self.prepare(project,attempt,old);path=Path(tree['path']);repo=self.projects[project][0]
+            self._git(repo,'fetch','origin','main',timeout=60)
+            if self._git(repo,'rev-parse','FETCH_HEAD')!=base_sha:raise ValueError('base_moved_again')
+            self._git(repo,'rev-parse',base_sha+'^{commit}')
+            self.store.save_worktree(attempt,dict(tree,state='base_update_intent'))
+            state='ready'
+            try:
+                self._git(path,'merge','--no-commit','--no-ff',base_sha)
+                if self._git(path,'status','--porcelain'):
+                    if self._git(path,'rev-parse','MERGE_HEAD')!=base_sha:raise ValueError('base_update_unknown')
+                    state='merge_pending'
+                else:self._git(path,'merge-base','--is-ancestor',base_sha,'HEAD')
+            except ValueError:
+                if self._git(path,'rev-parse','MERGE_HEAD')!=base_sha or not self._git(path,'diff','--name-only','--diff-filter=U'):raise ValueError('base_update_unknown') from None
+                state='merge_pending'
+            self.store.save_worktree(attempt,dict(tree,base_sha=base_sha,state=state))
+        return self._prepare(project,attempt,base_sha,False,allow_conflict=True)
+
+    def _prepare(self,project,attempt,sha,review,allow_conflict=False):
         if not isinstance(attempt,str) or not re.fullmatch('[A-Za-z0-9][A-Za-z0-9_.-]{0,127}',attempt) or attempt in ('.','..'):raise ValueError('invalid_attempt')
         if project not in self.projects:raise ValueError('project_forbidden')
         if not isinstance(sha,str) or not re.fullmatch('[0-9a-f]{40}',sha):raise ValueError('exact_sha_required')
@@ -39,7 +60,16 @@ class Worktrees:
         data=dict(project_id=project,path=str(target),branch=branch,base_sha=sha,state='ready',review=review)
         prior=self.store.worktree(attempt)
         if prior:
-            if prior!=data:raise ValueError('worktree_unknown_or_conflict')
+            conflict=prior.get('state')=='merge_pending' and not review
+            if conflict:
+                if dict(prior,state='ready')!=data:raise ValueError('worktree_unknown_or_conflict')
+                if allow_conflict:
+                    if self._git(target,'rev-parse','MERGE_HEAD')!=sha:raise ValueError('merge_conflict_identity_changed')
+                else:
+                    if self._git(target,'status','--porcelain'):raise ValueError('unresolved_merge')
+                    self._git(target,'merge-base','--is-ancestor',sha,'HEAD')
+                    prior=dict(prior,state='ready');self.store.save_worktree(attempt,prior);conflict=False
+            if dict(prior,state='ready')!=data or prior['state'] not in ('ready','merge_pending'):raise ValueError('worktree_unknown_or_conflict')
             if not os.path.samefile(self._git(target,'rev-parse','--show-toplevel'),target):raise ValueError('foreign_worktree')
             if self._git(target,'rev-parse','--git-common-dir'):
                 actual=Path(self._git(target,'rev-parse','--git-common-dir'))
@@ -47,7 +77,7 @@ class Worktrees:
                 common=Path(self._git(repo,'rev-parse','--git-common-dir'))
                 if not common.is_absolute():common=repo/common
                 if actual.resolve()!=common.resolve():raise ValueError('foreign_repository')
-            if self._git(target,'status','--porcelain'):raise ValueError('dirty_worktree')
+            if not (conflict and allow_conflict) and self._git(target,'status','--porcelain'):raise ValueError('dirty_worktree')
             actual=self._git(target,'rev-parse','--abbrev-ref','HEAD')
             if actual!=(branch or 'HEAD'):raise ValueError('branch_changed')
             if review and self._git(target,'rev-parse','HEAD')!=sha:raise ValueError('review_sha_changed')

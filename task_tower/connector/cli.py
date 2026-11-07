@@ -1,7 +1,8 @@
 """UI-independent explicit assignment runner.
 
 Usage: python -m task_tower.connector.cli run --config <private-file>
-No install/autostart/service, role scheduling, merge or close. Configuration is
+No install/autostart/service or dynamic role scheduling. Managed work may opt
+into fixed trusted delivery through explicit delivery_projects configuration. Configuration is
 host-trusted: version, connector_id, endpoint, token_file, journal, app_server,
 projects {project_id: {repository, worktree_root}}, assignment
 {project_id, bead_id, base_sha, input: {text}}. Journals persist across restarts;
@@ -28,7 +29,8 @@ def load_config(path):
     if len(raw)>65536:raise ValueError('configuration_limit')
     value=strict_json(raw.decode('utf-8'))
     required={'version','connector_id','endpoint','token_file','journal','app_server','projects','assignment'}
-    if not isinstance(value,dict) or set(value) not in (required,required-{'assignment'}|{'assignments'},required-{'assignment'}|{'assignments','max_active_tasks'}) or type(value['version']) is not int or value['version']!=1:raise ValueError('invalid_configuration')
+    if (not isinstance(value,dict) or set(value)-{'max_active_tasks','delivery_projects'} not in (required,required-{'assignment'}|{'assignments'})
+            or type(value['version']) is not int or value['version']!=1):raise ValueError('invalid_configuration')
     identity(value['connector_id'])
     for k in ('token_file','journal','app_server'):value[k]=_absolute(value[k])
     if len({value[k] for k in ('token_file','journal','app_server')})!=3:raise ValueError('private_file_collision')
@@ -41,12 +43,15 @@ def load_config(path):
         if not isinstance(a['base_sha'],str) or re.fullmatch('[0-9a-f]{40}',a['base_sha']) is None:raise ValueError('exact_sha_required')
         if not isinstance(a['input'],dict) or set(a['input'])!={'text'} or not isinstance(a['input']['text'],str) or not 1<=len(a['input']['text'])<=32768:raise ValueError('invalid_input')
         if a['project_id'] not in value['projects']:raise ValueError('project_forbidden')
+    scope=value.get('delivery_projects',{})
+    if (not isinstance(scope,dict) or set(scope)-set(value['projects']) or any(not isinstance(r,str) or re.fullmatch('[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9_][A-Za-z0-9_.-]*',r) is None for r in scope.values())):raise ValueError('invalid_delivery_scope')
+    value['delivery_projects']=scope
     value['assignments']=assignments
     if type(value.get('max_active_tasks',2)) is not int or not 1<=value.get('max_active_tasks',2)<=32:raise ValueError('invalid_capacity')
     return value
 
 def main(argv=None):
-    parser=argparse.ArgumentParser(description='Explicit host connector assignment; merge disabled')
+    parser=argparse.ArgumentParser(description='Explicit host connector assignments and opt-in trusted delivery')
     sub=parser.add_subparsers(dest='action',required=True)
     for name in ('run','work','resume'):
         action=sub.add_parser(name);action.add_argument('--config',required=True)
@@ -129,6 +134,11 @@ def work(cfg):
         trees=Worktrees(cfg['projects'],store)
         api=APIClient(cfg['endpoint'],cfg['connector_id'],read_token(cfg['token_file']))
         connector=LifecycleConnector(store,api,trees,lambda cwd,request_handler=None:AppServer(store,executable=cfg['app_server'],cwd=Path(cwd),request_handler=request_handler),max_active_tasks=cfg.get('max_active_tasks',2))
+        if cfg.get('delivery_projects'):
+            from .delivery import Delivery,GitHubHost,MainReviewer
+            main_reviewer=MainReviewer(trees,store,lambda cwd:AppServer(store,executable=cfg['app_server'],cwd=Path(cwd)),connector.stop)
+            host=GitHubHost(trees,store,cfg['delivery_projects'],reviewer=main_reviewer)
+            connector.delivery=Delivery(host,store,cfg['delivery_projects'])
         admitted=set();next_admission=0
         while True:
             connector.tick()
