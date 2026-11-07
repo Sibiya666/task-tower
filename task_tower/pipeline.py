@@ -323,8 +323,9 @@ def watch_tick(config,journal,*,dispatch_tick=dispatcher.tick):
     if state['dispatcher'] is None and now>=state['next_dispatch']:
         if not config['_authority_check']() or args.dispatch_config.read_bytes()!=config['_dispatch_bytes']:
             raise ValueError('Dispatcher policy changed')
-        DeliveryJournal(args.dispatch_journal,checkouts=[c.checkout for c in config['_connections']],
-            forbidden_paths=(args.connections,args.config,args.executor_config,args.journal,args.dispatch_config)).initialize()
+        if config['_dispatch_config'].get('allowlist') and config['_dispatch_config'].get('backend'):
+            DeliveryJournal(args.dispatch_journal,checkouts=[c.checkout for c in config['_connections']],
+                forbidden_paths=(args.connections,args.config,args.executor_config,args.journal,args.dispatch_config)).initialize()
         _backend_scope(config,journal)
         state['dispatcher']=_Host(args,'_dispatch',config['task_timeout_seconds'],state['stop'])
     rows=journal.status()['runs']
