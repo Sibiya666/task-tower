@@ -153,3 +153,63 @@ class ResultDeliveryTests(unittest.TestCase):
                 self.assertEqual(s.record_event(event),value)
                 with self.assertRaises(ServiceError):s.record_event(dict(event,event_id='e2',execution=dict(event['execution'],thread_id='foreign')))
             finally:s.close()
+
+class StreamingDeliveryTests(unittest.TestCase):
+    def test_streaming_continues_during_slow_and_unavailable_api(self):
+        import sys,subprocess,time,threading
+        from unittest.mock import patch
+        from task_tower.connector.app_server import StdioTransport,AppServer
+        script="""import sys,json,time
+for line in sys.stdin:
+ m=json.loads(line)
+ if 'id' not in m:continue
+ if m['method']=='thread/start':r={'thread':{'id':'thread1'}}
+ elif m['method']=='turn/start':r={'turn':{'id':'turn1','status':'inProgress'}}
+ else:r={}
+ print(json.dumps({'id':m['id'],'result':r}),flush=True)
+ if m['method']=='turn/start':
+  for i in range(300):
+   print(json.dumps({'method':'item/agentMessage/delta','params':{'threadId':'thread1','turnId':'turn1','delta':'x'}}),flush=True);time.sleep(.002)
+  print(json.dumps({'method':'turn/completed','params':{'threadId':'thread1','turn':{'id':'turn1','status':'completed','items':[{'type':'agentMessage','text':'STREAM_OK'}]}}}),flush=True)
+"""
+        original=subprocess.Popen
+        def launch(argv,**kw):return original([sys.executable,'-u','-c',script],**kw)
+        for delay,outage in ((0,False),(.8,False),(.8,True)):
+            with self.subTest(delay=delay,outage=outage),tempfile.TemporaryDirectory() as tmp,patch('task_tower.connector.app_server.subprocess.Popen',side_effect=launch):
+                s=ConnectorStore(Path(tmp)/'j','host1');wire=StdioTransport(Path(sys.executable),Path(tmp),timeout=2)
+                class API:
+                    timeout=2
+                    unavailable=outage
+                    ids=[]
+                    failures=0
+                    def validate(self,a):return dict(connector_id='host1',project_id='p',phase='claimed')
+                    def send_event(self,event):
+                        time.sleep(delay)
+                        if self.unavailable:
+                            self.failures+=1;raise ConnectionError()
+                        self.ids.append(event['event_id'])
+                class Trees:
+                    def prepare(self,*a):return {'path':tmp}
+                api=API();c=Connector(s,api,AppServer(s,transport=wire),Trees())
+                try:
+                    command=dict(version=1,command_id='c1',attempt_id='a1',project_id='p',base_sha='a'*40,input={'text':'hi'})
+                    self.assertEqual(c.execute(command)['phase'],'executing')
+                    deadline=time.monotonic()+3
+                    while s.command('c1')['phase']=='executing' and time.monotonic()<deadline:
+                        c.poll();time.sleep(.02)
+                    self.assertEqual(s.command('c1')['phase'],'completed')
+                    self.assertFalse(wire.failed.is_set())
+                    self.assertEqual(wire.q.maxsize,256)
+                    if outage:
+                        c.delivery_worker.join(1)
+                        self.assertGreaterEqual(api.failures,1)
+                    pending=s.pending_events();terminal=[e for e in pending if e['execution_state']=='completed']
+                    if outage:self.assertEqual(len(terminal),1)
+                    api.unavailable=False;c.flush()
+                    self.assertEqual(s.pending_events(),[])
+                    if terminal:self.assertIn(terminal[0]['event_id'],api.ids)
+                    self.assertEqual(s.command('c1')['turn_id'],'turn1')
+                finally:
+                    wire.close()
+                    if hasattr(c,'close'):c.close()
+                    s.close()

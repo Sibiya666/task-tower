@@ -6,6 +6,7 @@ import http.client
 import io
 import json
 import time
+import threading
 from urllib.parse import urlsplit,quote
 from ..service.beads import strict_json,identity
 from .app_server import DecisionRequired
@@ -61,13 +62,36 @@ class APIClient:
     def send_event(self,event):return self.request('POST','/v1/events',event)
 
 class Connector:
-    def __init__(self,store,api,app,worktrees):self.store,self.api,self.app,self.worktrees=store,api,app,worktrees
+    def __init__(self,store,api,app,worktrees):
+        self.store,self.api,self.app,self.worktrees=store,api,app,worktrees
+        self.delivery_lock=threading.Lock();self.worker_lock=threading.Lock()
+        self.delivery_stop=threading.Event();self.delivery_worker=None
     def flush(self):
-        for event in self.store.pending_events():
-            try:self.api.send_event(event)
-            except Exception:return False
-            self.store.ack(event['event_id'])
-        return True
+        # Serialize delivery so event order and stable event IDs survive retries.
+        # Never called synchronously by the active RPC polling loop.
+        with self.delivery_lock:
+            for event in self.store.pending_events():
+                if self.delivery_stop.is_set():return False
+                try:self.api.send_event(event)
+                except Exception:return False
+                self.store.ack(event['event_id'])
+            return True
+    def _deliver_async(self):
+        with self.worker_lock:
+            if self.delivery_stop.is_set() or (self.delivery_worker and self.delivery_worker.is_alive()):return
+            if not self.store.pending_events():return
+            def deliver():
+                try:self.flush()
+                except Exception:pass  # Unacknowledged durable events remain pending.
+            self.delivery_worker=threading.Thread(target=deliver,daemon=True)
+            self.delivery_worker.start()
+    def close(self):
+        self.delivery_stop.set()
+        if self.delivery_worker:
+            # APIClient bounds connect/write/response independently. Only this
+            # owner's delivery worker is joined; its journal stays open until then.
+            self.delivery_worker.join(3*getattr(self.api,'timeout',5)+1)
+            if self.delivery_worker.is_alive():raise RuntimeError('delivery_cleanup_unconfirmed')
     def claim(self,project,bead):
         if not self.flush():return None
         try:
@@ -122,4 +146,5 @@ class Connector:
                         if len(text.encode('utf-8'))>32768:complete=False;execution=None
                     try:self.store.transition(key,'completed' if complete else 'needs_reconciliation','completed' if complete else 'unknown',execution=execution,completion=params['turn'])
                     except ValueError:self.store.transition(key,'needs_reconciliation','unknown')
-        return self.flush()
+        self._deliver_async()
+        return True

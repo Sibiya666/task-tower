@@ -43,7 +43,7 @@ def load_config(path):
 def main(argv=None):
     parser=argparse.ArgumentParser(description='Explicit host connector assignment; merge disabled')
     sub=parser.add_subparsers(dest='action',required=True);run=sub.add_parser('run');run.add_argument('--config',required=True)
-    store=app=None;command=None
+    store=app=connector=None;command=None
     try:
         args=parser.parse_args(argv);cfg=load_config(args.config)
         store=ConnectorStore(cfg['journal'],cfg['connector_id'])
@@ -82,6 +82,9 @@ def main(argv=None):
         cleanup=True
         if app is not None:
             try:app.close()
+            except Exception:cleanup=False
+        if connector is not None:
+            try:connector.close()
             except Exception:cleanup=False
         if store is not None:
             try:
