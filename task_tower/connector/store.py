@@ -96,6 +96,13 @@ CREATE TABLE IF NOT EXISTS claims (key TEXT PRIMARY KEY,data TEXT NOT NULL);
             data=self.command(key);data.update(changes);self._save(data);return data
     def commands(self):
         with self.lock:return [json.loads(r[0]) for r in self.db.execute('SELECT data FROM inbox ORDER BY rowid')]
+    def cleanup_reservations(self):
+        # False is a durable unknown/pending cleanup fence, never inferred away
+        # from process restart, a completed command, or a closed native task.
+        with self.lock:
+            return {data['command']['attempt_id'] for row in self.db.execute('SELECT data FROM inbox')
+                    if (data:=json.loads(row[0])).get('cleanup_confirmed') is False}
+
     def event(self,attempt,phase,state):
         identity(attempt)
         event=dict(version=1,event_id=str(uuid.uuid4()),attempt_id=attempt,connector_id=self.connector_id,phase=phase,execution_state=state,connection_state='connected')

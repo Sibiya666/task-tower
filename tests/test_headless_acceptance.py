@@ -229,14 +229,18 @@ class DeliveryCapacityTests(unittest.TestCase):
                 raise AssertionError(method)
             def notifications(self):return []
             def close(self):pass
+        commands=[deliver] if getattr(self,'known_restart_probe',False) else [deliver,second]
         class API:
-            def commands(self):return [deliver,second]
+            def commands(self):return list(commands)
             def validate_command(self,key):return {}
             def send_event(self,event):return {}
         class Trees:
             def prepare(self,*args):return dict(path=str(root))
+        deliveries=[]
         class Delivered:
-            def run(self,*args):return None if mode=='superseded' else dict(phase='accepted',canonical_close={'event_id':'close','owner':'owner'})
+            def run(self,*args):
+                deliveries.append(1)
+                return None if mode=='superseded' else dict(phase='accepted',canonical_close={'event_id':'close','owner':'owner'})
         c=LifecycleConnector(store,API(),Trees(),lambda cwd,request_handler=None:AppServer(store,transport=Wire(),request_handler=request_handler),max_active_tasks=1,delivery=Delivered());self.addCleanup(c.close)
         worker=dict(queue=queue.Queue(4),apps={'author-cmd':retained},replies={},busy=False,reserved=0)
         c.workers['attempt']=worker;worker['thread']=threading.Thread(target=c._work,args=('attempt',worker),daemon=True);worker['thread'].start()
@@ -245,13 +249,14 @@ class DeliveryCapacityTests(unittest.TestCase):
             c.tick()
             if started.is_set():break
             current=next((d for d in store.commands() if d['command']['command_id']=='deliver-cmd'),None)
+            if getattr(self,'known_restart_probe',False) and current and current['phase']=='completed' and not worker['busy']:break
             if mode!='accepted' and current and current['phase'] in ('completed','needs_reconciliation') and not worker['busy']:
                 for _ in range(3):c.tick();time.sleep(.01)
                 break
             time.sleep(.01)
         if mode=='accepted':
             self.assertTrue(retained.closed)
-            self.assertTrue(started.is_set(),'confirmed accepted delivery must admit the next configured task')
+            if not getattr(self,'known_restart_probe',False):self.assertTrue(started.is_set(),'confirmed accepted delivery must admit the next configured task')
             self.assertFalse(c._occupied(worker));self.assertEqual(store.command('deliver-cmd')['phase'],'completed')
         elif mode=='unknown-cleanup':
             self.assertFalse(retained.closed);self.assertFalse(started.is_set());self.assertTrue(c._occupied(worker))
@@ -259,6 +264,65 @@ class DeliveryCapacityTests(unittest.TestCase):
             self.assertIs(store.command('deliver-cmd')['cleanup_confirmed'],False)
         else:
             self.assertFalse(retained.closed);self.assertFalse(started.is_set());self.assertTrue(c._occupied(worker))
+        if getattr(self,'known_restart_probe',False):
+            c.close();store.close()
+            reopened=ConnectorStore(root/'journal','delivery-capacity-'+mode);self.addCleanup(reopened.close)
+            self.assertIs(reopened.command('deliver-cmd')['cleanup_confirmed'],True)
+            new=LifecycleConnector(reopened,API(),Trees(),lambda cwd,request_handler=None:AppServer(reopened,transport=Wire(),request_handler=request_handler),max_active_tasks=1,delivery=Delivered());self.addCleanup(new.close)
+            commands.append(second);end=time.monotonic()+2
+            while not started.is_set() and time.monotonic()<end:new.tick();time.sleep(.01)
+            self.assertTrue(started.is_set());self.assertEqual(deliveries,[1])
+        if getattr(self,'restart_probe',False):
+            c.close();store.close()
+            # Real close/reopen of the SAME SQLite journal, with a NEW connector.
+            reopened=ConnectorStore(root/'journal','delivery-capacity-'+mode);self.addCleanup(reopened.close)
+            new=LifecycleConnector(reopened,API(),Trees(),lambda cwd,request_handler=None:AppServer(reopened,transport=Wire(),request_handler=request_handler),max_active_tasks=1,delivery=Delivered());self.addCleanup(new.close)
+            for _ in range(8):new.tick();time.sleep(.01)
+            self.assertFalse(started.is_set(),'restart must retain the unknown-cleanup slot')
+            self.assertEqual(deliveries,[1],'old delivery must never replay')
+            self.assertIs(reopened.command('deliver-cmd')['cleanup_confirmed'],False)
+            # An unbound quiesce cannot guess old process ownership or ACK cleanup.
+            control=dict(version=1,kind='quiesce',command_id='unknown-stop',attempt_id='attempt',project_id='p',base_sha=B)
+            commands.insert(0,control);new.tick();time.sleep(.02)
+            self.assertNotIn('unknown-stop',{x['command']['command_id'] for x in reopened.commands()})
+            commands.remove(control)
+            # Explicit operator-confirmed fixture reconciliation, not restart,
+            # a closed Bead, a PID guess, or an automatic recovery operation.
+            reopened.update('deliver-cmd',cleanup_confirmed=True,reconciliation={'kind':'operator_confirmed_cleanup','receipt':'fixture-cleanup-proof'})
+            end=time.monotonic()+2
+            while not started.is_set() and time.monotonic()<end:new.tick();time.sleep(.01)
+            self.assertTrue(started.is_set());self.assertEqual(deliveries,[1])
+        if getattr(self,'other_slot_probe',False):
+            c.max_active_tasks=2
+            end=time.monotonic()+2
+            while not started.is_set() and time.monotonic()<end:c.tick();time.sleep(.01)
+            self.assertTrue(started.is_set(),'one durable and one live reservation for SAME attempt count only once')
+            c.max_active_tasks=1;started.clear()
+            third=dict(second,command_id='third-cmd',attempt_id='third')
+            control=dict(version=1,kind='quiesce',command_id='stop-second',attempt_id='second',project_id='p',base_sha=B)
+            commands.extend([control,third])
+            end=time.monotonic()+2
+            while time.monotonic()<end:
+                c.tick();time.sleep(.01)
+                if any(d['command']['command_id']=='stop-second' and d['phase']=='completed' for d in store.commands()):break
+            self.assertEqual(store.command('stop-second')['phase'],'completed')
+            self.assertNotIn('third-cmd',{d['command']['command_id'] for d in store.commands()})
+            self.assertFalse(started.is_set());self.assertTrue(c._occupied(worker))
+            c.max_active_tasks=2
+            end=time.monotonic()+2
+            while not started.is_set() and time.monotonic()<end:c.tick();time.sleep(.01)
+            self.assertTrue(started.is_set());self.assertIs(store.command('deliver-cmd')['cleanup_confirmed'],False)
     def test_accepted_delivery_stops_retained_author_and_frees_actual_worker_capacity(self):self.scenario('accepted')
     def test_unknown_author_cleanup_preserves_local_fence_and_capacity(self):self.scenario('unknown-cleanup')
     def test_premerge_supersession_keeps_same_author_and_capacity_for_revision(self):self.scenario('superseded')
+
+
+class DurableCleanupAdmissionTests(unittest.TestCase):
+    scenario=DeliveryCapacityTests.scenario
+    def test_actual_unknown_cleanup_survives_journal_reopen_until_explicit_reconciliation(self):
+        self.restart_probe=True;self.scenario('unknown-cleanup')
+    def test_durable_and_live_same_attempt_union_other_slot_lower_limit_and_quiesce(self):
+        self.other_slot_probe=True;self.scenario('unknown-cleanup')
+
+    def test_successful_known_cleanup_journal_reopen_admits_next_without_replaying_delivery(self):
+        self.known_restart_probe=True;self.scenario('accepted')

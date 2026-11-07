@@ -209,7 +209,12 @@ an ambiguous outcome retains reconciliation and cannot repeat native close.
 Only confirmed canonical closure releases the acceptance lease and marks the
 attempt accepted. The worker then closes its retained owned author transports
 and confirms cleanup before freeing local capacity. Unknown cleanup retains the
-app, occupancy and durable reconciliation fence. A premerge supersession keeps
+app, occupancy and durable reconciliation fence. Admission unions live attempts
+with journaled unresolved cleanup reservations, counting an attempt once. These
+reservations survive a journal reopen/new connector and remain until explicit
+cleanup reconciliation; a closed Bead or restart cannot release them. Unbound
+controls cannot acknowledge unknown old-process cleanup. Known existing controls
+remain available when limits are full or lowered. A premerge supersession keeps
 the same author app for revision. No GitHub Issue is created as a duplicate of
 Beads.
 

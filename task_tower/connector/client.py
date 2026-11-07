@@ -192,8 +192,13 @@ class LifecycleConnector(Connector):
             with self.worker_guard:
                 worker=self.workers.get(attempt)
                 execution=command['kind'] in ('execute','review','revise','deliver')
-                active=sum(self._occupied(w) for w in self.workers.values())
-                if execution and (worker is None or not self._occupied(worker)) and active>=self.max_active_tasks:
+                cleanup=self.store.cleanup_reservations()
+                # Count each attempt once across live workers AND durable fences.
+                # A restart supplies no process identity for an unknown cleanup;
+                # it cannot start more work there or fabricate a stop ACK.
+                active={a for a,w in self.workers.items() if self._occupied(w)}|cleanup
+                if attempt in cleanup and (execution or worker is None or not worker['apps']):continue
+                if execution and (worker is None or not self._occupied(worker)) and len(active)>=self.max_active_tasks:
                     continue
                 self.store.receive(command);self.seen.add(key)
                 new_worker=worker is None
