@@ -252,9 +252,30 @@ class Store:
                 or (status!='deferred' and row.get('defer_until'))):
             raise ServiceError('import_readback_mismatch')
 
+    def validate_execution(self,attempt_id,connector_id):
+        """Fresh native read-only boundary; cached attempt is never executable authority."""
+        with self.lock:
+            data=self.attempt(attempt_id,connector_id)
+            if data['phase']!='claimed' or data['execution_state']!='not_started':
+                raise ServiceError('execution_fenced')
+            deadline=time.monotonic()+30
+            task=self._approved_task(data['project_id'],data['bead_id'])
+            approved=False
+            for batch in self.db.execute("SELECT digest,data FROM plan_imports WHERE project_id=? AND state='published'",(data['project_id'],)):
+                if batch['digest'] in self.approved_plans.get(data['project_id'],()) and data['bead_id'] in {t['id'] for t in json.loads(batch['data'])['plan']['tasks']}:approved=True
+            if not approved:raise ServiceError('execution_plan_not_approved')
+            row=self.beads.show(data['project_id'],data['bead_id'],deadline=deadline)
+            self._verify_row(task,row,'in_progress',data['actor'])
+            if row.get('metadata') or row.get('defer_until'):
+                raise ServiceError('native_fence_or_unknown_metadata')
+            for dependency in task['depends_on']:
+                dep=self.beads.show(data['project_id'],dependency,deadline=deadline)
+                if dep.get('status')!='closed':raise ServiceError('execution_dependency_changed')
+            return data
+
     def record_event(self,event):
         required={'version','event_id','attempt_id','connector_id','phase','execution_state','connection_state'}
-        if not isinstance(event,dict) or set(event)!=required or type(event['version']) is not int or event['version']!=1:
+        if not isinstance(event,dict) or set(event) not in (required,required|{'execution'}) or type(event['version']) is not int or event['version']!=1:
             raise ServiceError('invalid_event',400)
         identity(event['event_id']);identity(event['connector_id'])
         transitions={
@@ -269,6 +290,13 @@ class Store:
             raise ServiceError('phase_forbidden',403)
         if event['execution_state'] not in ('not_started','running','stopped','completed','unknown') or event['connection_state'] not in ('connected','disconnected','unknown'):
             raise ServiceError('invalid_event_state',400)
+        execution=event.get('execution')
+        if execution is not None:
+            if (not isinstance(execution,dict) or set(execution)!={'command_id','thread_id','turn_id','result'}
+                    or event['phase']!='executing' or event['execution_state']!='completed'
+                    or not isinstance(execution['result'],str) or len(execution['result'].encode('utf-8'))>32768):
+                raise ServiceError('invalid_execution_result',400)
+            for key in ('command_id','thread_id','turn_id'):identity(execution[key])
         fingerprint=encoded(event)
         with self.lock:
             data=self.attempt(event['attempt_id'],event['connector_id'])
@@ -278,6 +306,12 @@ class Store:
                 return json.loads(previous['outcome'])
             if event['phase']!=data['phase'] and event['phase'] not in transitions.get(data['phase'],set()):
                 raise ServiceError('invalid_transition')
+            if execution is not None:
+                if any(data.get(key) not in (None,execution[key]) for key in ('command_id','thread_id','turn_id')):
+                    raise ServiceError('execution_identity_conflict')
+                if data.get('execution_result') not in (None,execution['result']):raise ServiceError('execution_result_conflict')
+                data.update({key:execution[key] for key in ('command_id','thread_id','turn_id')})
+                data['execution_result']=execution['result']
             data.update({k:event[k] for k in ('phase','execution_state','connection_state')})
             with self.db:
                 self.db.execute('INSERT INTO events VALUES (?,?,?,?,?)',

@@ -1,0 +1,118 @@
+"""Durable connector inbox/outbox. Unknown effects are fenced, never replayed."""
+import json
+import os
+from pathlib import Path
+import sqlite3
+import threading
+import tempfile
+import hashlib
+import uuid
+from ..project_connections import safe_config_path
+from ..service.beads import identity
+from ..service.store import encoded
+
+class ConnectorStore:
+    def __init__(self,path,connector_id):
+        identity(connector_id)
+        self.connector_id=connector_id;self.lock=threading.RLock();self.db=None;self.guards=[]
+        self.path=safe_config_path(Path(path).absolute())
+        try:
+            for path in [Path(str(self.path)+'.lock'),Path(tempfile.gettempdir())/('task-tower-connector-'+hashlib.sha256(connector_id.encode('utf-8')).hexdigest()+'.lock')]:
+                f=open(safe_config_path(path),'a+b');self.guards.append(f)
+                if os.name=='nt':
+                    import msvcrt
+                    f.seek(0);f.write(b'0');f.flush();f.seek(0);msvcrt.locking(f.fileno(),msvcrt.LK_NBLCK,1)
+                else:
+                    import fcntl
+                    fcntl.flock(f.fileno(),fcntl.LOCK_EX|fcntl.LOCK_NB)
+            if not self.path.exists():
+                fd=os.open(self.path,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600);os.close(fd)
+            self.db=sqlite3.connect(self.path,check_same_thread=False);self.db.row_factory=sqlite3.Row
+            self.db.execute('PRAGMA journal_mode=WAL');self.db.execute('PRAGMA synchronous=FULL')
+            self.db.executescript("""
+CREATE TABLE IF NOT EXISTS metadata (key TEXT PRIMARY KEY,value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS inbox (command_id TEXT PRIMARY KEY,fingerprint TEXT NOT NULL,data TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS outbox (seq INTEGER PRIMARY KEY AUTOINCREMENT,event_id TEXT UNIQUE NOT NULL,data TEXT NOT NULL,acked INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS worktrees (attempt_id TEXT PRIMARY KEY,data TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS claims (key TEXT PRIMARY KEY,data TEXT NOT NULL);
+""")
+            with self.db:
+                row=self.db.execute("SELECT value FROM metadata WHERE key='connector_id'").fetchone()
+                if row and row[0]!=connector_id:raise ValueError('connector_identity_mismatch')
+                self.db.execute("INSERT OR IGNORE INTO metadata VALUES ('connector_id',?)",(connector_id,))
+                for row in self.db.execute('SELECT data FROM inbox').fetchall():
+                    data=json.loads(row[0])
+                    if data['phase'] in ('queued','preparing','creating_thread','prepared','starting','executing'):
+                        data['phase']='needs_reconciliation';self._save(data)
+                        self.event(data['command']['attempt_id'],'needs_reconciliation','unknown')
+        except BaseException:self.close();raise
+    def close(self):
+        with self.lock:
+            if self.db is not None:self.db.close();self.db=None
+            for f in self.guards:f.close()
+            self.guards=[]
+    def receive(self,command):
+        fields={'version','command_id','attempt_id','project_id','base_sha','input'}
+        if not isinstance(command,dict) or set(command)!=fields or type(command['version']) is not int or command['version']!=1:raise ValueError('invalid_command')
+        for k in ('command_id','attempt_id','project_id'):identity(command[k])
+        import re
+        if not isinstance(command['base_sha'],str) or not re.fullmatch('[0-9a-f]{40}',command['base_sha']):raise ValueError('invalid_sha')
+        value=command['input']
+        if not isinstance(value,dict) or set(value)!={'text'} or not isinstance(value['text'],str) or not 1<=len(value['text'])<=32768:raise ValueError('invalid_input')
+        fingerprint=encoded(command)
+        with self.lock:
+            row=self.db.execute('SELECT * FROM inbox WHERE command_id=?',(command['command_id'],)).fetchone()
+            if row:
+                if row['fingerprint']!=fingerprint:raise ValueError('command_conflict')
+                return json.loads(row['data'])
+            if any(json.loads(x[0])['command']['attempt_id']==command['attempt_id'] for x in self.db.execute('SELECT data FROM inbox')):raise ValueError('attempt_already_assigned')
+            data=dict(command=command,phase='queued',thread_id=None,turn_id=None)
+            with self.db:self.db.execute('INSERT INTO inbox VALUES (?,?,?)',(command['command_id'],fingerprint,encoded(data)))
+            return data
+    def _save(self,data):self.db.execute('UPDATE inbox SET data=? WHERE command_id=?',(encoded(data),data['command']['command_id']))
+    def command(self,key):
+        with self.lock:
+            row=self.db.execute('SELECT data FROM inbox WHERE command_id=?',(key,)).fetchone()
+            if not row:raise ValueError('unknown_command')
+            return json.loads(row[0])
+    def update(self,key,**changes):
+        with self.lock,self.db:
+            data=self.command(key);data.update(changes);self._save(data);return data
+    def commands(self):
+        with self.lock:return [json.loads(r[0]) for r in self.db.execute('SELECT data FROM inbox ORDER BY rowid')]
+    def event(self,attempt,phase,state):
+        identity(attempt)
+        event=dict(version=1,event_id=str(uuid.uuid4()),attempt_id=attempt,connector_id=self.connector_id,phase=phase,execution_state=state,connection_state='connected')
+        with self.lock,self.db:self.db.execute('INSERT INTO outbox(event_id,data) VALUES (?,?)',(event['event_id'],encoded(event)))
+        return event
+    def pending_events(self):
+        with self.lock:return [json.loads(r[0]) for r in self.db.execute('SELECT data FROM outbox WHERE acked=0 ORDER BY seq')]
+    def ack(self,key):
+        with self.lock,self.db:self.db.execute('UPDATE outbox SET acked=1 WHERE event_id=?',(key,))
+    def worktree(self,key):
+        with self.lock:
+            row=self.db.execute('SELECT data FROM worktrees WHERE attempt_id=?',(key,)).fetchone()
+            return json.loads(row[0]) if row else None
+    def save_worktree(self,key,data):
+        with self.lock,self.db:self.db.execute('INSERT INTO worktrees VALUES (?,?) ON CONFLICT(attempt_id) DO UPDATE SET data=excluded.data',(key,encoded(data)))
+    def claim_intent(self,project,bead):
+        key=encoded([project,bead])
+        with self.lock,self.db:
+            row=self.db.execute('SELECT data FROM claims WHERE key=?',(key,)).fetchone()
+            if row:return json.loads(row[0])
+            data=dict(request_id=str(uuid.uuid4()),project_id=project,bead_id=bead,connector_id=self.connector_id,version=1)
+            self.db.execute('INSERT INTO claims VALUES (?,?)',(key,encoded(data)));return data
+
+    def transition(self,key,phase,state,*,execution=None,**changes):
+        """Command outcome and delivery event commit together."""
+        with self.lock,self.db:
+            data=self.command(key);data.update(changes,phase=phase);self._save(data)
+            event=dict(version=1,event_id=str(uuid.uuid4()),attempt_id=data['command']['attempt_id'],connector_id=self.connector_id,phase='executing' if phase in ('executing','completed') else phase,execution_state=state,connection_state='connected')
+            if execution is not None:event['execution']=execution
+            if len(encoded(event).encode('utf-8'))>65536:raise ValueError('event_body_limit')
+            self.db.execute('INSERT INTO outbox(event_id,data) VALUES (?,?)',(event['event_id'],encoded(event)))
+            return data
+    def existing_claim(self,project,bead):
+        with self.lock:
+            row=self.db.execute('SELECT data FROM claims WHERE key=?',(encoded([project,bead]),)).fetchone()
+            return json.loads(row[0]) if row else None
