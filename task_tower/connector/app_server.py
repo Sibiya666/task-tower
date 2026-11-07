@@ -8,6 +8,9 @@ import threading
 import time
 from ..service.beads import strict_json
 
+TRANSPORT_FAILURES=frozenset({'rpc_read_queue_full','rpc_line_limit','rpc_invalid_utf8',
+    'rpc_invalid_message','rpc_stdout_read_failed','rpc_stdout_eof','owned_app_interrupted'})
+
 class RpcError(RuntimeError):pass
 class DecisionRequired(RuntimeError):
     def __init__(self,request):
@@ -20,6 +23,7 @@ class StdioTransport:
         if not Path(executable).is_absolute() or not Path(cwd).is_absolute():raise ValueError('absolute_path_required')
         self.request_handler=request_handler
         self.timeout=timeout;self.q=queue.Queue(capacity);self.events=queue.Queue(capacity)
+        self.failure_reason=None
         self.failed=threading.Event();self.serial=threading.RLock();self.counter=0;self.stderr_tail=bytearray()
         env={k:v for k,v in os.environ.items() if k.upper() not in ('GH_TOKEN','GITHUB_TOKEN') and not k.upper().startswith(('BD_','BEADS_','DOLT_','TOWER_','TASK_TOWER_'))}
         self.process=subprocess.Popen([str(executable),'app-server','--listen','stdio://'],cwd=cwd,env=env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0,start_new_session=os.name!='nt')
@@ -44,12 +48,21 @@ class StdioTransport:
         try:
             while True:
                 line=self.process.stdout.readline(self.MAX_LINE+1)
-                if not line:return
-                if len(line)>self.MAX_LINE or not line.endswith(b'\n'):raise ValueError('rpc_line_limit')
+                if not line:self.failure_reason='rpc_stdout_eof';return
+                if len(line)>self.MAX_LINE or not line.endswith(b'\n'):
+                    self.failure_reason='rpc_line_limit';raise ValueError('rpc_line_limit')
                 msg=strict_json(line.decode('utf-8'))
                 if not isinstance(msg,dict):raise ValueError('invalid_rpc')
+                # Tool display output is not consumed by this headless lifecycle.
+                # Keep every response, callback and completion; never let unused
+                # output deltas exhaust their bounded control queue.
+                if msg.get('method')=='item/commandExecution/outputDelta' and 'id' not in msg:continue
                 self.q.put_nowait(msg)
-        except Exception:self.failed.set()
+        except queue.Full:self.failure_reason='rpc_read_queue_full'
+        except UnicodeError:self.failure_reason='rpc_invalid_utf8'
+        except (ValueError,RecursionError):
+            if self.failure_reason is None:self.failure_reason='rpc_invalid_message'
+        except Exception:self.failure_reason='rpc_stdout_read_failed'
         finally:self.failed.set()
     def _stderr(self):
         try:
@@ -112,7 +125,8 @@ class StdioTransport:
                 try:msg=self.q.get_nowait()
                 except queue.Empty:break
                 result.append(msg)
-            if self.failed.is_set():result.append({'method':'connector/interrupted'})
+            if self.failed.is_set():result.append({'method':'connector/interrupted',
+                'params':{'reason':getattr(self,'failure_reason',None) or 'owned_app_interrupted'}})
             return result
     def close(self):
         p=self.process

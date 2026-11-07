@@ -9,7 +9,7 @@ import time
 import threading
 from urllib.parse import urlsplit,quote
 from ..service.beads import strict_json,identity
-from .app_server import DecisionRequired
+from .app_server import DecisionRequired,TRANSPORT_FAILURES
 
 class _ResponseReader(io.RawIOBase):
     def __init__(self,sock,deadline):
@@ -343,7 +343,10 @@ class LifecycleConnector(Connector):
         try:
             for message in app.notifications():
                 p=message.get('params',{});method=message.get('method')
-                if method=='connector/interrupted':raise ValueError('owned_app_interrupted')
+                if method=='connector/interrupted':
+                    reason=p.get('reason')
+                    self.store.update(key,failure_reason=reason if isinstance(reason,str) and reason in TRANSPORT_FAILURES else 'owned_app_interrupted')
+                    raise ValueError('owned_app_interrupted')
                 if 'id' in message and 'method' in message:
                     if method not in ('item/commandExecution/requestApproval','item/fileChange/requestApproval') or p.get('threadId')!=data['thread_id']:
                         raise ValueError('unsupported_or_foreign_request')
