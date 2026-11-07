@@ -155,8 +155,10 @@ busy repository's unstarted command stays queued. No background deployment or
 second task scheduler is created.
 
 The fixed host operations validate all origin fetch/push URLs against the
-allowlist, push only the owned deterministic branch, and create/reuse its PR to
-main. They require the actual H/B, independent recorded reviewer, all current CI
+allowlist using the same effective global/system Git configuration, environment
+and command configuration as authenticated push, including URL rewrites and
+existing credential routing. They recheck all destinations immediately before
+pushing only the owned deterministic branch, and create/reuse its PR to main. They require the actual H/B, independent recorded reviewer, all current CI
 and protection. Only the complete expected docs shard matrix may skip. The
 adapter publishes a real `task-tower/pr-acceptance` status bound to the independent
 verdict, verifies its actual creator/id/description, and re-reads H/B and
@@ -205,7 +207,11 @@ closed task, preserved owner and the exact native history event carrying the
 receipt reason. Lost close/HTTP responses read back the existing result first;
 an ambiguous outcome retains reconciliation and cannot repeat native close.
 Only confirmed canonical closure releases the acceptance lease and marks the
-attempt accepted. No GitHub Issue is created as a duplicate of Beads.
+attempt accepted. The worker then closes its retained owned author transports
+and confirms cleanup before freeing local capacity. Unknown cleanup retains the
+app, occupancy and durable reconciliation fence. A premerge supersession keeps
+the same author app for revision. No GitHub Issue is created as a duplicate of
+Beads.
 
 ## Verification
 

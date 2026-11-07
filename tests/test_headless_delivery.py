@@ -96,7 +96,9 @@ class HostBoundaryTests(unittest.TestCase):
             def _git(self,path,*args,**kw):
                 if args[:2]==('remote','get-url'):return 'https://github.com/other/repository'
                 raise AssertionError('effect before verified remote')
-        host=GitHubHost(Trees(),None,{'p':REPO},token='fixture',transport=lambda *a: self.fail('network before verified remote'))
+        class FixedHost(GitHubHost):
+            def _trusted_git(self,path,*args,**kw):return self.trees._git(path,*args)
+        host=FixedHost(Trees(),None,{'p':REPO},token='fixture',transport=lambda *a: self.fail('network before verified remote'))
         with self.assertRaises(ValueError):host.prepare_pr(attempt())
     def test_fresh_fetch_failure_stops_before_source_ci_discovery_or_reviewer(self):
         from task_tower.connector.delivery import GitHubHost
@@ -354,7 +356,8 @@ class RemoteScopeTests(unittest.TestCase):
                     return 'https://github.com/'+REPO+('\nhttps://github.com/other/repo' if '--push' in args and '--all' in args else '')
                 raise AssertionError(args)
         class HostFixture(GitHubHost):
-            def _push(self,*args):raise AssertionError('push before all remote targets verified')
+            def _trusted_git(self,path,*args,**kw):return self.trees._git(path,*args)
+            def _push(self,*args,**kw):raise AssertionError('push before all remote targets verified')
         h=HostFixture(Trees(),None,{'p':REPO},token='fixture',transport=lambda *args:None)
         with self.assertRaises(ValueError):h.prepare_pr(attempt())
 
@@ -442,3 +445,74 @@ class FetchBudgetTests(unittest.TestCase):
         with patch('time.monotonic',lambda:clock[0]):
             with self.assertRaises(ValueError):host.verify_main(attempt(),dict(repository=REPO,pr_number=7,main_sha=M))
         self.assertEqual(budgets,[1])
+
+
+class EffectiveGitDestinationTests(unittest.TestCase):
+    def test_actual_host_read_and_push_share_config_including_rewrites_and_credentials(self):
+        import os
+        from unittest.mock import patch
+        from task_tower.connector.delivery import GitHubHost
+        from task_tower.connector.worktrees import Worktrees
+        root=tempfile.TemporaryDirectory();self.addCleanup(root.cleanup);path=Path(root.name)
+        class Trees:
+            _git=Worktrees._git
+            def prepare(self,*args):return dict(path=str(path),branch='codex/headless-attempt')
+            def source(self,*args):return attempt()['source']
+        class HostFixture(GitHubHost):
+            def _pages(self,*args):return [dict(number=7)]
+            def read_pr(self,*args):return copy.deepcopy(Host().pr)
+        for kind in ('global_insteadOf','global_pushInsteadOf','system_insteadOf','system_pushInsteadOf','multiple','credential_config_only'):
+            with self.subTest(kind=kind):
+                calls=[]
+                def runner(argv,cwd,timeout,env=None,capture=None,**kwargs):
+                    calls.append((list(argv),dict(env)))
+                    enabled=(kind.startswith('global') and env.get('GIT_CONFIG_GLOBAL')!=os.devnull) or (kind.startswith('system') and env.get('GIT_CONFIG_NOSYSTEM')!='1')
+                    remote='https://github.com/'+REPO
+                    if enabled and (kind.endswith('_insteadOf') or '--push' in argv or 'push' in argv):remote='https://other.invalid/escape'
+                    if kind=='multiple' and '--push' in argv and '--all' in argv:remote+='\nhttps://other.invalid/escape'
+                    text=remote if 'remote' in argv else ''
+                    Path(capture['directory'],'stdout.log').write_text(text,encoding='utf-8');Path(capture['directory'],'stderr.log').write_text('',encoding='utf-8')
+                    return dict(status='passed',exit_code=0,cleanup_confirmed=True)
+                host=HostFixture(Trees(),None,{'p':REPO},token='fixture',transport=lambda *args:self.fail('network effect'))
+                with patch('task_tower.connector.worktrees.run_command',runner),patch('task_tower.processes.run_command',runner),patch.dict(os.environ,{'gH_tOkEn':'fixture-only'}):
+                    if kind=='credential_config_only':host.prepare_pr(attempt())
+                    else:
+                        with self.assertRaises(ValueError):host.prepare_pr(attempt())
+                pushes=[(argv,env) for argv,env in calls if 'push' in argv]
+                if kind!='credential_config_only':self.assertEqual(pushes,[])
+                else:
+                    self.assertEqual(len(pushes),1)
+                    push_env=pushes[0][1]
+                    self.assertNotEqual(push_env.get('GIT_CONFIG_GLOBAL'),os.devnull);self.assertNotEqual(push_env.get('GIT_CONFIG_NOSYSTEM'),'1')
+                    self.assertTrue(any(k.upper()=='GH_TOKEN' and v=='fixture-only' for k,v in push_env.items()))
+                    for argv,env in calls:
+                        if 'remote' in argv:self.assertTrue(env==push_env,'host configuration differs')
+
+
+class NativeGitRewriteTests(unittest.TestCase):
+    def test_effective_global_system_rewrites_and_multiple_urls_with_isolated_native_git_configs(self):
+        import os,subprocess
+        from unittest.mock import patch
+        from task_tower.connector.delivery import GitHubHost
+        temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup);root=Path(temp.name)
+        for kind in ('global_insteadOf','global_pushInsteadOf','system_insteadOf','system_pushInsteadOf','multiple','allowed_credentials'):
+            with self.subTest(kind=kind):
+                directory=root/kind;directory.mkdir();repo=directory/'repo';repo.mkdir()
+                global_config=directory/'global';system_config=directory/'system'
+                global_config.write_text('[credential]\n helper = fixture-not-executed\n',encoding='utf-8');system_config.write_text('',encoding='utf-8')
+                env={k:v for k,v in os.environ.items() if not k.upper().startswith('GIT_') and k.upper() not in ('GH_TOKEN','GITHUB_TOKEN')}
+                env.update(GIT_CONFIG_GLOBAL=str(global_config),GIT_CONFIG_SYSTEM=str(system_config),GIT_CONFIG_NOSYSTEM='0',GIT_TERMINAL_PROMPT='0')
+                def git(*args):return subprocess.run(['git',*args],cwd=repo,env=env,timeout=10,capture_output=True,encoding='utf-8',check=True).stdout.strip()
+                git('init');git('remote','add','origin','https://github.com/'+REPO)
+                if kind.startswith(('global_','system_')):
+                    config=global_config if kind.startswith('global') else system_config
+                    rewrite='pushInsteadOf' if kind.endswith('pushInsteadOf') else 'insteadOf'
+                    with config.open('a',encoding='utf-8') as file:file.write('[url "https://forbidden.invalid/"]\n '+rewrite+' = https://github.com/\n')
+                if kind=='multiple':
+                    git('config','--add','remote.origin.pushurl','https://github.com/'+REPO)
+                    git('config','--add','remote.origin.pushurl','https://forbidden.invalid/escape')
+                host=GitHubHost(None,None,{'p':REPO},token='fixture',transport=lambda *args:self.fail('network effect'))
+                with patch.object(host,'_git_environment',return_value=env):
+                    if kind=='allowed_credentials':host._remote(repo,REPO)
+                    else:
+                        with self.assertRaises(ValueError):host._remote(repo,REPO)

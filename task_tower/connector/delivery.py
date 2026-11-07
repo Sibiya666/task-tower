@@ -331,18 +331,39 @@ class GitHubHost:
             base_ref=row['base']['ref'],branch=row['head']['ref'],head_repository=row['head']['repo']['full_name'],merged_at=row.get('merged_at'),
             state=row['state'],merged=row['merged'],merge_commit_sha=row.get('merge_commit_sha'),mergeable=row.get('mergeable'),
             mergeable_state=row.get('mergeable_state'),conversations_resolved=self._conversations(r,p))
-    def _remote(self,path,r):
-        remote=self.trees._git(path,'remote','get-url','--all','origin')
-        push=self.trees._git(path,'remote','get-url','--push','--all','origin')
+    @staticmethod
+    def _git_environment():
+        import os
+        env={k:v for k,v in os.environ.items() if not k.upper().startswith('GIT_')}
+        env.update(GIT_TERMINAL_PROMPT='0',GCM_INTERACTIVE='Never',GH_PROMPT_DISABLED='1')
+        return env
+
+    def _trusted_git(self,path,*args,timeout=10,env=None):
+        # Remote expansion and authenticated push MUST see identical config,
+        # including global/system url rewrites and existing credential helpers.
+        import os,tempfile
+        from pathlib import Path
+        from ..processes import run_command
+        env=self._git_environment() if env is None else env
+        with tempfile.TemporaryDirectory(prefix='headless-host-git-') as temp:
+            result=run_command(['git','-c','safe.directory='+path.as_posix(),'-c','core.hooksPath='+os.devnull,'-c','core.fsmonitor=false',*args],
+                path,timeout,env=env,capture={'directory':Path(temp),'max_bytes_per_stream':1048576})
+            if result.get('status')!='passed' or not result.get('cleanup_confirmed') or any(result.get(k) for k in ('stdout_truncated','stderr_truncated','stdout_tail_unknown','stderr_tail_unknown')):raise ValueError('trusted_git_outcome_unknown')
+            return (Path(temp)/'stdout.log').read_text(encoding='utf-8').strip()
+
+    def _remote(self,path,r,env=None):
+        env=self._git_environment() if env is None else env
+        remote=self._trusted_git(path,'remote','get-url','--all','origin',env=env)
+        push=self._trusted_git(path,'remote','get-url','--push','--all','origin',env=env)
         allowed={'https://github.com/'+r,'https://github.com/'+r+'.git','git@github.com:'+r+'.git'}
         if remote not in allowed or push not in allowed:raise ValueError('remote_repository_mismatch')
     def prepare_pr(self,a):
         from pathlib import Path
         from urllib.parse import quote
         r=self.projects[a['project_id']];tree=self.trees.prepare(a['project_id'],a['attempt_id'],a['base_sha']);path=Path(tree['path'])
-        self._remote(path,r)
+        env=self._git_environment();self._remote(path,r,env=env)
         if tree['branch']!='codex/headless-'+a['attempt_id'] or self.trees.source(a['project_id'],a['attempt_id'],a['base_sha'])!=a['source']:raise ValueError('source_changed_before_push')
-        self._push(path,tree['branch'])
+        self._push(path,tree['branch'],r,env=env)
         owner=r.split('/')[0];branch=tree['branch']
         existing=self._pages(r,'/pulls?state=open&head='+quote(owner+':'+branch,safe='')+'&base=main')
         if len(existing)>1:raise ValueError('duplicate_pr')
@@ -351,17 +372,12 @@ class GitHubHost:
             row=self._request(r,'POST','/pulls',dict(title='Headless delivery '+a['bead_id'],head=branch,base='main',body='Beads task: '+a['bead_id']+'; attempt: '+a['attempt_id']+'\nIndependent review is recorded by the trusted connector.'))
             p=row['number']
         return self.read_pr(r,p)
-    def _push(self,path,branch):
-        # Only this fixed trusted host operation inherits GitHub authentication.
-        import os,tempfile
-        from pathlib import Path
-        from ..processes import run_command
-        env={k:v for k,v in os.environ.items() if not k.upper().startswith('GIT_')}
-        env.update(GIT_TERMINAL_PROMPT='0',GCM_INTERACTIVE='Never',GH_PROMPT_DISABLED='1')
-        with tempfile.TemporaryDirectory(prefix='headless-push-') as temp:
-            result=run_command(['git','-c','safe.directory='+path.as_posix(),'-c','core.hooksPath='+os.devnull,'-c','core.fsmonitor=false',
-                'push','origin',branch+':refs/heads/'+branch],path,60,env=env,capture={'directory':Path(temp),'max_bytes_per_stream':1048576})
-            if result.get('status')!='passed' or not result.get('cleanup_confirmed') or any(result.get(k) for k in ('stdout_truncated','stderr_truncated','stdout_tail_unknown','stderr_tail_unknown')):raise ValueError('push_needs_reconciliation')
+    def _push(self,path,branch,repository,env=None):
+        # Recheck every effective destination immediately before the effect,
+        # with the same environment, cwd, argv config and credential routing.
+        env=self._git_environment() if env is None else env
+        self._remote(path,repository,env=env)
+        self._trusted_git(path,'push','origin',branch+':refs/heads/'+branch,timeout=60,env=env)
     def protection(self,r):
         p=self._request(r,'GET','/branches/main/protection');checks=p.get('required_status_checks') or {}
         return dict(enforce_admins=p.get('enforce_admins',{}).get('enabled'),strict=checks.get('strict'),

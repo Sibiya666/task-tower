@@ -246,7 +246,15 @@ class LifecycleConnector(Connector):
             self.api.validate_command(key)
             if kind=='deliver':
                 self.store.update(key,phase='starting')
-                self.delivery.run(command,self.api,self.stop)
+                result=self.delivery.run(command,self.api,self.stop)
+                if result is not None:
+                    if result.get('phase')!='accepted' or not result.get('canonical_close'):raise ValueError('confirmed_delivery_required')
+                    self.store.update(key,cleanup_confirmed=False)
+                    for previous,app in list(worker['apps'].items()):
+                        # close() verifies this owned transport's containment/readers;
+                        # failure retains its app and occupancy plus the durable fence.
+                        app.close();worker['apps'].pop(previous);worker['replies'].pop(previous,None)
+                    self.store.update(key,cleanup_confirmed=True)
                 self.store.update(key,phase='completed')
                 return
             if kind=='quiesce':

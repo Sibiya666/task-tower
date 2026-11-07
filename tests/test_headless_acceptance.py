@@ -200,3 +200,65 @@ class AcceptanceIntegration(unittest.TestCase):
         self.assertFalse(actions[0]['changes']['quiescent'])
         self.assertEqual(actions[0]['changes']['correction_count'],3)
         self.assertEqual([x['kind'] for x in actions[1:]],['quiesce'])
+
+
+class DeliveryCapacityTests(unittest.TestCase):
+    def scenario(self,mode):
+        import tempfile,threading,queue,time
+        from pathlib import Path
+        from task_tower.connector.client import LifecycleConnector
+        from task_tower.connector.store import ConnectorStore
+        from task_tower.connector.app_server import AppServer
+        temp=tempfile.TemporaryDirectory();self.addCleanup(temp.cleanup);root=Path(temp.name)
+        store=ConnectorStore(root/'journal','delivery-capacity-'+mode);self.addCleanup(store.close)
+        source=dict(head_sha=H,base_sha=B,diff='whole approved diff')
+        author=dict(version=1,kind='execute',command_id='author-cmd',attempt_id='attempt',project_id='p',base_sha=B,input={'text':'approved'},source=source)
+        deliver=dict(version=1,kind='deliver',command_id='deliver-cmd',attempt_id='attempt',project_id='p',base_sha=B,attempt=attempt())
+        second=dict(version=1,kind='execute',command_id='next-cmd',attempt_id='second',project_id='p',base_sha=B,input={'text':'second approved'},source=dict(head_sha=B,base_sha=B,diff=''))
+        store.receive(author);store.update('author-cmd',phase='completed',thread_id='author',turn_id='author-turn')
+        class RetainedAuthor:
+            closed=False
+            def close(self):
+                if mode=='unknown-cleanup':raise RuntimeError('cleanup unknown')
+                self.closed=True
+        retained=RetainedAuthor();started=threading.Event()
+        class Wire:
+            def request(self,method,params):
+                if method=='thread/start':return {'thread':{'id':'second-author'}}
+                if method=='turn/start':started.set();return {'turn':{'id':'second-turn'}}
+                raise AssertionError(method)
+            def notifications(self):return []
+            def close(self):pass
+        class API:
+            def commands(self):return [deliver,second]
+            def validate_command(self,key):return {}
+            def send_event(self,event):return {}
+        class Trees:
+            def prepare(self,*args):return dict(path=str(root))
+        class Delivered:
+            def run(self,*args):return None if mode=='superseded' else dict(phase='accepted',canonical_close={'event_id':'close','owner':'owner'})
+        c=LifecycleConnector(store,API(),Trees(),lambda cwd,request_handler=None:AppServer(store,transport=Wire(),request_handler=request_handler),max_active_tasks=1,delivery=Delivered());self.addCleanup(c.close)
+        worker=dict(queue=queue.Queue(4),apps={'author-cmd':retained},replies={},busy=False,reserved=0)
+        c.workers['attempt']=worker;worker['thread']=threading.Thread(target=c._work,args=('attempt',worker),daemon=True);worker['thread'].start()
+        end=time.monotonic()+2
+        while time.monotonic()<end:
+            c.tick()
+            if started.is_set():break
+            current=next((d for d in store.commands() if d['command']['command_id']=='deliver-cmd'),None)
+            if mode!='accepted' and current and current['phase'] in ('completed','needs_reconciliation') and not worker['busy']:
+                for _ in range(3):c.tick();time.sleep(.01)
+                break
+            time.sleep(.01)
+        if mode=='accepted':
+            self.assertTrue(retained.closed)
+            self.assertTrue(started.is_set(),'confirmed accepted delivery must admit the next configured task')
+            self.assertFalse(c._occupied(worker));self.assertEqual(store.command('deliver-cmd')['phase'],'completed')
+        elif mode=='unknown-cleanup':
+            self.assertFalse(retained.closed);self.assertFalse(started.is_set());self.assertTrue(c._occupied(worker))
+            self.assertEqual(store.command('deliver-cmd')['phase'],'needs_reconciliation')
+            self.assertIs(store.command('deliver-cmd')['cleanup_confirmed'],False)
+        else:
+            self.assertFalse(retained.closed);self.assertFalse(started.is_set());self.assertTrue(c._occupied(worker))
+    def test_accepted_delivery_stops_retained_author_and_frees_actual_worker_capacity(self):self.scenario('accepted')
+    def test_unknown_author_cleanup_preserves_local_fence_and_capacity(self):self.scenario('unknown-cleanup')
+    def test_premerge_supersession_keeps_same_author_and_capacity_for_revision(self):self.scenario('superseded')
