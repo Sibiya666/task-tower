@@ -19,14 +19,15 @@ class Worktrees:
             if not repo.is_dir():raise ValueError('invalid_repository')
             if root==repo or repo in root.parents:raise ValueError('worktree_root_inside_repository')
             self.projects[key]=(repo,root)
-    def _git(self,repo,*args,timeout=10):
+    def _git(self,repo,*args,timeout=10,raw=False):
         env={k:v for k,v in os.environ.items() if not k.upper().startswith('GIT_') and k.upper() not in ('GH_TOKEN','GITHUB_TOKEN')}
         env['GIT_TERMINAL_PROMPT']='0'
         env.update(GIT_CONFIG_NOSYSTEM='1',GIT_CONFIG_GLOBAL=os.devnull,GIT_NO_LAZY_FETCH='1',GIT_NO_REPLACE_OBJECTS='1')
         with tempfile.TemporaryDirectory(prefix='tower-connector-git-') as tmp:
             result=run_command(['git','-c','core.hooksPath='+os.devnull,'-c','core.fsmonitor=false',*args],repo,timeout,env=env,capture={'directory':Path(tmp),'max_bytes_per_stream':1048576})
             if result.get('exit_code')!=0 or result.get('status')!='passed' or not result.get('cleanup_confirmed') or any(result.get(k) for k in ('stdout_truncated','stderr_truncated','stdout_tail_unknown','stderr_tail_unknown')):raise ValueError('git_operation_unknown')
-            return (Path(tmp)/'stdout.log').read_text(encoding='utf-8').strip()
+            text=(Path(tmp)/'stdout.log').read_text(encoding='utf-8')
+            return text if raw else text.strip()
     def prepare(self,project_id,attempt_id,base_sha):return self._prepare(project_id,attempt_id,base_sha,False)
     def prepare_review(self,project_id,attempt_id,base_sha):return self._prepare(project_id,attempt_id,base_sha,True)
     def _prepare(self,project,attempt,sha,review):
@@ -59,3 +60,11 @@ class Worktrees:
         self._git(repo,*args)
         self.store.save_worktree(attempt,data)
         return data
+
+    def source(self,project,attempt,base_sha):
+        from .briefs import validate_source
+        tree=self.prepare(project,attempt,base_sha);path=Path(tree['path'])
+        head=self._git(path,'rev-parse','HEAD')
+        self._git(path,'merge-base','--is-ancestor',base_sha,head)
+        diff=self._git(path,'diff','--no-ext-diff','--no-textconv','--binary',base_sha,head,'--',raw=True)
+        return validate_source(dict(base_sha=base_sha,head_sha=head,diff=diff))

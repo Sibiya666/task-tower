@@ -16,8 +16,9 @@ class DecisionRequired(RuntimeError):
 
 class StdioTransport:
     MAX_LINE=1048576
-    def __init__(self,executable,cwd,*,timeout=30,capacity=256):
+    def __init__(self,executable,cwd,*,timeout=30,capacity=256,request_handler=None):
         if not Path(executable).is_absolute() or not Path(cwd).is_absolute():raise ValueError('absolute_path_required')
+        self.request_handler=request_handler
         self.timeout=timeout;self.q=queue.Queue(capacity);self.events=queue.Queue(capacity)
         self.failed=threading.Event();self.serial=threading.RLock();self.counter=0;self.stderr_tail=bytearray()
         env={k:v for k,v in os.environ.items() if k.upper() not in ('GH_TOKEN','GITHUB_TOKEN') and not k.upper().startswith(('BD_','BEADS_','DOLT_','TOWER_','TASK_TOWER_'))}
@@ -77,6 +78,8 @@ class StdioTransport:
             self.failed.set();raise TimeoutError('rpc_write_outcome_unknown')
         if self.failed.is_set():raise RpcError('rpc_write_failed')
     def _event(self,msg):
+        if 'id' in msg and 'method' in msg and self.request_handler is not None:
+            self.request_handler(msg,self.respond);return
         try:self.events.put_nowait(msg)
         except queue.Full:self.failed.set();raise RpcError('notification_limit') from None
         if 'id' in msg and 'method' in msg:raise DecisionRequired(msg)
@@ -97,6 +100,8 @@ class StdioTransport:
                     if not isinstance(msg.get('result'),dict):raise RpcError('invalid_rpc_result')
                     return msg['result']
                 self._event(msg)
+    def respond(self,key,result):
+        self._send(dict(id=key,result=result))
     def notifications(self):
         with self.serial:
             result=[]
@@ -143,8 +148,9 @@ class StdioTransport:
         if any(t.is_alive() for t in self.readers):raise RpcError('reader_cleanup_unknown')
 
 class AppServer:
-    def __init__(self,store,*,transport=None,executable=None,cwd=None):
-        self.store=store;self.transport=transport or StdioTransport(executable,cwd)
+    def __init__(self,store,*,transport=None,executable=None,cwd=None,request_handler=None):
+        self.store=store;self.transport=transport or StdioTransport(executable,cwd,request_handler=request_handler)
+        if request_handler is not None:self.transport.request_handler=request_handler
     def create_thread(self,cwd,command_id=None):
         if command_id is None:raise ValueError('durable_command_required')
         data=self.store.command(command_id)
@@ -168,7 +174,9 @@ class AppServer:
         if data['phase']!='prepared':raise ValueError('turn_start_fenced')
         self.store.update(command_id,phase='starting')
         try:
-            result=self.transport.request('turn/start',{'threadId':thread_id,'input':[dict(type='text',text=input['text'])]})
+            text=input['text']
+            if data['command'].get('kind')=='review':text+='\nYour actual reviewer_thread_id: '+thread_id
+            result=self.transport.request('turn/start',{'threadId':thread_id,'input':[dict(type='text',text=text)]})
             key=result['turn']['id']
             if not isinstance(key,str) or not key:raise RpcError('invalid_turn')
             return self.store.update(command_id,phase='executing',turn_id=key)
@@ -176,6 +184,19 @@ class AppServer:
             return self.store.update(command_id,phase='needs_input',decision=error.decision)
         except Exception:
             return self.store.update(command_id,phase='needs_reconciliation')
+    def attach_thread(self,thread_id,command_id,cwd,*,resume=False):
+        data=self.store.command(command_id)
+        if data['phase']!='queued':raise ValueError('existing_thread_fenced')
+        self.store.update(command_id,phase='creating_thread')
+        if resume:
+            result=self.transport.request('thread/resume',{'threadId':thread_id,'cwd':str(cwd)})
+            if result.get('thread',{}).get('id')!=thread_id:raise RpcError('resume_identity_mismatch')
+        self.store.update(command_id,phase='prepared',thread_id=thread_id)
+        return thread_id
+    def respond(self,request,answer):
+        if answer not in ('approve','decline'):raise ValueError('invalid_answer')
+        if not hasattr(self.transport,'respond'):raise RpcError('response_transport_unavailable')
+        self.transport.respond(request['request_id'],{'decision':'accept' if answer=='approve' else 'decline'})
     def inspect(self,thread_id):
         metadata=self.transport.request('thread/read',{'threadId':thread_id,'includeTurns':False})
         try:return dict(metadata=metadata,history=self.transport.request('thread/read',{'threadId':thread_id,'includeTurns':True}),history_state='complete')

@@ -60,6 +60,12 @@ class APIClient:
     def claim(self,body):return self.request('POST','/v1/claims',body)['attempt']
     def validate(self,attempt):return self.request('POST','/v1/attempts/'+quote(identity(attempt),safe='')+'/validate',{'version':1})['attempt']
     def send_event(self,event):return self.request('POST','/v1/events',event)
+    def commands(self):return self.request('GET','/v1/commands')['commands']
+    def validate_command(self,key):return self.request('POST','/v1/commands/'+quote(identity(key),safe='')+'/validate',{'version':1})['attempt']
+    def dispatch(self,key,base):return self.request('POST','/v1/attempts/'+quote(identity(key),safe='')+'/dispatch',dict(version=1,base_sha=base))['attempt']
+    def resume(self,key):return self.request('POST','/v1/attempts/'+quote(identity(key),safe='')+'/resume',dict(version=1))['attempt']
+    def decisions(self):return self.request('GET','/v1/decisions')['decisions']
+    def respond(self,key,answer):return self.request('POST','/v1/decisions/'+quote(identity(key),safe='')+'/respond',dict(version=1,answer=answer))['decision']
 
 class Connector:
     def __init__(self,store,api,app,worktrees):
@@ -148,3 +154,171 @@ class Connector:
                     except ValueError:self.store.transition(key,'needs_reconciliation','unknown')
         self._deliver_async()
         return True
+
+
+class LifecycleConnector(Connector):
+    """At most the configured number of active attempts, each with its own RPC worker.
+
+    Control-plane HTTP and delivery never run on a live RPC polling thread. These
+    fixed workers are transport owners, not model-selected assistants/schedulers.
+    """
+    def __init__(self,store,api,worktrees,app_factory,*,max_active_tasks=2):
+        super().__init__(store,api,None,worktrees)
+        if type(max_active_tasks) is not int or not 1<=max_active_tasks<=32:raise ValueError('invalid_capacity')
+        self.max_active_tasks=max_active_tasks;self.app_factory=app_factory
+        self.workers={};self.worker_guard=threading.RLock();self.stop=threading.Event();self.seen=set()
+
+    def tick(self):
+        self._deliver_async()
+        try:commands=self.api.commands()
+        except Exception:return False
+        import queue
+        for command in commands:
+            key=command['command_id'];attempt=command['attempt_id']
+            if key in self.seen:continue
+            # Replay returns durable local outcome; no second start/response.
+            prior=next((d for d in self.store.commands() if d['command']['command_id']==key),None)
+            if prior is not None:
+                self.seen.add(key);continue
+            with self.worker_guard:
+                worker=self.workers.get(attempt)
+                active=sum(bool(w['apps']) or w['busy'] for w in self.workers.values())
+                if worker is None:
+                    if active>=self.max_active_tasks:continue
+                    worker=dict(queue=queue.Queue(4),apps={},replies={},busy=True)
+                    self.workers[attempt]=worker
+                    worker['thread']=threading.Thread(target=self._work,args=(attempt,worker),daemon=True)
+                    worker['thread'].start()
+                self.store.receive(command);self.seen.add(key)
+                if command['kind']=='respond':
+                    # RPC may be waiting for the initial turn/start ACK; its bounded
+                    # worker cannot consume a queued reply until that request returns.
+                    self._execute_lifecycle(command,worker)
+                else:worker['queue'].put_nowait(command)
+        return True
+
+    def _work(self,attempt,worker):
+        import queue
+        try:
+            while not self.stop.is_set():
+                try:command=worker['queue'].get(timeout=.02)
+                except queue.Empty:command=None
+                if command is not None:
+                    worker['busy']=True
+                    self._execute_lifecycle(command,worker)
+                    worker['busy']=False
+                for key,app in list(worker['apps'].items()):
+                    data=self.store.command(key)
+                    if data['phase'] in ('executing','needs_input'):
+                        self._poll_lifecycle(key,app,worker)
+        finally:
+            for key,app in list(worker['apps'].items()):
+                try:
+                    app.close()
+                    if self.store.command(key)['phase'] in ('executing','needs_input','starting'):
+                        self.store.lifecycle_transition(key,'needs_reconciliation','failed')
+                except Exception:
+                    self.store.lifecycle_transition(key,'needs_reconciliation','failed')
+            worker['apps'].clear()
+
+    def _execute_lifecycle(self,command,worker):
+        key=command['command_id'];kind=command['kind'];attempt=command['attempt_id']
+        try:
+            self.api.validate_command(key)
+            if kind=='quiesce':
+                self.store.update(key,phase='starting')
+                for previous,app in list(worker['apps'].items()):
+                    app.close();worker['apps'].pop(previous)
+                    if self.store.command(previous)['phase'] in ('executing','needs_input'):
+                        self.store.update(previous,phase='stopped')
+                self.store.lifecycle_transition(key,'completed','quiescent');return
+            if kind=='respond':
+                target=command['target_command_id'];app=worker['apps'].get(target);reply=worker['replies'].get(target)
+                if (app is None and reply is None) or self.store.command(target)['phase']!='needs_input':raise ValueError('approval_process_missing')
+                original=self.store.command(target).get('decision')
+                if original!=command['request']:raise ValueError('approval_identity_mismatch')
+                # A fast RPC ACK must not enqueue started/completed ahead of the
+                # response outcome. Hold only the local journal lock, never HTTP.
+                with self.store.lock:
+                    self.store.update(key,phase='starting')
+                    if reply is not None:reply(command['request']['request_id'],{'decision':'accept' if command['answer']=='approve' else 'decline'})
+                    else:app.respond(command['request'],command['answer'])
+                    self.store.update(target,phase='executing')
+                    self.store.lifecycle_transition(key,'completed','responded')
+                return
+            def on_request(message,reply):
+                import uuid
+                method=message.get('method');p=message.get('params',{})
+                current=self.store.command(key)
+                if (method not in ('item/commandExecution/requestApproval','item/fileChange/requestApproval')
+                        or (current.get('thread_id') is not None and p.get('threadId',current['thread_id'])!=current['thread_id'])):
+                    raise ValueError('unsupported_or_foreign_request')
+                request=dict(method=method,request_id=message['id'],question=p.get('reason') or 'Explicit '+method)
+                worker['replies'][key]=reply
+                self.store.update(key,phase='needs_input',decision=request)
+                self.store.lifecycle_event(attempt,'approval',command_id=key,decision_id=str(uuid.uuid4()),request=request)
+            if kind=='review':
+                # Author worktree must still have exactly the complete source reviewed.
+                source=self.worktrees.source(command['project_id'],attempt,command['base_sha'])
+                if source!=command['source']:raise ValueError('source_changed_before_review')
+                tree=self.worktrees.prepare_review(command['project_id'],attempt+'-r-'+key[:12],source['head_sha'])
+            else:tree=self.worktrees.prepare(command['project_id'],attempt,command['base_sha'])
+            self.api.validate_command(key)
+            if kind=='revise':
+                prior=next((d for d in reversed(self.store.commands()) if d['command']['attempt_id']==attempt and d['command'].get('kind') in ('execute','revise') and d['thread_id']==command['thread_id'] and d['command']['command_id'] in worker['apps']),None)
+                if prior is None:prior=next((d for d in reversed(self.store.commands()) if d['command']['attempt_id']==attempt and d['command'].get('kind') in ('execute','revise') and d['thread_id']==command['thread_id']),None)
+                if prior is None:raise ValueError('author_thread_unknown')
+                app=worker['apps'].pop(prior['command']['command_id'],None)
+                resumed=app is None
+                if app is None:app=self.app_factory(tree['path'],request_handler=on_request)
+                worker['apps'][key]=app
+                app.transport.request_handler=on_request
+                self.api.validate_command(key)
+                thread=app.attach_thread(command['thread_id'],key,tree['path'],resume=resumed)
+            else:
+                app=self.app_factory(tree['path'],request_handler=on_request);worker['apps'][key]=app
+                self.api.validate_command(key)
+                thread=app.create_thread(tree['path'],command_id=key)
+            self.api.validate_command(key)
+            result=app.start_turn(thread,key,command['input'])
+            if result['phase']!='executing':raise ValueError('turn_start_unknown')
+            self.store.lifecycle_event(attempt,'started',command_id=key,thread_id=thread,turn_id=result['turn_id'])
+        except Exception:
+            self.store.lifecycle_transition(key,'needs_reconciliation','failed')
+
+    def _poll_lifecycle(self,key,app,worker):
+        import uuid
+        data=self.store.command(key);command=data['command'];attempt=command['attempt_id']
+        try:
+            for message in app.notifications():
+                p=message.get('params',{});method=message.get('method')
+                if method=='connector/interrupted':raise ValueError('owned_app_interrupted')
+                if 'id' in message and 'method' in message:
+                    if method not in ('item/commandExecution/requestApproval','item/fileChange/requestApproval') or p.get('threadId')!=data['thread_id']:
+                        raise ValueError('unsupported_or_foreign_request')
+                    decision=dict(method=method,request_id=message['id'],question=p.get('reason') or 'Explicit '+method)
+                    self.store.update(key,phase='needs_input',decision=decision)
+                    self.store.lifecycle_event(attempt,'approval',command_id=key,decision_id=str(uuid.uuid4()),request=decision)
+                elif method=='turn/completed' and p.get('threadId')==data['thread_id'] and p.get('turn',{}).get('id')==data['turn_id']:
+                    turn=p['turn']
+                    if turn.get('status')!='completed':raise ValueError('turn_not_completed')
+                    text='\n'.join(i['text'] for i in turn.get('items',[]) if isinstance(i,dict) and i.get('type')=='agentMessage' and isinstance(i.get('text'),str))
+                    payload=dict(thread_id=data['thread_id'],turn_id=data['turn_id'],result=text)
+                    source=self.worktrees.source(command['project_id'],attempt,command['base_sha'])
+                    if command['kind']=='review':
+                        self.worktrees.prepare_review(command['project_id'],attempt+'-r-'+key[:12],command['source']['head_sha'])
+                        if source!=command['source']:raise ValueError('source_changed_during_review')
+                        from ..service.lifecycle import validate_review
+                        validate_review(text,source,data['thread_id'])
+                        app.close();worker['apps'].pop(key)
+                    else:payload['source']=source
+                    self.store.lifecycle_transition(key,'completed','completed',**payload)
+        except Exception:
+            self.store.lifecycle_transition(key,'needs_reconciliation','failed')
+
+    def close(self):
+        self.stop.set()
+        for worker in self.workers.values():
+            worker['thread'].join(110)
+            if worker['thread'].is_alive():raise RuntimeError('lifecycle_cleanup_unconfirmed')
+        super().close()
