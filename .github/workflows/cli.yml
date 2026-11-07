@@ -101,3 +101,24 @@ jobs:
       - name: Fail if scope or required runtime route is incomplete
         if: always() && (needs.scope.result != 'success' || (needs.scope.outputs.mode != 'docs' && needs.scope.outputs.mode != 'full') || (needs.scope.outputs.mode == 'full' && (needs.shards.result != 'success' || steps.tests.outcome != 'success')) || (needs.scope.outputs.mode == 'docs' && (needs.shards.result != 'skipped' || steps.docs.outcome != 'success')))
         run: python -c "raise SystemExit(1)"
+  headless-container:
+    name: headless container smoke (linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Build pinned orchestrator with default-deny context
+        run: docker build -f deployment/headless/Dockerfile -t task-tower-headless:ci .
+      - name: Verify disposable native Beads and persistent service volumes
+        run: python deployment/headless/smoke.py --image task-tower-headless:ci --receipt "${{ runner.temp }}/headless-container/receipt.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: headless-container-${{ github.run_id }}
+          path: ${{ runner.temp }}/headless-container/receipt.json
+          if-no-files-found: error

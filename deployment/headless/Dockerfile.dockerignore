@@ -1,0 +1,17 @@
+# Default deny; directory traversal exceptions re-exclude descendants immediately.
+**
+!task_tower/
+task_tower/**
+!task_tower/*.py
+!task_tower/service/
+task_tower/service/**
+!task_tower/service/*.py
+!task_tower/connector/
+task_tower/connector/**
+!task_tower/connector/*.py
+!deployment/
+deployment/**
+!deployment/headless/
+deployment/headless/**
+!deployment/headless/Dockerfile
+!deployment/headless/Dockerfile.dockerignore

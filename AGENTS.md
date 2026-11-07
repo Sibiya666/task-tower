@@ -76,3 +76,17 @@ Read [backlog](docs/backlog.md) as canonical-source navigation plus historical c
 The unresolved tt-qrk.4 remains a recorded known risk, not fixed by green probes or workload optimization. The existing nonblocking release decision does not waive failed CI, assertions/timeouts, security checks or independent PR/main acceptance. See docs/ci-known-issues.md for the recorded boundary; do not resume its diagnostic merely by reading it.
 
 Preserve existing monitors and their actual user-controlled state. Do not duplicate, transfer, restart or install them during this cleanup or future navigation. Their historical descriptions do not prove they are currently active. Never scan private runtime/DB/configs to fill a monitoring gap.
+
+
+## Explicit headless deployment
+
+Use the approved headless design/plan and [operation procedure](docs/runtime/headless-operation.md)
+for the bounded Linux Docker orchestrator plus host connector. Keep only new,
+explicitly approved pilot tasks in its isolated native Beads volumes until a
+separately authorized single-writer migration. Docker receives no executor
+repository, model authorization, host GitHub credentials or docker.sock. Build
+with the Dockerfile-specific default-deny context and pinned dependencies; retain
+host-loopback-only port publishing. The ordinary host API still requires loopback;
+container-network binding is explicit and limited to the Linux Docker namespace.
+A stopped/failed smoke, fixture verdict or model completion never proves real
+pilot delivery. Preserve all PR/main gates, unknown fences and canonical claims.

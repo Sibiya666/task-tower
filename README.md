@@ -190,3 +190,12 @@ Pop-Location
 Существующие [GitHub-книги](docs/github-books.md), [Project-first setup](docs/github-setup.md), [postmerge worker](docs/postmerge-worker.md), [executor](docs/executor.md) и [захват сессий](docs/session-capture.md) сохраняются для совместимости и аудита. Их инструкции не делают GitHub Issues каноническим источником новых Beads-задач и не разрешают автоматически восстанавливать старое исполнение.
 
 Superpowers остаётся обязательной основой; [AGENTS.md](AGENTS.md) задаёт текущие границы работы агента. Сначала прочитайте актуальную задачу Beads и связанную спеку, затем используйте изолированную рабочую копию и независимую приёмку. Статусы в книжках, зелёный отдельный тест и ответ модели не заменяют проверяемый результат.
+
+
+## Headless Linux orchestrator
+
+The explicit [Docker/host-connector procedure](docs/runtime/headless-operation.md#linux-docker-deployment-stage-6)
+keeps Beads and runtime journals in separate persistent volumes and Codex/repositories
+on the host. It includes a disposable native Linux smoke; fixture/container success
+alone does not establish acceptance of the real autonomous pilot. No canonical
+backlog is migrated and no unattended service is installed by default.
