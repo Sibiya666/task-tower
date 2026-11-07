@@ -8,6 +8,7 @@ import json
 import time
 from urllib.parse import urlsplit,quote
 from ..service.beads import strict_json,identity
+from .app_server import DecisionRequired
 
 class _ResponseReader(io.RawIOBase):
     def __init__(self,sock,deadline):
@@ -95,6 +96,9 @@ class Connector:
             phase=result['phase']
             self.store.event(command['attempt_id'],'executing' if phase=='executing' else phase,'running' if phase=='executing' else 'unknown')
             return result
+        except DecisionRequired as error:
+            result=self.store.update(key,phase='needs_input',decision=error.decision)
+            self.store.event(command['attempt_id'],'needs_input','unknown');return result
         except Exception:
             result=self.store.update(key,phase='needs_reconciliation')
             self.store.event(command['attempt_id'],'needs_reconciliation','unknown');return result

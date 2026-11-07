@@ -99,3 +99,28 @@ for line in sys.stdin:
         finally:
             release.set();t.join(3)
             if hasattr(wire,'writer'):wire.writer.join(2)
+
+class ApprovalBoundaryTests(unittest.TestCase):
+    def test_thread_start_approval_preserved_and_no_turn(self):
+        from task_tower.connector.client import Connector
+        from task_tower.connector.app_server import DecisionRequired
+        with tempfile.TemporaryDirectory() as tmp:
+            s=ConnectorStore(Path(tmp)/'j','host1')
+            class Wire:
+                starts=0
+                def request(self,method,params):
+                    if method=='turn/start':self.starts+=1
+                    raise DecisionRequired({'id':99,'method':'item/commandExecution/requestApproval'})
+                def notifications(self):return []
+            class API:
+                def validate(self,a):return dict(connector_id='host1',project_id='p',phase='claimed')
+            class Trees:
+                def prepare(self,*a):return {'path':tmp}
+            wire=Wire()
+            try:
+                command=dict(version=1,command_id='c1',attempt_id='a1',project_id='p',base_sha='a'*40,input={'text':'hi'})
+                result=Connector(s,API(),AppServer(s,transport=wire),Trees()).execute(command)
+                self.assertEqual(result['phase'],'needs_input')
+                self.assertEqual(result['decision']['method'],'item/commandExecution/requestApproval')
+                self.assertEqual(wire.starts,0)
+            finally:s.close()

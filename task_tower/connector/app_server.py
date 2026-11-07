@@ -9,7 +9,10 @@ import time
 from ..service.beads import strict_json
 
 class RpcError(RuntimeError):pass
-class DecisionRequired(RuntimeError):pass
+class DecisionRequired(RuntimeError):
+    def __init__(self,request):
+        super().__init__('explicit_app_server_decision_required')
+        self.decision=dict(method=request.get('method','unknown_callback'),request_id=request.get('id')) if isinstance(request,dict) else dict(method='unknown_callback')
 
 class StdioTransport:
     MAX_LINE=1048576
@@ -76,7 +79,7 @@ class StdioTransport:
     def _event(self,msg):
         try:self.events.put_nowait(msg)
         except queue.Full:self.failed.set();raise RpcError('notification_limit') from None
-        if 'id' in msg and 'method' in msg:raise DecisionRequired('explicit_app_server_decision_required')
+        if 'id' in msg and 'method' in msg:raise DecisionRequired(msg)
     def request(self,method,params):
         with self.serial:
             if self.failed.is_set():raise RpcError('app_server_unavailable')
@@ -154,6 +157,8 @@ class AppServer:
             if not isinstance(key,str) or not key:raise RpcError('invalid_thread')
             self.store.update(command_id,thread_id=key,phase='prepared')
             return key
+        except DecisionRequired as error:
+            self.store.update(command_id,phase='needs_input',decision=error.decision);raise
         except Exception:
             self.store.update(command_id,phase='needs_reconciliation');raise
     def start_turn(self,thread_id,command_id,input):
@@ -167,10 +172,8 @@ class AppServer:
             key=result['turn']['id']
             if not isinstance(key,str) or not key:raise RpcError('invalid_turn')
             return self.store.update(command_id,phase='executing',turn_id=key)
-        except DecisionRequired:
-            requests=[m for m in self.transport.notifications() if 'id' in m and 'method' in m]
-            decision=dict(method=requests[0]['method'],request_id=requests[0]['id']) if requests else {'method':'unknown_callback'}
-            return self.store.update(command_id,phase='needs_input',decision=decision)
+        except DecisionRequired as error:
+            return self.store.update(command_id,phase='needs_input',decision=error.decision)
         except Exception:
             return self.store.update(command_id,phase='needs_reconciliation')
     def inspect(self,thread_id):

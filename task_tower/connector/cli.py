@@ -15,7 +15,7 @@ import sys
 import time
 from .store import ConnectorStore
 from .worktrees import Worktrees
-from .app_server import AppServer
+from .app_server import AppServer,DecisionRequired
 from .client import APIClient,Connector
 from ..service.beads import strict_json,identity,bead_id
 from ..service.cli import read_token,_absolute
@@ -43,7 +43,7 @@ def load_config(path):
 def main(argv=None):
     parser=argparse.ArgumentParser(description='Explicit host connector assignment; merge disabled')
     sub=parser.add_subparsers(dest='action',required=True);run=sub.add_parser('run');run.add_argument('--config',required=True)
-    store=app=None
+    store=app=None;command=None
     try:
         args=parser.parse_args(argv);cfg=load_config(args.config)
         store=ConnectorStore(cfg['journal'],cfg['connector_id'])
@@ -58,6 +58,7 @@ def main(argv=None):
             connector.flush();print('connector: '+previous['phase']);return 0 if previous['phase']=='completed' else 4
         # Fresh native check before even launching the owned app-server process.
         connector._validate(command)
+        store.receive(command)  # Durable intent before the owned process starts.
         app=AppServer(store,executable=cfg['app_server'],cwd=Path(cfg['projects'][a['project_id']]['repository']))
         connector.app=app;data=connector.execute(command)
         while data['phase']=='executing':
@@ -68,6 +69,11 @@ def main(argv=None):
         print('connector: '+data['phase'])
         if data.get('decision'):print('connector: explicit app-server decision required; affected action paused')
         return 0 if data['phase']=='completed' and not store.pending_events() else 4
+    except DecisionRequired as error:
+        if store is not None and command is not None:
+            store.transition(command['command_id'],'needs_input','unknown',decision=error.decision)
+        print('connector: explicit app-server decision required; affected action paused')
+        return 4
     except KeyboardInterrupt:
         print('connector: interrupted; retained journal requires reconciliation');return 4
     except Exception:
