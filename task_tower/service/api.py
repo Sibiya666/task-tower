@@ -1,13 +1,35 @@
 """Version-one, loopback-only HTTP polling API with connector-scoped bearer auth."""
 import hmac
+import io
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import math
+import time
 from urllib.parse import parse_qs, urlsplit
 
 from .beads import ServiceError, identity, strict_json
 
 MAX_BODY=65536
+READ_TIMEOUT=5
+
+
+class _DeadlineReader(io.RawIOBase):
+    """Refresh the remaining total read budget on every underlying recv.
+
+    A socket timeout alone restarts after each successful trickle. BufferedReader
+    may call readinto many times for a single header line or body read.
+    """
+    def __init__(self,connection,deadline):
+        super().__init__()
+        self.connection,self.deadline=connection,deadline
+
+    def readable(self):return True
+
+    def readinto(self,buffer):
+        remaining=self.deadline-time.monotonic()
+        if remaining<=0:raise TimeoutError('request_read_deadline')
+        self.connection.settimeout(remaining)
+        return self.connection.recv_into(buffer)
 
 
 def make_server(store,connectors,*,host='127.0.0.1',port=8765,poll_seconds=2):
@@ -35,7 +57,11 @@ def make_server(store,connectors,*,host='127.0.0.1',port=8765,poll_seconds=2):
         sys_version=''
 
         def setup(self):
-            super().setup();self.connection.settimeout(5)
+            super().setup()
+            self.connection.settimeout(READ_TIMEOUT)
+            self.rfile.close()
+            self.rfile=io.BufferedReader(_DeadlineReader(
+                self.connection,time.monotonic()+READ_TIMEOUT))
 
         def log_message(self,*args):pass  # No paths, tokens, payloads or user prose in logs.
 
@@ -48,7 +74,9 @@ def make_server(store,connectors,*,host='127.0.0.1',port=8765,poll_seconds=2):
                         and lengths[0].isdigit() and len(lengths[0])<=6
                         and 0<int(lengths[0])<=MAX_BODY):
                     try:self.rfile.read(int(lengths[0]))
-                    except (OSError,TimeoutError):pass
+                    except OSError:
+                        self.close_connection=True
+                        return
                 self._body_consumed=True
             raw=json.dumps(dict(version=1,**value),ensure_ascii=True,allow_nan=False).encode('utf-8')
             try:
@@ -58,7 +86,7 @@ def make_server(store,connectors,*,host='127.0.0.1',port=8765,poll_seconds=2):
                 self.send_header('Cache-Control','no-store')
                 self.send_header('X-Content-Type-Options','nosniff')
                 self.end_headers();self.wfile.write(raw)
-            except (BrokenPipeError,ConnectionResetError,TimeoutError):pass
+            except OSError:self.close_connection=True
 
         def _authenticate(self):
             values=self.headers.get_all('X-Connector-ID',[])
@@ -148,7 +176,9 @@ def make_server(store,connectors,*,host='127.0.0.1',port=8765,poll_seconds=2):
                 raise ServiceError('route_not_found',404)
             except ServiceError as error:
                 self._send(error.status,dict(error=dict(code=error.code,retryable=error.retryable,request_id=request_id)))
-            except (TimeoutError,ValueError,TypeError,KeyError,RecursionError):
+            except TimeoutError:
+                self.close_connection=True
+            except (ValueError,TypeError,KeyError,RecursionError):
                 self._send(400,dict(error=dict(code='invalid_request',retryable=False,request_id=request_id)))
             except Exception:
                 self._send(503,dict(error=dict(code='service_unavailable',retryable=False,request_id=request_id)))

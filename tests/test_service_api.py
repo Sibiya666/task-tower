@@ -3,6 +3,9 @@ import json
 import socket
 import tempfile
 import threading
+import time
+from unittest.mock import patch
+from task_tower.service import api
 import unittest
 from pathlib import Path
 from tests.test_service_store import PLAN,DIGEST
@@ -50,9 +53,11 @@ class APITests(unittest.TestCase):
     def request(self,method,path,body=None,token='a'*40,connector='c1'):
         c=http.client.HTTPConnection('127.0.0.1',self.server.server_port,timeout=3)
         raw=None if body is None else json.dumps(body)
-        c.request(method,path,raw,{'Authorization':'Bearer '+token,'X-Connector-ID':connector,
-                                'Content-Type':'application/json'})
-        r=c.getresponse();data=json.loads(r.read());c.close();return r.status,data
+        try:
+            c.request(method,path,raw,{'Authorization':'Bearer '+token,'X-Connector-ID':connector,
+                                    'Content-Type':'application/json'})
+            r=c.getresponse();data=json.loads(r.read());return r.status,data
+        finally:c.close()
 
     def import_plan(self):
         status,data=self.request('POST','/v1/plans/import',dict(version=1,request_id='import-1',
@@ -178,3 +183,40 @@ class APITests(unittest.TestCase):
             self.assertEqual(status,401)
             self.assertEqual(data['error']['code'],'unauthorized')
         self.assertEqual(self.native.calls,[])
+
+    def test_trickling_headers_body_and_rejected_drain_do_not_block_connector(self):
+        # Lower only the configured read budget; exercise real socket/HTTP/store code.
+        with patch.object(api,'READ_TIMEOUT',.3,create=True):
+            for phase in ('headers','body','rejected_drain'):
+                with self.subTest(phase=phase):
+                    slow=socket.create_connection(('127.0.0.1',self.server.server_port),timeout=2)
+                    if phase=='headers':
+                        prefix=b'GET /v1/ready?project_id=p HTTP/1.1\r\nX-Slow: '
+                    else:
+                        token=b'a'*40 if phase=='body' else b'wrong'
+                        prefix=(b'POST /v1/claims HTTP/1.1\r\nHost: localhost\r\nAuthorization: Bearer '+token+
+                            b'\r\nX-Connector-ID: c1\r\nContent-Type: application/json\r\nContent-Length: 4096\r\n\r\n{')
+                    slow.sendall(prefix)
+                    stop=threading.Event()
+                    def trickle():
+                        while not stop.wait(.03):
+                            try:slow.sendall(b' ')
+                            except OSError:break
+                    sender=threading.Thread(target=trickle,daemon=True);sender.start()
+                    try:
+                        try:status,data=self.request('GET','/v1/ready?project_id=p')
+                        except OSError:status,data='timeout',None
+                        self.assertEqual(status,200,'trickling '+phase+' blocked an authorized connector')
+                        self.assertEqual(data['ready'],[])
+                    finally:
+                        stop.set();slow.close();sender.join(2)
+            self.assertFalse(any('--claim' in c for c in self.native.calls))
+
+    def test_read_deadline_does_not_cancel_a_valid_native_claim(self):
+        self.import_plan()
+        self.native.before_claim=lambda:time.sleep(.2)
+        with patch.object(api,'READ_TIMEOUT',.1,create=True):
+            status,data=self.request('POST','/v1/claims',self.claim())
+        self.assertEqual(status,200,data)
+        self.assertEqual(data['attempt']['phase'],'claimed')
+        self.assertEqual(sum('--claim' in c for c in self.native.calls),1)
