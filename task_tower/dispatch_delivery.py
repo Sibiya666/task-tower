@@ -55,6 +55,110 @@ class DeliveryJournal:
                 if canonical == str(other.resolve()).casefold() or (info is not None and other_info is not None and os.path.samestat(info,other_info)):
                     raise ValueError('Delivery journal aliases an input')
 
+    def initialize(self):
+        """Prepare a new journal before starting its concurrent readers.
+
+        Existing files are only read and validated. SQLite writes solely to
+        memory; initial bytes go through our exclusive-created descriptor, so
+        a pathname replacement cannot redirect writes into another database.
+        Failed/uncertain creation is retained for owner reconciliation.
+        """
+        if self.readonly: raise ValueError('Read-only delivery journal')
+        try:
+            self._safe()
+            if self.path.exists():
+                self.rows()
+                return
+            with closing(sqlite3.connect(':memory:')) as db:
+                db.row_factory = sqlite3.Row
+                db.execute('PRAGMA synchronous=FULL')
+                db.execute('BEGIN IMMEDIATE')
+                db.execute('PRAGMA application_id='+str(APP_ID))
+                db.execute('PRAGMA user_version=1')
+                db.execute(DELIVERIES_SCHEMA)
+                db.execute(METADATA_SCHEMA)
+                db.commit()
+                db.execute('PRAGMA query_only=ON')
+                db.execute('BEGIN')
+                self._validate_database(db)
+                image = db.serialize()
+            if image[:16] != b'SQLite format 3\x00' or image[18:20] != b'\x01\x01':
+                raise ValueError('Unsupported initial delivery journal format')
+            self.path.parent.mkdir(parents=True,exist_ok=True)
+            self._safe()
+            try:
+                fd = os.open(self.path,os.O_CREAT|os.O_EXCL|os.O_RDWR|getattr(os,'O_BINARY',0),0o600)
+            except FileExistsError:
+                # Another creator is not evidence that an empty/partial file is safe.
+                self.rows()
+                return
+            try:
+                def owned():
+                    self._safe()
+                    if not os.path.samestat(os.fstat(fd),_private_stat(self.path)):
+                        raise ValueError('Created delivery journal missing or replaced')
+                owned()
+                remaining = memoryview(image)
+                while remaining:
+                    count = os.write(fd,remaining)
+                    if count <= 0: raise OSError('Incomplete initial delivery journal write')
+                    remaining = remaining[count:]
+                os.fsync(fd)
+                owned()
+                os.lseek(fd,0,os.SEEK_SET)
+                saved = bytearray()
+                while len(saved) < len(image):
+                    chunk = os.read(fd,len(image)-len(saved))
+                    if not chunk: break
+                    saved.extend(chunk)
+                # Equality binds the current owned file to the read-only validated
+                # memory image, without opening any pathname for SQLite writes.
+                if saved != image or os.fstat(fd).st_size != len(image):
+                    raise ValueError('Initial delivery journal bytes changed')
+                owned()
+            finally:
+                os.close(fd)
+        except (OSError,sqlite3.Error) as error:
+            raise ValueError('Delivery journal unavailable; preserve journal and restore access') from error
+
+    @staticmethod
+    def _validate_database(db):
+        app = db.execute('PRAGMA application_id').fetchone()[0]
+        version = db.execute('PRAGMA user_version').fetchone()[0]
+        tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        if app != APP_ID or version != 1 or tables != {'deliveries','metadata'}:
+            raise ValueError('Unrecognized delivery journal')
+        if [r[1] for r in db.execute('PRAGMA table_info(deliveries)')] != COLUMNS.split(','):
+            raise ValueError('Unrecognized delivery journal schema')
+        schemas = {r['name']:r['sql'] for r in db.execute("SELECT name,sql FROM sqlite_master WHERE type='table'")}
+        if schemas != {'deliveries':DELIVERIES_SCHEMA,'metadata':METADATA_SCHEMA}:
+            raise ValueError('Unrecognized delivery journal constraints')
+        if db.execute("SELECT 1 FROM sqlite_master WHERE type IN ('trigger','view') LIMIT 1").fetchone():
+            raise ValueError('Unrecognized delivery journal schema')
+        for saved in db.execute('SELECT '+COLUMNS+' FROM deliveries'):
+            row = dict(saved)
+            repository, issue, task = _identity(row)
+            try:
+                valid_uuid = str(uuid.UUID(row['delivery_id'])) == row['delivery_id']
+            except (ValueError, TypeError, AttributeError):
+                valid_uuid = False
+            if (repository != row['repository'] or not valid_uuid
+                    or not isinstance(row['backend_fingerprint'],str)
+                    or not re.fullmatch('[a-f0-9]{64}',row['backend_fingerprint'])
+                    or row['status'] not in {'unknown','accepted'}
+                    or row['detail'] not in {'intent_committed','accepted'}
+                    or (row['status']=='unknown' and row['receipt_id'] is not None)
+                    or (row['status']=='accepted' and (not isinstance(row['receipt_id'],str) or not RECEIPT.fullmatch(row['receipt_id'])))):
+                raise ValueError('Invalid delivery journal row')
+        for metadata in db.execute('SELECT key,value FROM metadata'):
+            try:
+                cursor = json.loads(metadata['value'])
+                valid = (metadata['key']=='lookup_cursor' and isinstance(cursor,list) and len(cursor)==2
+                         and isinstance(cursor[0],str) and type(cursor[1]) is int and cursor[1]>0)
+            except (ValueError,TypeError):
+                valid = False
+            if not valid: raise ValueError('Invalid delivery journal cursor')
+
     @contextmanager
     def _database(self, *, write=False):
         if write and self.readonly: raise ValueError('Read-only delivery journal')
@@ -81,7 +185,9 @@ class DeliveryJournal:
                 if write:
                     db.execute('PRAGMA synchronous=FULL')
                     db.execute('BEGIN IMMEDIATE')
-                else: db.execute('PRAGMA query_only=ON')
+                else:
+                    db.execute('PRAGMA query_only=ON')
+                    db.execute('BEGIN')
                 app = db.execute('PRAGMA application_id').fetchone()[0]
                 version = db.execute('PRAGMA user_version').fetchone()[0]
                 tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
@@ -90,38 +196,7 @@ class DeliveryJournal:
                     db.execute('PRAGMA user_version=1')
                     db.execute(DELIVERIES_SCHEMA)
                     db.execute(METADATA_SCHEMA)
-                elif app != APP_ID or version != 1 or tables != {'deliveries','metadata'}:
-                    raise ValueError('Unrecognized delivery journal')
-                if [r[1] for r in db.execute('PRAGMA table_info(deliveries)')] != COLUMNS.split(','):
-                    raise ValueError('Unrecognized delivery journal schema')
-                schemas = {r['name']:r['sql'] for r in db.execute("SELECT name,sql FROM sqlite_master WHERE type='table'")}
-                if schemas != {'deliveries':DELIVERIES_SCHEMA,'metadata':METADATA_SCHEMA}:
-                    raise ValueError('Unrecognized delivery journal constraints')
-                if db.execute("SELECT 1 FROM sqlite_master WHERE type IN ('trigger','view') LIMIT 1").fetchone():
-                    raise ValueError('Unrecognized delivery journal schema')
-                for saved in db.execute('SELECT '+COLUMNS+' FROM deliveries'):
-                    row = dict(saved)
-                    repository, issue, task = _identity(row)
-                    try:
-                        valid_uuid = str(uuid.UUID(row['delivery_id'])) == row['delivery_id']
-                    except (ValueError, TypeError, AttributeError):
-                        valid_uuid = False
-                    if (repository != row['repository'] or not valid_uuid
-                            or not isinstance(row['backend_fingerprint'],str)
-                            or not re.fullmatch('[a-f0-9]{64}',row['backend_fingerprint'])
-                            or row['status'] not in {'unknown','accepted'}
-                            or row['detail'] not in {'intent_committed','accepted'}
-                            or (row['status']=='unknown' and row['receipt_id'] is not None)
-                            or (row['status']=='accepted' and (not isinstance(row['receipt_id'],str) or not RECEIPT.fullmatch(row['receipt_id'])))):
-                        raise ValueError('Invalid delivery journal row')
-                for metadata in db.execute('SELECT key,value FROM metadata'):
-                    try:
-                        cursor = json.loads(metadata['value'])
-                        valid = (metadata['key']=='lookup_cursor' and isinstance(cursor,list) and len(cursor)==2
-                                 and isinstance(cursor[0],str) and type(cursor[1]) is int and cursor[1]>0)
-                    except (ValueError,TypeError):
-                        valid = False
-                    if not valid: raise ValueError('Invalid delivery journal cursor')
+                self._validate_database(db)
                 try:
                     yield db
                     if write: db.commit()

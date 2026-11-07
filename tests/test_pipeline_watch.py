@@ -65,6 +65,52 @@ class WatchTests(unittest.TestCase):
         self.fail(observer.lazy_message(self.journal) if observer is not None else 'Watch condition timed out: '+str(self.journal.status()))
 
     @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native pipeline execution')
+    def test_disabled_parent_watch_does_not_create_dispatch_journal(self):
+        dispatch=json.loads(self.args.dispatch_config.read_text(encoding='utf-8'))
+        dispatch['allowlist']=[]
+        self.args.dispatch_config.write_text(json.dumps(dispatch),encoding='utf-8')
+        _,self.journal,self.config=pipeline._runtime(self.args)
+        self.start()
+        owner=self
+        class Helper:
+            def __init__(self,args,kind,timeout,stop):
+                owner.assertFalse(args.dispatch_journal.exists(), 'disabled parent watch created journal before helper')
+                owner.assertFalse(any(Path(str(args.dispatch_journal)+s).exists() for s in ('-journal','-wal','-shm')))
+                self.done=threading.Event();self.done.set()
+                self.result=dict(read_failure=False)
+                self.outcome=dict(cleanup_confirmed=True)
+            def close(self):pass
+        with patch.object(pipeline,'_Host',Helper):
+            pipeline.watch_tick(self.config,self.journal)
+        self.assertFalse(self.args.dispatch_journal.exists())
+        self.assertFalse(any(Path(str(self.args.dispatch_journal)+s).exists() for s in ('-journal','-wal','-shm')))
+
+    @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native pipeline execution')
+    def test_revoked_parent_authority_does_not_create_dispatch_journal(self):
+        self.start()
+        self.config['_authority_check']=lambda:False
+        with patch.object(pipeline,'_Host',side_effect=AssertionError('revoked parent launched helper')):
+            with self.assertRaises(ValueError):pipeline.watch_tick(self.config,self.journal)
+        self.assertFalse(self.args.dispatch_journal.exists())
+        self.assertFalse(any(Path(str(self.args.dispatch_journal)+s).exists() for s in ('-journal','-wal','-shm')))
+
+    @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native pipeline execution')
+    def test_dispatch_journal_is_ready_before_first_helper(self):
+        self.start()
+        owner=self
+        class Helper:
+            def __init__(self,args,kind,timeout,stop):
+                owner.assertTrue(args.dispatch_journal.exists(), 'helper started before journal initialization')
+                owner.assertEqual(pipeline.DeliveryJournal(args.dispatch_journal,readonly=True).rows(), [])
+                self.done=threading.Event();self.done.set()
+                self.result=dict(read_failure=False)
+                self.outcome=dict(cleanup_confirmed=True)
+            def close(self):pass
+        with patch.object(pipeline,'_Host',Helper):
+            pipeline.watch_tick(self.config,self.journal)
+        self.assertTrue(self.args.dispatch_journal.exists())
+
+    @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native pipeline execution')
     def test_real_dispatch_adapter_to_six_roles_and_host_tests(self):
         with HostObservation(self.root) as observation:
             self.start()
@@ -240,6 +286,8 @@ class WatchTests(unittest.TestCase):
         backend=self.dispatch['backend'];backend['argv'][backend['argv'].index('adapter')]='executor'
         self.args.dispatch_config.write_text(json.dumps(self.dispatch))
         with self.assertRaises(ValueError):pipeline._runtime(self.args)
+        self.assertFalse(self.args.dispatch_journal.exists())
+        self.assertFalse(any(Path(str(self.args.dispatch_journal)+s).exists() for s in ('-journal','-wal','-shm')))
 
     def test_read_failure_backoff_is_exact_and_never_submits(self):
         self.source.transport_unavailable=True
