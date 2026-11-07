@@ -58,6 +58,11 @@ def tick(connections, config, journal_path, *, dry_run=False, store_factory=GitH
     report['operational_failure'] = any(p.get('status') == 'unavailable' for p in selection['projects'])
     journal = DeliveryJournal(journal_path, readonly=dry_run,
         checkouts=[c.checkout for c in connections], forbidden_paths=forbidden_paths)
+    if not dry_run:
+        if authority_check is not None and not authority_check():
+            report['operational_failure'] = True
+            return report
+        journal.initialize()
     rows = journal.rows()
     existing = {(r['repository'].casefold(),r['issue']): r for r in rows}
     backend = config['backend']

@@ -99,6 +99,21 @@ class TickIntegrationTests(unittest.TestCase):
         self.assertEqual(report['deliveries'][0]['state'],'planned')
         self.assertEqual(self.calls,[])
         self.assertEqual(before,set(self.root.iterdir()))
+    def test_active_tick_commits_schema_before_first_journal_read(self):
+        from task_tower.dispatch_delivery import DeliveryJournal
+        rows=DeliveryJournal.rows
+        def checked(journal):
+            self.assertTrue(journal.path.exists(), 'active dispatcher read before journal initialization')
+            return rows(journal)
+        with patch.object(DeliveryJournal,'rows',checked):
+            self.run_tick()
+        self.assertEqual([r['operation'] for r in self.calls],['submit'])
+
+    def test_revoked_authority_does_not_create_journal(self):
+        self.run_tick(authority_check=lambda:False)
+        self.assertFalse((self.root/'journal').exists())
+        self.assertEqual(self.calls,[])
+
     def test_latest_issue_closure_prevents_submit(self):
         self.changed=True
         self.run_tick()

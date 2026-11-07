@@ -65,6 +65,22 @@ class WatchTests(unittest.TestCase):
         self.fail(observer.lazy_message(self.journal) if observer is not None else 'Watch condition timed out: '+str(self.journal.status()))
 
     @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native pipeline execution')
+    def test_dispatch_journal_is_ready_before_first_helper(self):
+        self.start()
+        owner=self
+        class Helper:
+            def __init__(self,args,kind,timeout,stop):
+                owner.assertTrue(args.dispatch_journal.exists(), 'helper started before journal initialization')
+                owner.assertEqual(pipeline.DeliveryJournal(args.dispatch_journal,readonly=True).rows(), [])
+                self.done=threading.Event();self.done.set()
+                self.result=dict(read_failure=False)
+                self.outcome=dict(cleanup_confirmed=True)
+            def close(self):pass
+        with patch.object(pipeline,'_Host',Helper):
+            pipeline.watch_tick(self.config,self.journal)
+        self.assertTrue(self.args.dispatch_journal.exists())
+
+    @unittest.skipUnless(pipeline.native_execution_supported(),'Windows native pipeline execution')
     def test_real_dispatch_adapter_to_six_roles_and_host_tests(self):
         with HostObservation(self.root) as observation:
             self.start()
