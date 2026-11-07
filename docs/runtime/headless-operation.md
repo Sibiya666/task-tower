@@ -69,6 +69,48 @@ API credentials. Decision CLI actions do not open an app-server or connector
 journal. New tasks and scope expansions require a separately approved plan;
 model prose never authorizes them.
 
+### Inspect ready work and import an approved plan
+
+Use the existing private connector config (an empty `assignments` list is valid)
+and its authenticated API client; no manual HTTP request is needed:
+
+```console
+python -m task_tower.connector.cli ready --project-id <approved-project-id> --config <private-connector-config>
+python -m task_tower.connector.cli plan import --project-id <approved-project-id> --request-id <stable-import-request-id> --digest <approved-sha256> --plan-file <approved-plan.json> --config <private-connector-config>
+```
+
+Replace angle-bracket placeholders with actual values and quote paths containing
+spaces. `ready` prints a JSON array of that project's published, native-ready
+tasks. Both the connector config and the service's connector permissions must
+allow the project. These commands do not start Codex, create connector journals
+or worktrees, claim work, or perform GitHub delivery.
+
+The plan file is strict UTF-8 JSON without a BOM, duplicate keys, nonfinite
+constants or trailing content, at most 65,536 bytes. It contains the existing
+`tasks` array, with each task's `id`, `title`, `description` and `depends_on`.
+The HTTP request, including its envelope and JSON escaping, must also fit the
+existing 65,536-byte API body limit. Responses retain the client's 1 MiB bound.
+
+The service operator must first review the exact immutable plan and explicitly
+allow its digest for the project in the private service `approved_plans`
+configuration before starting the service. The lowercase SHA256 is calculated
+over canonical JSON, using the existing helper
+`task_tower.service.store.plan_digest(plan)`: sorted keys, compact separators,
+ASCII escaping, UTF-8 bytes. It is **not** a hash of the pretty-printed file.
+Changing task text or dependencies requires a newly reviewed digest. Supplying
+`--digest` only checks that the local file matches the expected plan; it grants
+no approval and cannot modify the service allowlist.
+
+`plan import` prints the canonical batch object (`request_id`, `project_id`,
+`digest`, `state`). Success means `state: "published"`, with exit status 0.
+Repeat the same request ID and unchanged plan/digest after a lost response to
+retrieve the same batch without creating duplicate tasks. Rejection or
+unavailability returns nonzero; a returned `needs_reconciliation` batch is
+printed with nonzero status and retains its native effect fence. Resolve that
+state through the established operator procedure; do not change request IDs to
+replay unknown effects. Publishing a batch or completing a model turn does not
+mean accepted pilot delivery.
+
 ## Lifecycle and wire contract
 
 `GET /v1/commands` returns durable commands for the authenticated connector's
