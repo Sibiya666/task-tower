@@ -35,7 +35,26 @@ class DoltEventTests(unittest.TestCase):
         self.assertFalse(any(k.upper() in ('GH_TOKEN','GITHUB_TOKEN','DOLT_PROFILE') for k in env))
         self.assertNotIn('--password',argv)
         query=argv[-1];self.assertTrue(query.startswith('SELECT '));self.assertNotIn(';',query)
-        return {'rows':[dict(r) for r in self.db.execute(query)]}
+        # Dolt1.85 jsonDataForSqlSchema skips every SQL NULL column.
+        return {'rows':[{k:v for k,v in dict(r).items() if v is not None} for r in self.db.execute(query)]}
+
+    def test_authentic_null_omissions_preserve_optional_values_but_never_invent_identity(self):
+        from task_tower.service.dolt_events import read_events
+        from task_tower.service.beads import ServiceError
+        self.db.execute('INSERT INTO events VALUES (?,?,?,?,?,?,?,?)',
+            (self.row[0],self.row[1],'created','owner',None,None,None,self.row[-1]))
+        try:events=read_events(self.root,'pilot-a',self.profile,self.runner,10)
+        except ServiceError as error:self.fail('authentic Dolt NULL omission rejected: '+error.code)
+        self.assertEqual(events[0]['id'],'ecfcf609-90b2-42ab-837c-cdbf71bdf132')
+        self.assertEqual([events[0][k] for k in ('old_value','new_value','comment')],[None,None,None])
+        for missing in ('id','issue_id','event_type','actor','created_at','project_id'):
+            def invalid(argv,cwd,timeout,env):
+                result=self.runner(argv,cwd,timeout,env)
+                for row in result['rows']:
+                    if row['row_kind']=='event':row.pop(missing)
+                return result
+            with self.subTest(missing=missing),self.assertRaises(ServiceError):
+                read_events(self.root,'pilot-a',self.profile,invalid,10)
 
     def test_native_project_event_identity_and_actual_wisp_membership(self):
         from task_tower.service.dolt_events import read_events

@@ -48,8 +48,12 @@ One source-defined SELECT checks native database metadata `_project_id` and read
 `events` or `wisp_events` according to actual `wisps` membership in the same query.
 Only a strictly validated native bead ID enters the query. SQL, table names,
 ordering and limits cannot come from configuration or task text. Native UUIDs,
-actors, chronology and close reasons are retained; no event is invented. More
-than 100 events, duplicate IDs, missing project identity, malformed output or
+actors, chronology and close reasons are retained; no event is invented.
+The pinned Dolt JSON writer omits SQL NULL columns. Only nullable event values
+and the identity row's fixed NULL placeholders may be absent; required event and
+project identity fields remain mandatory. See the upstream [JSON writer](https://github.com/dolthub/dolt/blob/v1.85.0/go/libraries/doltcore/table/typed/json/writer.go).
+
+More than 100 events, duplicate IDs, missing project identity, malformed output or
 uncertain process cleanup fails closed. See the native [event routing](https://github.com/gastownhall/beads/blob/v1.0.2/internal/storage/issueops/events.go)
 and [close event](https://github.com/gastownhall/beads/blob/v1.0.2/internal/storage/issueops/close.go).
 

@@ -106,10 +106,16 @@ def read_events(project,bead,profile,runner,timeout):
         if len(identity)!=1 or identity[0].get('project_id')!=profile['project_id']:raise ValueError()
         seen=set();events=[]
         for row in rows:
-            if not isinstance(row,dict) or set(row)!={'row_kind','project_id',*FIELDS} or row['project_id']!=profile['project_id']:raise ValueError()
+            if (not isinstance(row,dict) or set(row)-{'row_kind','project_id',*FIELDS}
+                    or row.get('project_id')!=profile['project_id']):raise ValueError()
             if row['row_kind']=='identity':
-                if any(row[k] is not None for k in FIELDS):raise ValueError()
+                # Dolt1.85 omits SQL NULL columns in JSON. These identity-row
+                # placeholders are NULL by this fixed SELECT, never event data.
+                if any(row.get(k) is not None for k in FIELDS):raise ValueError()
                 continue
+            nullable=('old_value','new_value','comment')
+            if not {'row_kind','project_id',*(set(FIELDS)-set(nullable))}<=set(row):raise ValueError()
+            row=dict({k:None for k in nullable},**row)
             if (row['row_kind']!='event' or row['issue_id']!=bead or not isinstance(row['id'],str)
                     or str(uuid.UUID(row['id']))!=row['id'] or row['id'] in seen
                     or any(not isinstance(row[k],str) for k in ('event_type','actor','created_at'))

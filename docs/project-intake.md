@@ -72,6 +72,11 @@ assignment retirement after the 32-entry limit, or any trusted-setting change ne
 an explicit controlled restart with journals retained and active work reconciled.
 Reload does not change model/account authorization or approval decisions.
 
+After a controlled restart, only publications whose digest remains in the current
+approval set can admit new claims. Revoked journal rows and existing ownership
+remain recorded; restoring approval permits normal admission again. A repeated
+request can read its prior outcome without restoring execution authority.
+
 ## Project-specific native and delivery authority
 
 Optional service `native_profiles` bind per-project executable hashes, versions

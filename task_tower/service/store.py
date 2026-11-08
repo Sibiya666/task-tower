@@ -151,7 +151,8 @@ class Store(LifecycleStore,AcceptanceStore):
 
     def _published(self,project):
         result=set()
-        for row in self.db.execute("SELECT data FROM plan_imports WHERE project_id=? AND state='published'",(project,)):
+        for row in self.db.execute("SELECT digest,data FROM plan_imports WHERE project_id=? AND state='published'",(project,)):
+            if row['digest'] not in self.approved_plans.get(project,()):continue
             result.update(t['id'] for t in json.loads(row['data'])['plan']['tasks'])
         return result
 

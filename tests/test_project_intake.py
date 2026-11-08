@@ -25,6 +25,30 @@ class AdoptionTests(unittest.TestCase):
   self.assertEqual(first['state'],'published');self.assertEqual(self.native.rows,before)
   self.assertEqual(self.store.adopt_plan('adopt-1','p',self.digest,PLAN),first)
   self.assertFalse(any('create' in c or 'update' in c for c in self.native.calls))
+
+ def test_revoked_digest_after_restart_cannot_authorize_a_new_native_claim(self):
+  self.store.adopt_plan('approved','p',self.digest,PLAN)
+  before=copy.deepcopy(self.native.rows)
+  self.store.close();self.store=Store(self.path,self.beads,approved_plans={'p':set()})
+  self.assertEqual(self.store.ready('p'),[])
+  with self.assertRaises(ServiceError):self.store.claim_request('revoked','p','pilot-a','c')
+  self.assertEqual(self.native.rows,before)
+  self.assertFalse(any('--claim' in c for c in self.native.calls))
+  self.assertEqual(self.store.db.execute('SELECT count(*) FROM plan_imports').fetchone()[0],1)
+  self.store.close();self.store=Store(self.path,self.beads,approved_plans={'p':{self.digest}})
+  self.assertEqual([r['id'] for r in self.store.ready('p')],['pilot-a'])
+  self.assertEqual(self.store.claim_request('retained','p','pilot-a','c')['phase'],'claimed')
+
+ def test_revocation_preserves_existing_claim_and_idempotent_readback(self):
+  self.store.adopt_plan('approved','p',self.digest,PLAN)
+  original=self.store.claim_request('existing','p','pilot-a','c')
+  before=copy.deepcopy(self.native.rows);calls=len(self.native.calls)
+  self.store.close();self.store=Store(self.path,self.beads,approved_plans={'p':set()})
+  self.assertEqual(self.store.claim_request('existing','p','pilot-a','c'),original)
+  self.assertEqual(len(self.native.calls),calls)
+  with self.assertRaises(ServiceError):self.store.validate_execution(original['attempt_id'],'c')
+  self.assertEqual(self.native.rows,before)
+  self.assertEqual(sum('--claim' in c for c in self.native.calls),1)
  def test_owner_and_parent_drift_rejected(self):
   self.native.rows['pilot-a']['assignee']='foreign'
   self.assertNotEqual(self.store.adopt_plan('adopt-1','p',self.digest,PLAN)['state'],'published')
