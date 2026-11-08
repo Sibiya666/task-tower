@@ -44,7 +44,7 @@ class AdoptionTests(unittest.TestCase):
   with self.assertRaises(ServiceError):self.store.adopt_plan('b','other',self.digest,PLAN)
 
  def test_title_status_parent_and_blocker_drift_are_fenced(self):
-  for field,value in [('title','Changed'),('status','blocked'),('dependencies',[]),('description','Changed')]:
+  for field,value in [('title','Changed'),('status','blocked'),('dependencies',[]),('description','Changed'),('metadata',{'unknown':'fence'})]:
    with self.subTest(field=field):
     path=Path(self.tmp.name)/('journal-'+field)
     store=Store(path,self.beads,approved_plans={'p':{self.digest}})

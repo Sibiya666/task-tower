@@ -14,4 +14,9 @@ new approved digests/assignments are admitted. Legacy import and static config w
 - [x] Scoped API/CLI adopt entry point.
 - [x] Append-only service approval and connector assignment reload.
 - [x] Focused tests and Reslop full-diff review (50 focused tests pass).
-- [ ] Complete full-suite result and independent parent review; no runtime activation.
+- [x] Full-suite result recorded: 1115 tests, 60 failures, 11 errors, 33 skips
+  on macOS. One new fixture error was corrected and covered by the green 50-test
+  rerun; remaining full-suite failures were not waived. Three representative
+  admission/pipeline/cleanup failures reproduce against an untouched base archive
+  under the same escalated permissions. Full CI remains required.
+- [ ] Independent parent review and exact-head CI acceptance; no runtime activation.

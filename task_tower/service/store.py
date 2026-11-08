@@ -306,6 +306,7 @@ class Store(LifecycleStore,AcceptanceStore):
                 or row.get('title')!=task['title'] or row.get('description')!=task['description']
                 or any(not isinstance(d,str) for d in actual)
                 or sorted(actual)!=sorted(task['depends_on']) or not hierarchy_ok
+                or ('parents' in task and row.get('metadata'))
                 or (status=='deferred' and not row.get('defer_until'))
                 or (status!='deferred' and row.get('defer_until'))):
             raise ServiceError('import_readback_mismatch')
