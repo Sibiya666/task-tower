@@ -195,10 +195,11 @@ def make_server(store,connectors,*,host='127.0.0.1',port=8765,poll_seconds=2,con
                     self._project(entry,body['project_id'])
                     result=store.claim_request(body['request_id'],body['project_id'],body['bead_id'],connector)
                     self._send(200,dict(attempt=result));return
-                if uri.path=='/v1/plans/import':
+                if uri.path in ('/v1/plans/import','/v1/plans/adopt'):
                     self._fields(body,{'request_id','project_id','digest','plan'})
                     self._project(entry,body['project_id'])
-                    result=store.import_plan(body['request_id'],body['project_id'],body['digest'],body['plan'])
+                    operation=store.adopt_plan if uri.path.endswith('/adopt') else store.import_plan
+                    result=operation(body['request_id'],body['project_id'],body['digest'],body['plan'])
                     self._send(200,dict(batch=result));return
                 if uri.path=='/v1/events':
                     self._fields(body,{'event_id','attempt_id','connector_id','lifecycle'} if 'lifecycle' in body else {'event_id','attempt_id','connector_id','phase','execution_state','connection_state'} | ({'execution'} if 'execution' in body else set()))

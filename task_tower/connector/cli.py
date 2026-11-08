@@ -59,9 +59,10 @@ def main(argv=None):
     ready=sub.add_parser('ready')
     ready.add_argument('--project-id',required=True);ready.add_argument('--config',required=True)
     plan=sub.add_parser('plan');plans=plan.add_subparsers(dest='plan_action',required=True)
-    action=plans.add_parser('import')
-    for flag in ('project-id','request-id','digest','plan-file','config'):
-        action.add_argument('--'+flag,required=True)
+    for operation in ('import','adopt'):
+        action=plans.add_parser(operation)
+        for flag in ('project-id','request-id','digest','plan-file','config'):
+            action.add_argument('--'+flag,required=True)
     decision=sub.add_parser('decision');ds=decision.add_subparsers(dest='decision_action',required=True)
     for name in ('list','respond'):
         action=ds.add_parser(name);action.add_argument('--config',required=True)
@@ -81,7 +82,7 @@ def main(argv=None):
                 if len(raw)>65536:raise ValueError('plan_file_limit')
                 plan=strict_json(raw.decode('utf-8'))
                 if plan_digest(plan)!=args.digest:raise ValueError('plan_digest_mismatch')
-                value=api.request('POST','/v1/plans/import',dict(version=1,project_id=args.project_id,
+                value=api.request('POST','/v1/plans/'+args.plan_action,dict(version=1,project_id=args.project_id,
                     request_id=args.request_id,digest=args.digest,plan=plan))['batch']
             print(json.dumps(value,ensure_ascii=True,allow_nan=False))
             return 0 if args.action=='ready' or value.get('state')=='published' else 4
@@ -91,7 +92,7 @@ def main(argv=None):
             elif args.decision_action=='list':value=api.decisions()
             else:value=api.respond(args.decision_id,args.answer)
             print(json.dumps(value,ensure_ascii=True));return 0
-        if args.action=='work':return work(cfg)
+        if args.action=='work':return work(cfg,config_path=args.config)
         if 'assignment' not in cfg:raise ValueError('legacy_assignment_required')
         store=ConnectorStore(cfg['journal'],cfg['connector_id'])
         trees=Worktrees(cfg['projects'],store)
@@ -145,7 +146,7 @@ def main(argv=None):
             print('connector: owned process cleanup unconfirmed; reconciliation required',file=sys.stderr)
             return 4
 
-def work(cfg):
+def work(cfg,*,config_path=None):
     """Explicit foreground run. Only configured assignments may be admitted.
 
     A blocked third claim waits in native Beads, never in a second task queue.
@@ -166,6 +167,10 @@ def work(cfg):
             connector.tick()
             if time.monotonic()>=next_admission:
                 next_admission=time.monotonic()+2
+                if config_path is not None:
+                    from ..intake_reload import extend_config
+                    try:cfg=extend_config(cfg,load_config(config_path),'assignments')
+                    except Exception:continue  # Live transports continue; no new admission.
                 for assignment in cfg['assignments']:
                     key=(assignment['project_id'],assignment['bead_id'])
                     if key in admitted:continue

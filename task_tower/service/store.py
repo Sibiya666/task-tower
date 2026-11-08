@@ -204,6 +204,48 @@ class Store(LifecycleStore,AcceptanceStore):
                                 (data['phase'],encoded(data),request_id))
             return data
 
+    def adopt_plan(self,request_id,project,digest,plan):
+        identity(request_id);self.beads.project(project)
+        if not isinstance(plan,dict) or set(plan)!={'tasks'} or not isinstance(plan['tasks'],list):
+            raise ServiceError('invalid_plan',400)
+        clean={'tasks':[]}
+        for task in plan['tasks']:
+            if not isinstance(task,dict) or set(task)!={'id','title','description','depends_on','parents'}:
+                raise ServiceError('invalid_plan',400)
+            parents=task['parents']
+            if (not isinstance(parents,list) or len(parents)>31 or any(not isinstance(x,str) for x in parents)
+                    or len(set(parents))!=len(parents) or task['id'] in parents):
+                raise ServiceError('invalid_parents',400)
+            for parent in parents:bead_id(parent)
+            clean['tasks'].append({k:v for k,v in task.items() if k!='parents'})
+        validate_plan(clean)
+        if not isinstance(digest,str) or plan_digest(plan)!=digest or digest not in self.approved_plans.get(project,()):
+            raise ServiceError('plan_not_approved',403)
+        tasks={t['id']:t for t in plan['tasks']}
+        with self.lock:
+            row=self.db.execute('SELECT * FROM plan_imports WHERE request_id=?',(request_id,)).fetchone()
+            if row:
+                if row['project_id']!=project or row['digest']!=digest:raise ServiceError('request_conflict')
+                return self._import_outcome(row)
+            for row in self.db.execute('SELECT * FROM plan_imports WHERE project_id=?',(project,)):
+                if row['digest']==digest:
+                    with self.db:self.db.execute('INSERT INTO plan_imports VALUES (?,?,?,?,?,?,?)',
+                        (request_id,project,digest,row['state'],row['data'],utc(),utc()))
+                    return self._import_outcome(row)
+                if set(tasks)&{t['id'] for t in json.loads(row['data'])['plan']['tasks']}:
+                    raise ServiceError('import_task_conflict')
+            data=dict(plan=plan,request_id=request_id,project_id=project,digest=digest,adopted=True)
+            with self.db:self.db.execute('INSERT INTO plan_imports VALUES (?,?,?,?,?,?,?)',
+                (request_id,project,digest,'importing',encoded(data),utc(),utc()))
+            state='needs_reconciliation';deadline=time.monotonic()+60
+            try:
+                self._verify_import(project,tasks,'open',deadline)
+                self._verify_import(project,tasks,'open',deadline)
+                state='published'
+            except Exception:pass
+            with self.db:self.db.execute('UPDATE plan_imports SET state=?,updated_at=? WHERE request_id=?',(state,utc(),request_id))
+            return dict(request_id=request_id,project_id=project,digest=digest,state=state)
+
     def import_plan(self,request_id,project,digest,plan):
         identity(request_id);self.beads.project(project)
         tasks=validate_plan(plan)
@@ -258,10 +300,12 @@ class Store(LifecycleStore,AcceptanceStore):
         if not isinstance(deps,list) or any(not isinstance(d,dict) for d in deps):
             raise ServiceError('import_readback_mismatch')
         actual=[d.get('id') for d in deps if d.get('dependency_type')=='blocks']
+        parents=[d.get('id') for d in deps if d.get('dependency_type')=='parent-child']
+        hierarchy_ok=(sorted(parents)==sorted(task['parents']) and len(actual)+len(parents)==len(deps)) if 'parents' in task else len(actual)==len(deps)
         if (row.get('status')!=status or (row.get('assignee') or None)!=owner
                 or row.get('title')!=task['title'] or row.get('description')!=task['description']
                 or any(not isinstance(d,str) for d in actual)
-                or sorted(actual)!=sorted(task['depends_on']) or len(actual)!=len(deps)
+                or sorted(actual)!=sorted(task['depends_on']) or not hierarchy_ok
                 or (status=='deferred' and not row.get('defer_until'))
                 or (status!='deferred' and row.get('defer_until'))):
             raise ServiceError('import_readback_mismatch')

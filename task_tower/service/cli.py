@@ -106,7 +106,16 @@ def main(argv=None):
         try:
             server=make_server(store,config['connectors'],host='0.0.0.0' if args.container_network else '127.0.0.1',
                                port=config['port'],poll_seconds=config['poll_seconds'],container_network=args.container_network)
-            try:server.serve_forever()
+            try:
+                server.timeout=.5
+                while True:
+                    from ..intake_reload import extend_config
+                    try:
+                        current=extend_config(config,load_config(args.config),'approved_plans')
+                        with store.lock:store.approved_plans=current['approved_plans']
+                        config=current
+                    except Exception:pass  # Reject invalid file; retain prior operator authority.
+                    server.handle_request()
             except KeyboardInterrupt:pass
             finally:server.server_close()
         finally:store.close()
