@@ -1,6 +1,7 @@
 import copy
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import tempfile
@@ -89,6 +90,56 @@ class PublicationTests(unittest.TestCase):
         self.assertIsNone(re.search(r'(?i)\b(closes|fixes|resolves)\b',payload['body']))
         self.assertEqual(self.real_git(self.bare,'rev-parse','refs/heads/'+self.f.state()['branch']).decode().strip(),self.f.state()['checkpoint_sha'])
         self.assertNotIn('--force',[a for call in self.calls for a in call])
+
+    @unittest.skipUnless(os.name == 'nt', 'Native Windows delete-sharing regression')
+    def test_final_commit_cleanup_sharing_violation_retries_without_replay(self):
+        from tests.fixtures.windows_file_lease import DeleteLease
+        self.accepted(True)
+        journal = self.f.journal
+        before = journal.history(self.f.run_id)
+        finish_effect = journal.finish_effect
+        remove = tempfile.TemporaryDirectory._rmtree
+        leases, directories, errors = [], [], []
+
+        def finish(effect_id, owner, observation):
+            result = finish_effect(effect_id, owner, observation)
+            effect = next(e for e in journal.history(self.f.run_id)['effects']
+                          if e['effect_id'] == effect_id)
+            if (effect['kind'] == 'commit'
+                    and effect['intent']['evidence_manifest_sha256'] is not None):
+                indexes = list((journal.path.parent / ('checkpoint-' + self.f.run_id)).glob('*/index'))
+                self.assertEqual(len(indexes), 1)
+                leases.append(DeleteLease(indexes[0]))
+                directories.append(indexes[0].parent)
+            return result
+
+        def cleanup(name, *args, **kwargs):
+            try:
+                return remove(name, *args, **kwargs)
+            except PermissionError as error:
+                if directories and Path(name) == directories[0]:
+                    errors.append(getattr(error, 'winerror', None))
+                    for lease in leases:
+                        lease.close()
+                raise
+
+        try:
+            with patch.object(journal, 'finish_effect', side_effect=finish), \
+                    patch.object(tempfile.TemporaryDirectory, '_rmtree', side_effect=cleanup):
+                result = self.f.tick()
+        finally:
+            for lease in leases:
+                lease.close()
+        history = journal.history(self.f.run_id)
+        self.assertEqual(errors, [32])
+        self.assertEqual(result['status'], 'ready', result['reason'])
+        self.assertFalse(directories[0].exists())
+        self.assertEqual(len(history['effects']) - len(before['effects']), 1)
+        self.assertEqual(history['effects'][-1]['kind'], 'commit')
+        self.assertEqual(history['effects'][-1]['status'], 'completed')
+        self.assertEqual(len(history['verdicts']), 3)
+        self.assertEqual(self.calls, [])
+        self.assertEqual(self.store.writes, [])
 
     def test_lost_response_never_repeats_write(self):
         self.accepted(True); self.f.tick(); self.f.tick()
