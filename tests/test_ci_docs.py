@@ -219,6 +219,96 @@ class DocsTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.validate()
 
+    def test_complete_markdown_inventory_fits_fixed_git_startup_work_budget(self):
+        # Distinct Git blobs model a growing real docs inventory. Fixed process
+        # overhead is charged to the existing deadline, not hidden by a larger
+        # timeout or by restricting validation to changed Markdown files.
+        for index in range(160):
+            self.write(f'docs/many/{index:03}.md', f'# Document {index}\n[guide](../guide.md)\n')
+        self.commit()
+        self.base = self.git('rev-parse', 'HEAD').strip()
+        self.write('README.md', '# Changed\n[guide](docs/guide.md)\n')
+        self.git('add', '-A')
+        self.merge()
+        api = self.api()
+        now = [0.0]
+        original_git = api._Source.git
+
+        def charged_git(source, *args, **kwargs):
+            now[0] += .1
+            return original_git(source, *args, **kwargs)
+
+        # Replace only this module's clock binding: supervised child timeouts
+        # still use their real clock and all production resource guards run.
+        with patch.object(api, 'time', SimpleNamespace(monotonic=lambda: now[0])), \
+                patch.object(api._Source, 'git', charged_git):
+            report = self.validate()
+        self.assertEqual(report['checks'], 'passed')
+        self.assertEqual(report['local_links_checked'], 161)
+        self.assertEqual(report['historical_broken_links'], 0)
+        self.assertEqual(api.MAX_SECONDS, 30)
+
+    def test_prose_budget_counts_unique_utf8_blob_once_across_both_trees(self):
+        text = '# \u00e9\n'
+        self.write('README.md', text)
+        self.write('docs/guide.md', text)
+        self.commit()
+        self.base = self.git('rev-parse', 'HEAD').strip()
+        self.write('docs/extra.md', text)
+        self.git('add', '-A')
+        self.merge()
+        api = self.api()
+        size = len(text.encode('utf-8'))
+        with patch.object(api, 'MAX_PROSE_BYTES', size):
+            self.assertEqual(self.validate()['prose_bytes'], size)
+        with patch.object(api, 'MAX_PROSE_BYTES', size - 1):
+            with self.assertRaises(ValueError):
+                self.validate()
+
+    def test_shared_blob_still_resolves_each_referrers_relative_target(self):
+        text = '[target](target.md)\n'
+        self.write('docs/a/ref.md', text)
+        self.write('docs/a/target.md', '# Target\n')
+        self.commit()
+        self.base = self.git('rev-parse', 'HEAD').strip()
+        self.write('docs/b/ref.md', text)
+        self.git('add', '-A')
+        self.merge()
+        with self.assertRaises(ValueError):
+            self.validate()
+
+    def test_advertised_blob_size_preserves_content_and_cache_integrity(self):
+        api = self.api()
+        oid = 'a' * 40
+        for data in (b'', '# \u00e9\n'.encode('utf-8')):
+            with self.subTest(data=data):
+                source = api._Source(self.repo)
+                with patch.object(source, 'git', return_value=data):
+                    self.assertEqual(source.blob(oid, size=len(data)), data.decode('utf-8'))
+                    self.assertEqual(source.prose_bytes, len(data))
+                    with self.assertRaisesRegex(api.DocumentationError, 'malformed_blob_size'):
+                        source.blob(oid, size=len(data) + 1)
+        for size in (0, 2, 4):
+            with self.subTest(size=size):
+                source = api._Source(self.repo)
+                with patch.object(source, 'git', return_value=b'abc'):
+                    with self.assertRaisesRegex(api.DocumentationError, 'malformed_blob'):
+                        source.blob(oid, size=size)
+        source = api._Source(self.repo)
+        with patch.object(source, 'git', return_value=b'\xff'):
+            with self.assertRaises(UnicodeDecodeError):
+                source.blob(oid, size=1)
+
+    def test_advertised_size_refuses_before_reading_over_budget_or_invalid_input(self):
+        api = self.api()
+        for size in (-1, True, '1', 3):
+            with self.subTest(size=size), patch.object(api, 'MAX_PROSE_BYTES', 2):
+                source = api._Source(self.repo)
+                with patch.object(source, 'git') as git:
+                    with self.assertRaises(api.DocumentationError):
+                        source.blob('a' * 40, size=size)
+                    git.assert_not_called()
+
     def test_inherited_git_context_cannot_redirect_source(self):
         self.write('README.md', '# Changed\n')
         self.git('add', '-A')
@@ -285,8 +375,8 @@ class ParserResourceTests(unittest.TestCase):
     @staticmethod
     def source(text, remaining=lambda: None):
         return SimpleNamespace(
-            git=lambda *args: b'100644 blob ' + b'a'*40 + b'\tREADME.md\0',
-            blob=lambda oid: text, remaining=remaining)
+            git=lambda *args: b'100644 blob ' + b'a'*40 + b' ' + str(len(text.encode('utf-8'))).encode('ascii') + b'\tREADME.md\0',
+            blob=lambda oid, **metadata: text, remaining=remaining)
 
     def test_deadline_interrupts_scans_even_when_no_links_are_yielded(self):
         from task_tower import ci_docs
@@ -303,6 +393,17 @@ class ParserResourceTests(unittest.TestCase):
                 with self.assertRaisesRegex(ci_docs.DocumentationError, 'fake_deadline'):
                     ci_docs._broken(self.source(text, budget), 'a'*40)
                 self.assertEqual(calls, 20)
+
+    def test_malformed_tree_size_refuses_without_reading_prose(self):
+        from task_tower import ci_docs
+        for size in (b'-', b'-1', b'+1', b'1.0', b'01', b'1' * 21, b'unknown'):
+            with self.subTest(size=size):
+                source = self.source('text')
+                source.git = lambda *args: b'100644 blob ' + b'a' * 40 + b' ' + size + b'\tREADME.md\0'
+                with patch.object(source, 'blob') as blob:
+                    with self.assertRaisesRegex(ci_docs.DocumentationError, 'malformed_tree'):
+                        ci_docs._broken(source, 'a' * 40)
+                    blob.assert_not_called()
 
     def test_missing_deep_target_does_not_allocate_all_ancestor_prefixes(self):
         from task_tower import ci_docs
@@ -348,7 +449,7 @@ class ParserResourceTests(unittest.TestCase):
         source = self.source('[x](' + target + ')')
         original_git = source.git
         source.git = lambda *args: original_git(*args) + (
-            b'100644 blob ' + b'b'*40 + b'\t' + target.encode('utf-8') + b'\0')
+            b'100644 blob ' + b'b'*40 + b' 0\t' + target.encode('utf-8') + b'\0')
         with patch.object(ci_docs, 'MAX_ANCESTOR_DEPTH', 4):
             with self.assertRaisesRegex(ci_docs.DocumentationError, 'ancestor_depth_limit'):
                 ci_docs._broken(source, 'a'*40)
