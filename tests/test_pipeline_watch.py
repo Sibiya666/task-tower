@@ -566,9 +566,11 @@ with j.owner(sys.argv[2]):
     def test_distinct_worker_processes_commit_push_and_create_one_pr(self):
         run=self.accepted_publication();owners=[]
         checkpoint=run['manifest']['checkpoint_sha']
-        for expected in ('ready','ready','awaiting_pr'):
-            result=pipeline.work(self.config,self.journal);self.assertEqual(result['status'],expected)
-            run=self.journal.status(run['run_id']);owners.append(run['owner_id'])
+        with HostObservation(self.root) as observation:
+            for expected in ('ready','ready','awaiting_pr'):
+                result=pipeline.work(self.config,self.journal)
+                self.assertEqual(result['status'],expected,observation.lazy_message(self.journal))
+                run=self.journal.status(run['run_id']);owners.append(run['owner_id'])
         self.assertEqual(len(set(owners)),3)
         self.assertNotEqual(run['checkpoint_sha'],checkpoint)
         rows=json.loads((self.root/'prs.json').read_text());self.assertEqual(len(rows),1)

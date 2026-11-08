@@ -11,6 +11,7 @@ import re
 import stat
 import subprocess
 import tempfile
+import time
 
 from .executor_profiles import child_environment
 from .project_connections import safe_config_path
@@ -18,6 +19,59 @@ from .project_connections import safe_config_path
 ARTIFACT_LIMIT = 1024 * 1024
 BLOB_LIMIT = 16 * 1024 * 1024
 MANIFEST_LIMIT = 16 * 1024 * 1024
+
+
+class _CheckpointDirectory(tempfile.TemporaryDirectory):
+    """Finish actual private-index cleanup after a transient Windows read lease."""
+    def __init__(self, parent, guard):
+        self._checkpoint_parent = Path(parent).absolute()
+        self._checkpoint_guard = guard
+        super().__init__(dir=parent)
+        info = Path(self.name).lstat()
+        self._checkpoint_identity = (info.st_dev, info.st_ino)
+
+    def _same_directory(self):
+        path = Path(self.name)
+        if not path.is_absolute() or path.parent != self._checkpoint_parent:
+            raise ValueError('Changed checkpoint cleanup directory')
+        safe_config_path(path / '.cleanup-path-check')
+        try:
+            info = path.lstat()
+        except FileNotFoundError:
+            return False
+        if (not stat.S_ISDIR(info.st_mode)
+                or getattr(info, 'st_file_attributes', 0) & 0x400
+                or (info.st_dev, info.st_ino) != self._checkpoint_identity):
+            raise ValueError('Changed checkpoint cleanup directory')
+        return True
+
+    def cleanup(self):
+        try:
+            return super().cleanup()
+        except PermissionError as error:
+            # No best-effort success or generic permission-error retry. Actual
+            # runtime callers supply the existing authority/cancel/deadline guard.
+            if getattr(error, 'winerror', None) != 32 or not callable(self._checkpoint_guard):
+                raise
+            deadline = time.monotonic() + 5
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise error
+                time.sleep(min(.01, remaining))
+                self._checkpoint_guard()
+                if time.monotonic() >= deadline:
+                    raise error
+                if not self._same_directory():
+                    return
+                if time.monotonic() >= deadline:
+                    raise error
+                try:
+                    return super().cleanup()
+                except PermissionError as next_error:
+                    if getattr(next_error, 'winerror', None) != 32:
+                        raise
+                    error = next_error
 
 
 def canonical_text(data: bytes) -> bytes:
@@ -308,7 +362,7 @@ def _freeze_checkpoint(run,task_policy,journal,owner_id,failed_attempt_id=None):
     hooks.mkdir(exist_ok=True)
     safe_config_path(hooks / '.safe')
     if list(hooks.iterdir()): raise ValueError('Hooks directory must be empty')
-    with tempfile.TemporaryDirectory(dir=private) as temp:
+    with _CheckpointDirectory(private, task_policy.get('_before_effect')) as temp:
         index = Path(temp) / 'index'
         env = _git_environment()
         env.update(GIT_INDEX_FILE=str(index),GIT_AUTHOR_NAME='Task Tower',GIT_AUTHOR_EMAIL='task-tower@localhost',
