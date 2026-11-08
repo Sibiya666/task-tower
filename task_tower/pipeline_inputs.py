@@ -131,9 +131,22 @@ def _git(root, *args, env=None, data=None):
 def _repository(root, policy):
     root = Path(root)
     safe_config_path(root / '.pipeline-path-check')
-    if not root.is_dir() or Path(os.fsdecode(_git(root, 'rev-parse', '--show-toplevel')).strip()).resolve() != root.resolve():
+    if not root.is_dir():
         raise ValueError('Unexpected worktree identity')
-    git_dir = Path(os.fsdecode(_git(root, 'rev-parse', '--absolute-git-dir')).strip())
+    # Query adjacent path observations together, without caching across calls.
+    # Known LF paths retain the separate-query protocol: LF is Git's delimiter.
+    if any('\n' in os.path.abspath(path) for path in (root, policy.get('git_dir') or root)):
+        actual_root = Path(os.fsdecode(_git(root, 'rev-parse', '--show-toplevel')).strip())
+        if actual_root.resolve() != root.resolve():
+            raise ValueError('Unexpected worktree identity')
+        git_dir = Path(os.fsdecode(_git(root, 'rev-parse', '--absolute-git-dir')).strip())
+    else:
+        fields = _git(root, 'rev-parse', '--show-toplevel', '--absolute-git-dir').split(b'\n')
+        if len(fields) != 3 or fields[-1] != b'' or not all(fields[:2]):
+            raise ValueError('Malformed Git path identity')
+        actual_root, git_dir = (Path(os.fsdecode(value)) for value in fields[:2])
+        if actual_root.resolve() != root.resolve():
+            raise ValueError('Unexpected worktree identity')
     safe_config_path(git_dir / '.pipeline-path-check')
     if not git_dir.is_dir():
         raise ValueError('Unexpected Git directory')

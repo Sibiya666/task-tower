@@ -1,7 +1,7 @@
 # Reduce fresh Git identity query overhead
 
 Date: 2026-11-08
-Status: proposed short design; awaiting direct human approval before implementation
+Status: directly approved by the user on 2026-11-08 for implementation through protected main acceptance
 Canonical parent: tt-qrk; current actor task-tower-ci-perf-20261108
 Base: e1ba2419222b29c1ef82c0fc0df362ea92003e5e
 
@@ -59,7 +59,8 @@ runs are diagnostics, not an optimization comparison.
 Coordinator recommendation: combine only the adjacent fresh root and Git-directory
 queries in pipeline_inputs._repository with one rev-parse invocation. This removes
 one process per call while retaining all later checks. The independent read-only
-technical assessment supports this scope. The human has not yet approved it.
+technical assessment supports this scope. The user approved this design and
+implementation through main with all checks on 2026-11-08.
 
 Refreshing scheduling hints is not selected: PR105 already implemented balancing,
 and these runs show large whole-runner variation. Batching HEAD into the first
