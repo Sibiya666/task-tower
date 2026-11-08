@@ -27,11 +27,11 @@ Files: modify `task_tower/pipeline_inputs.py`; create
 `tests/test_pipeline_identity.py`; retain existing input/publication regressions.
 Interface: `_repository(root, policy)` continues returning the validated Path.
 
-- [ ] Write focused real-Git tests for ordinary and linked repositories, nested/wrong identity, Unicode/spaces, malformed byte framing, detached/unborn policy and HEAD mutation during filesystem validation. Add meaningful process-count regression: one fresh path query per validation, and a second call sees changed identity. POSIX LF fixture covers root and bound Git directory.
-- [ ] Run `python -m unittest tests.test_pipeline_identity -v`; observe optimization/framing regressions fail on original code, with existing behavior cases passing.
-- [ ] Implement only the combined path query and strict parser, with known-LF fallback. Keep HEAD, branch/ref and filesystem checks at their original boundaries.
-- [ ] Run focused tests and `python -m unittest tests.test_pipeline_inputs tests.test_ci_unittest -v`; require success.
-- [ ] Measure unchanged existing publication workload with the original and changed `_repository`, alternating three pairs, token-stripped environment; retain timings and process counts privately. Do not add a permanent benchmark job.
+- [x] Write focused real-Git tests for ordinary and linked repositories, nested/wrong identity, Unicode/spaces, malformed byte framing, detached/unborn policy and HEAD mutation during filesystem validation. Add meaningful process-count regression: one fresh path query per validation, and a second call sees changed identity. POSIX LF fixture covers root and bound Git directory.
+- [x] Run `python -m unittest tests.test_pipeline_identity -v`; observe optimization/framing regressions fail on original code, with existing behavior cases passing.
+- [x] Implement only the combined path query and strict parser, with known-LF fallback. Keep HEAD, branch/ref and filesystem checks at their original boundaries.
+- [x] Run focused tests and `python -m unittest tests.test_pipeline_inputs tests.test_ci_unittest -v`; require success.
+- [x] Measure unchanged existing publication workload with the original and changed `_repository`, alternating three pairs, token-stripped environment; retain timings and process counts privately. Do not add a permanent benchmark job.
 - [ ] Run `python -m unittest discover -s tests -v` on frozen source, record complete output and source identity; require success before delivery.
 - [ ] Commit source/tests/evidence summary, obtain independent whole-diff approval at actual fresh H/B, push/open PR and publish genuine acceptance only from that verdict.
 - [ ] Require all real PR CI, protection, mergeability/resolved conversations, manager merge serialization and protected expected-head merge. Fresh fetch <=60s/local Git <=10s.

@@ -116,3 +116,32 @@ The parent epic stays open while its existing unresolved obligations remain.
 
 The expected saving is one process per identity check (73 processes and roughly
 1.9 seconds in the measured local test), not a promised hosted-CI percentage.
+
+## Local implementation measurements
+
+Three alternating pairs executed the existing publication intent-order test in
+fresh Python processes. The before process used only the original `_repository`
+function from base e1ba241; the after process used the implementation at ad1a926.
+All other source and the workload were identical. All six executions succeeded.
+
+| Execution order | Implementation | Seconds | Git calls | Path query calls |
+| --- | --- | ---: | ---: | ---: |
+| 1 | before | 35.355 | 776 | 146 |
+| 2 | after | 33.998 | 703 | 73 |
+| 3 | after | 34.933 | 703 | 73 |
+| 4 | before | 36.194 | 776 | 146 |
+| 5 | before | 35.314 | 776 | 146 |
+| 6 | after | 33.441 | 703 | 73 |
+
+Local median fell from 35.355 to 33.998 seconds (approximately 3.8% for this one
+workload); paired differences were 1.26-1.87 seconds. This proves the process-count
+reduction and records a modest local benefit, not a hosted-CI percentage. Hosted
+runner differences can exceed this saving, as the baseline same-tree runs show.
+
+Independent source review subsequently found that the LF fallback's original
+whitespace trimming violated the exact-path contract. A failing regression
+confirmed it; the correction removes only the terminal LF and retains all path
+whitespace. This correction affects the known-LF fallback, not the LF-free path
+used by these measurements. Real POSIX LF-path regressions are explicitly skipped
+on Windows; a platform-independent mocked boundary regression verifies that the
+exact whitespace-bearing path reaches the filesystem guard.

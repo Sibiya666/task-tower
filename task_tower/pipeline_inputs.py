@@ -136,10 +136,15 @@ def _repository(root, policy):
     # Query adjacent path observations together, without caching across calls.
     # Known LF paths retain the separate-query protocol: LF is Git's delimiter.
     if any('\n' in os.path.abspath(path) for path in (root, policy.get('git_dir') or root)):
-        actual_root = Path(os.fsdecode(_git(root, 'rev-parse', '--show-toplevel')).strip())
+        def path_query(option):
+            raw = _git(root, 'rev-parse', option)
+            if not raw.endswith(b'\n') or len(raw) == 1:
+                raise ValueError('Malformed Git path identity')
+            return Path(os.fsdecode(raw[:-1]))
+        actual_root = path_query('--show-toplevel')
         if actual_root.resolve() != root.resolve():
             raise ValueError('Unexpected worktree identity')
-        git_dir = Path(os.fsdecode(_git(root, 'rev-parse', '--absolute-git-dir')).strip())
+        git_dir = path_query('--absolute-git-dir')
     else:
         fields = _git(root, 'rev-parse', '--show-toplevel', '--absolute-git-dir').split(b'\n')
         if len(fields) != 3 or fields[-1] != b'' or not all(fields[:2]):

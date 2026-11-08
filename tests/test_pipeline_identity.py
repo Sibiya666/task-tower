@@ -100,6 +100,39 @@ class IdentityTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             inputs._repository(self.root, policy)
 
+    def test_lf_fallback_does_not_strip_git_directory_whitespace(self):
+        directory = self.root / 'line\nid '
+        def query(root, *args, **kwargs):
+            value = self.root if args[-1] == '--show-toplevel' else directory
+            return os.fsencode(value.as_posix()) + b'\n'
+        with patch.object(inputs, '_git', side_effect=query), \
+                patch.object(inputs, 'safe_config_path', wraps=inputs.safe_config_path) as guard:
+            # The synthetic directory does not exist. Its exact identity must
+            # nevertheless reach the filesystem guard, never a trimmed sibling.
+            with self.assertRaises((ValueError, OSError)):
+                inputs._repository(self.root, {'git_dir': str(directory)})
+        self.assertIn((directory / '.pipeline-path-check',),
+                      [call.args for call in guard.call_args_list])
+
+    def test_lf_fallback_rejects_empty_or_unterminated_path_response(self):
+        for raw in (b'', b'\n', b'/unterminated'):
+            with self.subTest(raw=raw), patch.object(inputs, '_git', side_effect=[
+                    os.fsencode(self.root.as_posix()) + b'\n', raw]):
+                with self.assertRaisesRegex(ValueError, 'Malformed Git path identity'):
+                    inputs._repository(self.root, {'git_dir': 'line\nid'})
+
+    @unittest.skipIf(os.name == 'nt', 'LF paths are not supported by Windows')
+    def test_lf_bound_directory_preserves_trailing_space_and_rejects_sibling(self):
+        parent = self.root.parent / 'line\nparent'; parent.mkdir()
+        directory = parent / 'id '
+        sibling = parent / 'id'; sibling.mkdir()
+        target = self.root.parent / 'separate-checkout'
+        self.git(self.root, 'clone', '--no-hardlinks', '--separate-git-dir=' + str(directory),
+                 str(self.root), str(target))
+        self.assertEqual(inputs._repository(target, {'git_dir': str(directory)}), target)
+        with self.assertRaises(ValueError):
+            inputs._repository(target, {'git_dir': str(sibling)})
+
     @unittest.skipIf(os.name == 'nt', 'LF paths are not supported by Windows')
     def test_lf_root_and_bound_git_directory_keep_separate_queries(self):
         parent = self.root.parent / 'line\nparent'; parent.mkdir()
