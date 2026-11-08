@@ -43,10 +43,18 @@ def verify_source(project,profile):
     with path.open('rb') as stream:raw=stream.read(65537)
     if len(raw)>65536 or hashlib.sha256(raw).hexdigest()!=profile['metadata_sha256']:raise ServiceError('native_source_changed')
     metadata=strict_json(raw.decode('utf-8'))
+    allowed={'database','backend','deletions_retention_days','dolt_mode','dolt_server_host','dolt_server_port',
+        'dolt_server_user','dolt_database','dolt_server_tls','dolt_data_dir','dolt_remotesapi_port','project_id',
+        'global_dolt_database','stale_closed_issues_days','last_bd_version'}
     expected=dict(project_id=profile['project_id'],dolt_mode='server',dolt_server_host=profile['host'],
-        dolt_server_port=profile['port'],dolt_database=profile['database'],dolt_server_user=profile['user'],dolt_server_tls=False)
-    if not isinstance(metadata,dict) or any(type(metadata.get(k)) is not type(v) or metadata[k]!=v for k,v in expected.items()):
+        dolt_server_port=profile['port'],dolt_database=profile['database'],dolt_server_user=profile['user'])
+    if (not isinstance(metadata,dict) or set(metadata)-allowed
+            or any(type(metadata.get(k)) is not type(v) or metadata[k]!=v for k,v in expected.items())):
         raise ServiceError('native_source_mismatch')
+    # Native 1.0.2 Config.Save serializes this bool with omitempty. Omission is
+    # its known false value; explicit true or any non-bool remains unsupported.
+    tls=metadata.get('dolt_server_tls',False)
+    if type(tls) is not bool or tls:raise ServiceError('native_source_mismatch')
 
 
 def password(path):

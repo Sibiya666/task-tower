@@ -27,7 +27,9 @@ Dolt 1.85.0 executable/hash, loopback host `127.0.0.1`, explicit port, database,
 user, `password_file` (or null), native `project_id` UUID and `metadata_sha256`.
 The registered regular `.beads/metadata.json` must match that complete byte hash
 and explicitly specify matching server mode, host/port/database/user, project UUID
-and disabled TLS. Missing/defaulted metadata, redirects and `.env` overrides fail
+and disabled TLS. Beads 1.0.2 omits its false TLS bool when saving metadata; that
+documented producer shape is accepted, while true or non-bool values are refused.
+Missing/defaulted identity or connection fields, redirects and `.env` overrides fail
 closed. No database copy, new binary over an old DB or automatic configuration
 repair is performed. Other layouts need separate explicit registration.
 

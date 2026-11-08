@@ -17,8 +17,8 @@ class DoltEventTests(unittest.TestCase):
             project_id='d16b34dd-b706-4d07-aa0f-1fc5d7c7b294')
         import json
         (self.root/'.beads').mkdir()
-        raw=json.dumps(dict(project_id=self.profile['project_id'],dolt_mode='server',dolt_server_host='127.0.0.1',
-            dolt_server_port=14444,dolt_database='proof',dolt_server_user='root',dolt_server_tls=False)).encode('utf-8')
+        raw=json.dumps(dict(database='beads.db',project_id=self.profile['project_id'],dolt_mode='server',dolt_server_host='127.0.0.1',
+            dolt_server_port=14444,dolt_database='proof',dolt_server_user='root')).encode('utf-8')
         (self.root/'.beads/metadata.json').write_bytes(raw);self.profile['metadata_sha256']=hashlib.sha256(raw).hexdigest()
         self.db=sqlite3.connect(':memory:');self.addCleanup(self.db.close);self.db.row_factory=sqlite3.Row
         self.db.executescript("CREATE TABLE metadata(key TEXT,value TEXT); CREATE TABLE wisps(id TEXT);"+
@@ -81,3 +81,31 @@ class DoltEventTests(unittest.TestCase):
         with self.assertRaises(ServiceError):read_events(self.root,'pilot-a',self.profile,forbidden,10)
         path.unlink()
         with self.assertRaises(ServiceError):read_events(self.root,'pilot-a',self.profile,forbidden,10)
+
+    def test_legacy_producer_omits_false_tls_but_true_and_bad_types_fail_closed(self):
+        import json
+        from task_tower.service.dolt_events import read_events
+        from task_tower.service.beads import ServiceError
+        path=self.root/'.beads/metadata.json'
+        metadata=json.loads(path.read_text(encoding='utf-8'))
+        def save():
+            raw=json.dumps(metadata).encode('utf-8');path.write_bytes(raw)
+            self.profile['metadata_sha256']=hashlib.sha256(raw).hexdigest()
+        save()
+        try:self.assertEqual(read_events(self.root,'pilot-a',self.profile,self.runner,10),[])
+        except ServiceError as error:self.fail('native1.0.2 omitempty false rejected: '+error.code)
+        metadata['dolt_server_tls']=False;save()
+        self.assertEqual(read_events(self.root,'pilot-a',self.profile,self.runner,10),[])
+        for invalid in (True,0,'false',None):
+            metadata['dolt_server_tls']=invalid;save()
+            with self.subTest(tls=invalid),self.assertRaises(ServiceError):
+                read_events(self.root,'pilot-a',self.profile,self.runner,10)
+
+    def test_unknown_metadata_field_is_not_registered_by_hash_alone(self):
+        import json
+        from task_tower.service.dolt_events import read_events
+        from task_tower.service.beads import ServiceError
+        path=self.root/'.beads/metadata.json';metadata=json.loads(path.read_text(encoding='utf-8'))
+        metadata['unrecognized_routing_option']='foreign'
+        raw=json.dumps(metadata).encode('utf-8');path.write_bytes(raw);self.profile['metadata_sha256']=hashlib.sha256(raw).hexdigest()
+        with self.assertRaises(ServiceError):read_events(self.root,'pilot-a',self.profile,self.runner,10)
