@@ -76,8 +76,10 @@ has a filename/header ambiguity and needs a separate security parser review.
   source/hash, branch and refs predicate. Preserve unknown-intent/no-replay behavior.
 - Parse literal LF bytes, require exactly two nonempty records and terminal LF,
   then os.fsdecode each path. Never text.splitlines or whitespace-strip path data.
-  Preserve previously supported LF-containing POSIX roots through the original
-  separate-query route; do not silently restrict the path domain.
+  Preserve previously supported LF-containing POSIX roots or explicitly bound
+  policy.git_dir paths through the original separate-query route; do not
+  silently restrict the path domain. A bound Git directory may contain LF even
+  when its linked worktree root does not.
 - Real ordinary and explicitly bound linked worktrees, spaces and Unicode paths
   must work. Nested roots, unbound/wrong Git directory, malformed output, stale
   expected HEAD and branch-bound detached HEAD must fail closed. Unborn HEAD is
