@@ -50,6 +50,7 @@ class _Source:
         self.repo = str(Path(repo).absolute())
         self.deadline = time.monotonic() + MAX_SECONDS
         self.cache = {}
+        self.blob_sizes = {}
         self.prose_bytes = 0
         self.capture_bytes = 0
 
@@ -84,10 +85,17 @@ class _Source:
                 raise DocumentationError('git_or_resource_error')
             return (Path(directory)/'stdout.log').read_bytes()
 
-    def blob(self, oid):
+    def blob(self, oid, *, size=None):
+        if size is not None and (type(size) is not int or size < 0):
+            raise DocumentationError('malformed_blob_size')
+        if oid in self.cache:
+            if size is not None and size != self.blob_sizes[oid]:
+                raise DocumentationError('malformed_blob_size')
+            return self.cache[oid]
         if oid not in self.cache:
             remaining = MAX_PROSE_BYTES - self.prose_bytes
-            size = int(self.git('cat-file', '-s', oid, cap=64))
+            if size is None:
+                size = int(self.git('cat-file', '-s', oid, cap=64))
             if size < 0 or size > remaining:
                 raise DocumentationError('prose_limit')
             data = self.git('cat-file', 'blob', oid, cap=max(1, size))
@@ -95,6 +103,7 @@ class _Source:
                 raise DocumentationError('malformed_blob')
             self.prose_bytes += size
             self.cache[oid] = data.decode('utf-8', errors='strict')
+            self.blob_sizes[oid] = size
         return self.cache[oid]
 
 
@@ -297,28 +306,40 @@ def _target(referrer, destination):
 
 
 def _broken(source, revision):
-    raw = source.git('ls-tree', '-r', '-t', '-z', '--full-tree', revision)
-    entries = {'.': ('040000', 'tree', revision)}
+    raw = source.git('ls-tree', '-r', '-t', '-l', '-z', '--full-tree', revision)
+    entries = {'.': ('040000', 'tree', revision, None)}
     if raw and not raw.endswith(b'\0'):
         raise DocumentationError('malformed_tree')
     for record in raw.split(b'\0')[:-1]:
         source.remaining()
         metadata, name = record.split(b'\t', 1)
-        mode, kind, oid = metadata.decode('ascii').split(' ')
+        fields = metadata.decode('ascii').split()
+        if len(fields) != 4:
+            raise DocumentationError('malformed_tree')
+        mode, kind, oid, advertised_size = fields
+        if kind == 'blob' and re.fullmatch(r'(?:0|[1-9][0-9]{0,19})', advertised_size):
+            size = int(advertised_size)
+        elif kind in ('tree', 'commit') and advertised_size == '-':
+            size = None
+        else:
+            raise DocumentationError('malformed_tree')
         path = name.decode('utf-8', errors='strict')
         if len(path) > MAX_PATH_CHARS:
             raise DocumentationError('path_limit')
         if not _OID.fullmatch(oid) or mode not in ('100644', '100755', '120000', '160000', '040000'):
             raise DocumentationError('malformed_tree')
-        entries[path] = (mode, kind, oid)
+        entries[path] = (mode, kind, oid, size)
     broken, count = set(), 0
-    for path, (mode, kind, oid) in entries.items():
+    for path, (mode, kind, oid, size) in entries.items():
         source.remaining()
         # All regular tracked Markdown can refer to a changed target, even
         # outside the deliberately narrow fast-classification allowlist.
         if mode not in ('100644', '100755') or kind != 'blob' or not path.endswith('.md'):
             continue
-        for destination in _links(source.blob(oid), source.remaining):
+        # ls-tree supplies the size of this immutable Git object. Retain the
+        # bounded content read and exact byte check without a second process
+        # for cat-file -s on every unique Markdown blob.
+        for destination in _links(source.blob(oid, size=size), source.remaining):
             source.remaining()
             target = _target(path, destination)
             if target is None:
