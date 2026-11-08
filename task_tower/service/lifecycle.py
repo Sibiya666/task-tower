@@ -56,6 +56,12 @@ def advance(attempt,event,policy):
     elif kind=='quiescent':
         if a['phase']!='needs_input' or a.get('quiescent'):raise ServiceError('quiescence_fenced')
         a.update(quiescent=True,execution_state='stopped')
+    elif kind=='saved_result':
+        from ..delivery_policy import validate_receipt
+        if a['phase']!='awaiting_merge':raise ServiceError('handoff_fenced')
+        try:receipt=validate_receipt(event['receipt'],a.get('delivery_policy',{}),a['head_sha'],a['base_sha'])
+        except ValueError:raise ServiceError('invalid_saved_result') from None
+        a.update(phase='handoff',quiescent=True,saved_result=receipt)
     elif kind=='started':
         thread=identity(event['thread_id']);turn=identity(event['turn_id'])
         if a['phase'] not in ('executing','revising','reviewing'):raise ServiceError('start_fenced')
@@ -105,7 +111,7 @@ def advance(attempt,event,policy):
 class LifecycleStore:
     def active_count(self,connector):
         return sum(1 for row in self.db.execute('SELECT data FROM attempts WHERE connector_id=?',(connector,))
-                   if (a:=json.loads(row[0]))['phase']!='accepted'
+                   if (a:=json.loads(row[0]))['phase'] not in ('accepted','handoff')
                    and not (a['phase']=='needs_input' and a.get('quiescent') is True))
 
     def lifecycle_commands(self,connector):
@@ -180,7 +186,7 @@ class LifecycleStore:
         if not isinstance(payload,dict):raise ServiceError('invalid_lifecycle_event',400)
         kind=payload.get('kind')
         expected={'dispatch':{'base_sha'},'resume':set(),'pause':set(),'disconnected':set(),'failed':{'command_id'},
-                  'merged':{'command_id','merge'},'delivery_changed':{'command_id','base_sha'},'quiescent':{'command_id'},'started':{'command_id','thread_id','turn_id'},
+                  'saved_result':{'command_id','receipt'},'merged':{'command_id','merge'},'delivery_changed':{'command_id','base_sha'},'quiescent':{'command_id'},'started':{'command_id','thread_id','turn_id'},
                   'completed':{'command_id','thread_id','turn_id','result'},
                   'approval':{'command_id','decision_id','request'},'responded':{'command_id'}}
         if kind not in expected or set(payload)!={'kind'}|expected[kind]|({'source'} if kind=='completed' and 'source' in payload else set()):
@@ -194,6 +200,7 @@ class LifecycleStore:
                 if previous['fingerprint']!=fingerprint:raise ServiceError('event_conflict')
                 return json.loads(previous['outcome'])
             if kind!='dispatch' and not a.get('managed'):raise ServiceError('not_managed')
+            if a.get('delivery_policy')!=self.delivery_policies.get(a['project_id']):raise ServiceError('delivery_policy_changed')
             command=None
             if 'command_id' in payload:
                 row=self.db.execute('SELECT * FROM lifecycle_commands WHERE command_id=?',(identity(payload['command_id']),)).fetchone()
@@ -213,6 +220,7 @@ class LifecycleStore:
                 elif command['command_id']!=a.get('active_command_id'):raise ServiceError('command_superseded')
                 if kind=='merged' and (command['kind']!='deliver' or not isinstance(payload['merge'],dict) or payload['merge'].get('repository')!=self.delivery_projects.get(a['project_id'])):raise ServiceError('merge_fenced')
                 if kind=='delivery_changed' and command['kind']!='deliver':raise ServiceError('delivery_change_fenced')
+                if kind=='saved_result' and command['kind']!='deliver':raise ServiceError('handoff_fenced')
                 if kind=='started' and a.get('execution_state')=='running':raise ServiceError('already_started')
             decision=None
             if kind=='approval':
@@ -250,7 +258,7 @@ class LifecycleStore:
             with self.db:
                 self.db.execute('INSERT INTO events VALUES (?,?,?,?,?)',(event['event_id'],fingerprint,a['attempt_id'],encoded(a),utc()))
                 self._save_attempt(a)
-                if command and kind in ('completed','quiescent','failed','responded','delivery_changed'):
+                if command and kind in ('completed','quiescent','failed','responded','delivery_changed','saved_result'):
                     self.db.execute("UPDATE lifecycle_commands SET state='acknowledged' WHERE command_id=?",(command['command_id'],))
                 if decision:self.db.execute('INSERT INTO decisions VALUES (?,?,?,?,?)',
                     (decision['decision_id'],event['connector_id'],a['attempt_id'],encoded(decision),utc()))

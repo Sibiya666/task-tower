@@ -92,7 +92,84 @@ class AdoptionTests(unittest.TestCase):
   self.assertEqual(self.native.rows['pilot-a']['dependencies'],[dict(id='pilot-epic',dependency_type='parent-child')])
   self.store.validate_execution(result['attempt_id'],'c')
 
+ def external_plan(self):
+  plan=copy.deepcopy(PLAN);plan['tasks'][0]['depends_on']=['pilot-done']
+  self.native.rows['pilot-done']=dict(id='pilot-done',title='Previous work',status='closed')
+  self.native.rows['pilot-a']['requires']=['pilot-done']
+  digest=plan_digest(plan);self.store.approved_plans['p']={digest}
+  return plan,digest
+
+ def adopt_external(self,plan,digest):
+  try:return self.store.adopt_plan('external','p',digest,plan)
+  except ServiceError as error:self.fail('closed external blocker rejected: '+error.code)
+
+ def test_closed_external_blocker_is_verified_without_adopting_or_mutating_it(self):
+  plan,digest=self.external_plan();before=copy.deepcopy(self.native.rows)
+  self.assertEqual(self.adopt_external(plan,digest)['state'],'published')
+  self.assertEqual(self.store._published('p'),{'pilot-a'})
+  self.assertEqual(self.native.rows,before)
+  self.assertEqual(self.store.claim_request('claim','p','pilot-a','c')['phase'],'claimed')
+
+ def test_external_blocker_reopened_between_readbacks_fences_publication(self):
+  plan,digest=self.external_plan();original=self.store._verify_import
+  def verify(*args):
+   original(*args);self.native.rows['pilot-done']['status']='open'
+  self.store._verify_import=verify
+  self.assertEqual(self.adopt_external(plan,digest)['state'],'needs_reconciliation')
+  self.assertFalse(any('--claim' in c for c in self.native.calls))
+
+ def test_external_blocker_reopened_after_adoption_fences_claim(self):
+  plan,digest=self.external_plan()
+  self.assertEqual(self.adopt_external(plan,digest)['state'],'published')
+  self.native.rows['pilot-done']['status']='open'
+  self.assertEqual(self.store.claim_request('claim','p','pilot-a','c')['phase'],'needs_reconciliation')
+  self.assertFalse(any('--claim' in c for c in self.native.calls))
+
 class ReloadTests(unittest.TestCase):
+ def test_changed_operator_document_revalidates_real_private_credentials(self):
+  import json
+  from unittest.mock import patch
+  from task_tower.intake_reload import ConfigReloader
+  from task_tower.service.cli import load_config,read_token
+  from tests.test_service_api import private_token
+  with tempfile.TemporaryDirectory() as tmp:
+   root=Path(tmp);token=root/'token';private_token(token,'a'*40)
+   path=root/'operator.json'
+   document=dict(version=1,executable=str(root/'bd'),projects={'p':tmp},journal=str(root/'journal'),
+    connectors={'c':dict(token_file=str(token),projects=['p'])},approved_plans={'p':[]},port=0,poll_seconds=2)
+   path.write_text(json.dumps(document),encoding='utf-8')
+   old=load_config(path);reload=ConfigReloader(path,old,'approved_plans',load_config)
+   with patch('task_tower.service.cli.read_token',wraps=read_token) as reads:
+    reload();original=reload.document
+    reload();self.assertEqual(reads.call_count,1)
+    token.write_text('b'*40,encoding='ascii')
+    document['approved_plans']['p']=['a'*64]
+    path.write_text(json.dumps(document),encoding='utf-8')
+    with self.assertRaises(ValueError):reload()
+    self.assertEqual(reads.call_count,2)
+    self.assertEqual(reload.current,old);self.assertEqual(reload.document,original)
+    token.write_text('a'*40,encoding='ascii')
+    self.assertEqual(reload()['approved_plans'],{'p':['a'*64]})
+
+ def test_unchanged_document_does_not_repeat_credential_validation(self):
+  from task_tower.intake_reload import ConfigReloader
+  from unittest.mock import Mock
+  with tempfile.TemporaryDirectory() as tmp:
+   path=Path(tmp)/'operator.json';path.write_bytes(b'{"approved":1}')
+   old={'projects':{'p':'root'},'approved_plans':{'p':[]}}
+   loader=Mock(return_value=old)
+   reload=ConfigReloader(path,old,'approved_plans',loader)
+   self.assertEqual(reload(),old);self.assertEqual(reload(),old)
+   self.assertEqual(loader.call_count,1)
+   path.write_bytes(b'{"approved":2}')
+   added=copy.deepcopy(old);added['approved_plans']['p']=['a']
+   loader.return_value=added
+   self.assertEqual(reload(),added);self.assertEqual(loader.call_count,2)
+   loader.return_value={'projects':{'p':'foreign'},'approved_plans':{'p':['a']}}
+   path.write_bytes(b'{"approved":3}')
+   with self.assertRaises(ValueError):reload()
+   self.assertEqual(reload.current,added)
+
  def test_assignments_append_only_and_scope_immutable(self):
   from task_tower.intake_reload import extend_config
   old={'projects':{'p':'trusted'},'assignments':[],'credential':'same'}
@@ -119,7 +196,7 @@ class LiveReloadLoopTests(unittest.TestCase):
   added=copy.deepcopy(cfg);added['assignments']=[dict(project_id='p',bead_id='pilot-a',base_sha='a'*40,input={'text':'Approved'})]
   connector=MagicMock();connector.claim.return_value=None
   connector.tick.side_effect=[None,None,KeyboardInterrupt]
-  with patch.object(cli,'ConnectorStore'),patch.object(cli,'Worktrees'),patch.object(cli,'APIClient'),patch.object(cli,'read_token'),patch.object(cli,'LifecycleConnector',return_value=connector),patch.object(cli,'load_config',side_effect=[cfg,added]),patch.object(cli.time,'monotonic',side_effect=[0,0,3,3]),patch.object(cli.time,'sleep'):
+  with patch.object(cli,'ConnectorStore'),patch.object(cli,'Worktrees'),patch.object(cli,'APIClient'),patch.object(cli,'read_token'),patch.object(cli,'LifecycleConnector',return_value=connector),patch.object(cli,'load_config',side_effect=[cfg,added]),patch('task_tower.intake_reload.read_document',side_effect=[b'first',b'added']),patch.object(cli.time,'monotonic',side_effect=[0,0,3,3]),patch.object(cli.time,'sleep'):
    self.assertEqual(cli.work(cfg,config_path='operator-file'),4)
   connector.claim.assert_called_once_with('p','pilot-a')
  def test_service_loop_reloads_approvals_without_replacing_store(self):
@@ -132,6 +209,6 @@ class LiveReloadLoopTests(unittest.TestCase):
   def handle():
    self.assertEqual(store.approved_plans,added['approved_plans']);raise KeyboardInterrupt
   server.handle_request.side_effect=handle
-  with patch.object(cli,'load_config',side_effect=[cfg,added]),patch.object(cli,'Beads'),patch.object(cli,'Store',return_value=store),patch.object(cli,'make_server',return_value=server):
+  with patch.object(cli,'load_config',side_effect=[cfg,added]),patch('task_tower.intake_reload.read_document',return_value=b'added'),patch.object(cli,'Beads'),patch.object(cli,'Store',return_value=store),patch.object(cli,'make_server',return_value=server):
    self.assertEqual(cli.main(['--config','operator-file']),0)
   store.close.assert_called_once()

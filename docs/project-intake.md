@@ -22,7 +22,9 @@ supported. Assignments stay bounded at 32 and projects at 32.
    `parents` (parent-child IDs, including parents outside this batch). Include only
    intended executable tasks. Parent containers do not become executable merely
    because their IDs are referenced. Blocking IDs must be within the approved
-   batch, as with import; adopt dependent tasks together, up to 32 tasks.
+   batch unless an external blocker is already closed and passes both fresh native
+   readbacks. External blockers are never adopted, mutated or made executable.
+   Reopening one fences subsequent claim/execution. Adopt up to 32 tasks.
 2. Compute the canonical SHA256 using `task_tower.service.store.plan_digest`.
    After operator review of that exact snapshot, append the digest to the trusted
    service file's `approved_plans[project]`. Write files atomically in their trusted
@@ -69,3 +71,31 @@ when its file is invalid. Fix the operator file and retry normal polling. Revoca
 assignment retirement after the 32-entry limit, or any trusted-setting change needs
 an explicit controlled restart with journals retained and active work reconciled.
 Reload does not change model/account authorization or approval decisions.
+
+## Project-specific native and delivery authority
+
+Optional service `native_profiles` bind per-project executable hashes, versions
+and event readers. See [legacy event history](runtime/legacy-event-reader.md) for
+the strict server-backed 1.0.2 route and its pending authentic runtime proof.
+Never open an old database using the global newer binary to obtain history.
+
+The optional `delivery_policies` is identical in service and connector config:
+
+```json
+{"local-project":{"mode":"local"},"remote-project":{"mode":"owner_pr","repository":"owner/project","base":"test"}}
+```
+
+`local` persists the independently reviewed source/result and performs no GitHub
+operation. `owner_pr` pushes the reviewed branch and opens a PR against exactly
+the configured base; only the owner decides whether to merge. Neither mode
+automatically merges or closes native work as accepted. After owned transports
+are verified stopped, the attempt becomes `handoff` with a saved receipt and
+releases capacity. Unknown effects/cleanup remain fenced on restart.
+
+The existing `delivery_projects` spelling retains Task Tower's automatic protected
+main route. Explicit `task_tower` policies also require base `main` and all its
+existing CI/independent PR/main gates. Do not reuse that acceptance contract for
+unrelated repositories. A project cannot occur in both policy spellings. Policies
+bind at native claim; changed service/connector/restarted authority cannot expand
+an existing attempt's scope. Trusted policy changes require controlled restart
+and reconciliation, never live assignment prose.

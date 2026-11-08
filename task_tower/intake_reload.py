@@ -1,5 +1,28 @@
 """Append-only operator configuration changes; never an HTTP authorization source."""
 from copy import deepcopy
+from pathlib import Path
+from .project_connections import safe_config_path
+
+
+def read_document(path):
+    with safe_config_path(Path(path)).open('rb') as stream:raw=stream.read(65537)
+    if len(raw)>65536:raise ValueError('configuration_limit')
+    return raw
+
+
+class ConfigReloader:
+    """Validate changed operator bytes once; failed versions never advance authority."""
+    def __init__(self,path,current,field,loader):
+        self.path,self.current,self.field,self.loader=path,current,field,loader
+        self.document=None
+
+    def __call__(self):
+        raw=read_document(self.path)
+        if raw==self.document:return self.current
+        candidate=self.loader(self.path,document=raw)
+        current=extend_config(self.current,candidate,self.field)
+        self.current,self.document=current,raw
+        return current
 
 
 def extend_config(previous, candidate, field):

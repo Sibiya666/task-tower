@@ -57,13 +57,15 @@ def read_token(path):
     return token
 
 
-def load_config(path):
+def load_config(path,*,document=None):
     path=_absolute(str(path))
-    with path.open('rb') as stream:raw=stream.read(65537)
+    if document is None:
+        with path.open('rb') as stream:raw=stream.read(65537)
+    else:raw=document
     if len(raw)>65536:raise ValueError('config_limit')
     value=strict_json(raw.decode('utf-8'))
     required={'version','executable','projects','journal','connectors','approved_plans','port','poll_seconds'}
-    if not isinstance(value,dict) or set(value)-{'max_active_tasks','delivery_projects'} != required or type(value['version']) is not int or value['version']!=1:
+    if not isinstance(value,dict) or set(value)-{'max_active_tasks','delivery_projects','delivery_policies','native_profiles'} != required or type(value['version']) is not int or value['version']!=1:
         raise ValueError('invalid_configuration')
     exe=_absolute(value['executable']);journal=_absolute(value['journal'])
     if not isinstance(value['projects'],dict) or not 1<=len(value['projects'])<=32:
@@ -85,13 +87,17 @@ def load_config(path):
         if token_path==journal or token_path==exe:raise ValueError('private_file_collision')
         connectors[key]=dict(token=read_token(token_path),projects=entry['projects'])
     approved=value['approved_plans']
+    from .native_profiles import profiles
+    profiles(projects,value.get('native_profiles',{}))
+    from ..delivery_policy import policies
+    policies(projects,value.get('delivery_projects',{}),value.get('delivery_policies'))
     if not isinstance(approved,dict) or set(approved)-set(projects):raise ValueError('invalid_approvals')
     for digests in approved.values():
         if (not isinstance(digests,list) or len(digests)>1000
                 or any(not isinstance(d,str) or re.fullmatch('[0-9a-f]{64}',d) is None for d in digests)):
             raise ValueError('invalid_approvals')
-    return dict(executable=exe,projects=projects,journal=journal,connectors=connectors,
-                approved_plans=approved,delivery_projects=value.get('delivery_projects',{}),max_active_tasks=value.get('max_active_tasks',2),port=value['port'],poll_seconds=value['poll_seconds'])
+    return dict(executable=exe,projects=projects,journal=journal,connectors=connectors,native_profiles=value.get('native_profiles',{}),
+                approved_plans=approved,delivery_projects=value.get('delivery_projects',{}),delivery_policies=value.get('delivery_policies',{}),max_active_tasks=value.get('max_active_tasks',2),port=value['port'],poll_seconds=value['poll_seconds'])
 
 
 def main(argv=None):
@@ -101,17 +107,18 @@ def main(argv=None):
     try:
         args=parser.parse_args(argv)
         config=load_config(args.config)
-        beads=Beads(config['executable'],config['projects'])
-        store=Store(config['journal'],beads,approved_plans=config['approved_plans'],delivery_projects=config['delivery_projects'],max_active_tasks=config['max_active_tasks'])
+        beads=Beads(config['executable'],config['projects'],native_profiles=config.get('native_profiles'))
+        store=Store(config['journal'],beads,approved_plans=config['approved_plans'],delivery_projects=config['delivery_projects'],max_active_tasks=config['max_active_tasks'],delivery_policies=config.get('delivery_policies'))
         try:
             server=make_server(store,config['connectors'],host='0.0.0.0' if args.container_network else '127.0.0.1',
                                port=config['port'],poll_seconds=config['poll_seconds'],container_network=args.container_network)
             try:
+                from ..intake_reload import ConfigReloader
+                reload=ConfigReloader(args.config,config,'approved_plans',load_config)
                 server.timeout=.5
                 while True:
-                    from ..intake_reload import extend_config
                     try:
-                        current=extend_config(config,load_config(args.config),'approved_plans')
+                        current=reload()
                         with store.lock:store.approved_plans=current['approved_plans']
                         config=current
                     except Exception:pass  # Reject invalid file; retain prior operator authority.

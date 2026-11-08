@@ -21,20 +21,10 @@ def private_token(path,text):
         fd=os.open(path,os.O_CREAT|os.O_EXCL|os.O_WRONLY,0o600)
         with os.fdopen(fd,'w',encoding='utf-8') as f:f.write(text)
         return
-    import subprocess
-    env=dict(os.environ,TOWER_TEST_TOKEN_PATH=str(path),TOWER_TEST_TOKEN_TEXT=text)
-    script="""$ErrorActionPreference='Stop'
-$me=[System.Security.Principal.WindowsIdentity]::GetCurrent().User
-$acl=New-Object System.Security.AccessControl.FileSecurity
-$acl.SetAccessRuleProtection($true,$false)
-$acl.SetOwner($me)
-$rule=New-Object System.Security.AccessControl.FileSystemAccessRule($me,'FullControl','Allow')
-$acl.AddAccessRule($rule)
-$f=New-Object System.IO.FileStream($env:TOWER_TEST_TOKEN_PATH,[IO.FileMode]::CreateNew,[Security.AccessControl.FileSystemRights]::FullControl,[IO.FileShare]::None,4096,[IO.FileOptions]::None,$acl)
-try{$bytes=[Text.Encoding]::ASCII.GetBytes($env:TOWER_TEST_TOKEN_TEXT);$f.Write($bytes,0,$bytes.Length)}finally{$f.Dispose()}
-"""
-    subprocess.run([str(Path(os.environ['SystemRoot'])/'System32/WindowsPowerShell/v1.0/powershell.exe'),
-        '-NoProfile','-NonInteractive','-Command',script],env=env,check=True,
+    import subprocess,sys
+    env={k:v for k,v in os.environ.items() if k.upper() not in ('GH_TOKEN','GITHUB_TOKEN')}
+    env.update(TOWER_TEST_TOKEN_PATH=str(path),TOWER_TEST_TOKEN_TEXT=text)
+    subprocess.run([sys.executable,'-I','-S','-B',str(Path(__file__).parent/'fixtures/private_token.py')],env=env,check=True,
         capture_output=True,timeout=5,creationflags=subprocess.CREATE_NO_WINDOW)
 
 class APITests(unittest.TestCase):

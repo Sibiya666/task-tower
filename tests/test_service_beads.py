@@ -69,6 +69,34 @@ class BeadsTests(unittest.TestCase):
         self.assertEqual((r['status'], r['assignee']), ('in_progress', 'worker'))
         self.assertEqual(self.beads.show('p', 'pilot-a')['assignee'], 'worker')
 
+    def profile(self,name,history='events-v1'):
+        import hashlib
+        root=Path(self.tmp.name)/name;root.mkdir();(root/'.beads').mkdir()
+        (root/'.beads/.local_version').write_text('1.3.4\n',encoding='ascii')
+        exe=root/'bd';exe.write_bytes(name.encode('ascii'))
+        return root,dict(executable=str(exe),version='1.3.4',sha256=hashlib.sha256(exe.read_bytes()).hexdigest(),history=history)
+
+    def test_project_profile_uses_only_its_bound_binary_and_version(self):
+        root,p=self.profile('project-p');other,q=self.profile('project-q');calls=[]
+        def runner(argv,cwd,timeout,env):
+            calls.append((argv,cwd))
+            if 'version' in argv:return {'version':'1.3.4'}
+            return []
+        beads=Beads(Path(self.tmp.name)/'default',{'p':root,'q':other},runner=runner,native_profiles={'p':p,'q':q})
+        beads.ready('p');beads.ready('q')
+        self.assertEqual([a[0] for a,c in calls],[p['executable'],p['executable'],q['executable'],q['executable']])
+        self.assertEqual([c for a,c in calls],[root,root,other,other])
+        (root/'.beads/.local_version').write_text('1.0.2',encoding='ascii');before=len(calls)
+        with self.assertRaises(ServiceError):beads.ready('p')
+        self.assertEqual(len(calls),before)
+
+    def test_unsupported_history_fails_before_native_close(self):
+        root,profile=self.profile('legacy',history='unavailable')
+        calls=[]
+        beads=Beads(root/'bd',{'p':root},runner=lambda *args:calls.append(args),native_profiles={'p':profile})
+        with self.assertRaises(ServiceError):beads.close('p','pilot-a','worker','verified')
+        self.assertEqual(calls,[])
+
     def test_foreign_owner_preserved_without_claim_effect(self):
         self.native.rows['pilot-a'].update(status='in_progress', assignee='foreign')
         with self.assertRaises(ServiceError): self.beads.claim('p', 'pilot-a', 'worker')

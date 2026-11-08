@@ -31,6 +31,9 @@ def accept(attempt,evidence):
 class AcceptanceStore:
     def reserve_delivery(self,a):
         from .beads import ServiceError
+        policy=self.delivery_policies.get(a['project_id'])
+        if policy!=a.get('delivery_policy') and a.get('delivery_policy') is not None:raise ServiceError('delivery_policy_changed')
+        if policy and policy['mode'] in ('local','owner_pr'):return
         r=self.delivery_projects.get(a['project_id'])
         if r is None:raise ServiceError('delivery_not_configured',403)
         row=self.db.execute('SELECT attempt_id FROM acceptance_repository WHERE repository=?',(r,)).fetchone()
@@ -56,6 +59,8 @@ class AcceptanceStore:
                 if a['phase']=='accepted':return a
                 return self._close_readback(a,json.loads(row['data']))
             if a['phase'] not in ('awaiting_merge','postmerge'):raise ServiceError('acceptance_fenced')
+            self.beads.ensure_event_history(a['project_id'])
+            if a.get('delivery_policy',{}).get('mode') in ('local','owner_pr'):raise ServiceError('owner_acceptance_required')
             if (not isinstance(merge,dict) or set(merge)!={'repository','pr_number','head_sha','base_sha','main_sha'}
                     or any(merge[k]!=a[k] for k in ('head_sha','base_sha'))):raise ServiceError('merge_identity_mismatch')
             if merge.get('repository')!=self.delivery_projects.get(a['project_id']):raise ServiceError('repository_forbidden',403)
