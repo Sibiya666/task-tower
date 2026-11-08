@@ -69,6 +69,7 @@ class Store(LifecycleStore,AcceptanceStore):
         from ..delivery_policy import policies
         self.delivery_policies=policies(beads.projects,self.delivery_projects,delivery_policies)
         if any(p not in beads.projects or not isinstance(r,str) or __import__('re').fullmatch(r'[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9_][A-Za-z0-9_.-]*',r) is None for p,r in self.delivery_projects.items()):raise ValueError('invalid_delivery_scope')
+        self.delivery_projects={p:v['repository'] for p,v in self.delivery_policies.items() if v['mode']=='task_tower'}
         self.max_active_tasks=max_active_tasks
         self.path=safe_config_path(Path(path).absolute())
         self.beads=beads

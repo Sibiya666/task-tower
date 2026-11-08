@@ -7,6 +7,35 @@ from pathlib import Path
 
 
 class PolicyTests(unittest.TestCase):
+    def test_explicit_automatic_policy_preserves_full_acceptance_and_native_close(self):
+        from unittest.mock import patch
+        from task_tower.service.store import Store
+        from tests.test_headless_e2e import HeadlessE2ETests
+        from tests.test_headless_delivery import Host,REPO
+        from tests.test_headless_acceptance import evidence
+        from task_tower.connector.delivery import Delivery
+        policy=dict(mode='task_tower',repository=REPO,base='main')
+        fixture=HeadlessE2ETests()
+        def configured(*args,**kwargs):return Store(*args,**kwargs,delivery_policies={'p':policy})
+        with patch('task_tower.service.store.Store',side_effect=configured):fixture.setUp()
+        try:
+            class GitHub(Host):
+                def prepare_pr(host,a):
+                    host.pr.update(branch='codex/headless-'+a['attempt_id'],head_sha=a['head_sha'],base_sha=a['base_sha'])
+                    for c in host.checks:c['head_sha']=a['head_sha']
+                    return super().prepare_pr(a)
+                def verify_main(host,a,merge):
+                    proof=evidence(a);proof['postmerge_review']['base_sha']=a['base_sha'];return proof
+            host=GitHub();fixture.connector.delivery=Delivery(host,fixture.local,{'p':REPO})
+            a=fixture.start(0)
+            fixture.until(lambda:fixture.service.attempt(a['attempt_id'])['phase']=='accepted',seconds=12)
+            result=fixture.service.attempt(a['attempt_id'])
+            self.assertEqual(result['delivery_policy'],policy)
+            self.assertEqual(result['canonical_close']['event_id'],'close-pilot-0')
+            self.assertEqual(fixture.native.rows['pilot-0']['status'],'closed')
+            self.assertEqual(host.calls.count('merge'),1)
+        finally:fixture.doCleanups()
+
     def test_explicit_modes_and_git_branch_restrictions(self):
         from task_tower.delivery_policy import policies
         configured={'p':dict(mode='owner_pr',repository='owner/project',base='codex/veyra-rpg')}
