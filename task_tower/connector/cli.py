@@ -58,9 +58,9 @@ def load_config(path,*,document=None):
 def main(argv=None):
     parser=argparse.ArgumentParser(description='Explicit host connector assignments and opt-in trusted delivery')
     sub=parser.add_subparsers(dest='action',required=True)
-    for name in ('run','work','resume'):
+    for name in ('run','work','resume','inspect'):
         action=sub.add_parser(name);action.add_argument('--config',required=True)
-        if name=='resume':action.add_argument('attempt_id')
+        if name in ('resume','inspect'):action.add_argument('attempt_id')
     ready=sub.add_parser('ready')
     ready.add_argument('--project-id',required=True);ready.add_argument('--config',required=True)
     plan=sub.add_parser('plan');plans=plan.add_subparsers(dest='plan_action',required=True)
@@ -75,6 +75,12 @@ def main(argv=None):
     store=app=connector=None;command=None
     try:
         args=parser.parse_args(argv);cfg=load_config(args.config)
+        if args.action=='inspect':
+            from .diagnostics import inspect_attempt
+            try:value=inspect_attempt(cfg['journal'],cfg['connector_id'],args.attempt_id,set(cfg['projects']))
+            except ValueError:
+                print(json.dumps(dict(version=1,error='inspection_unavailable')));return 4
+            print(json.dumps(value,ensure_ascii=True,allow_nan=False));return 0
         if args.action in ('ready','plan'):
             identity(args.project_id)
             if args.project_id not in cfg['projects']:raise ValueError('project_forbidden')
