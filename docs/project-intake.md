@@ -81,7 +81,7 @@ request can read its prior outcome without restoring execution authority.
 
 Optional service `native_profiles` bind per-project executable hashes, versions
 and event readers. See [legacy event history](runtime/legacy-event-reader.md) for
-the strict server-backed 1.0.2 route and its pending authentic runtime proof.
+the strict server-backed 1.0.2 route and its bounded compatibility evidence.
 Never open an old database using the global newer binary to obtain history.
 
 The optional `delivery_policies` is identical in service and connector config:

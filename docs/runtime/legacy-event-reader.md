@@ -1,8 +1,9 @@
 # Explicit native profiles and legacy event history
 
 This is an operator-registered compatibility route, not discovery or migration.
-Real Beads 1.0.2 runtime compatibility is pending disposable proof; relational
-contract tests and public source analysis alone do not establish it.
+A human-authorized disposable proof on 2026-11-09 verified the pinned Beads 1.0.2
+route with Dolt 1.85.0. This evidence applies to a newly initialized isolated
+database; it does not establish compatibility with an existing project database.
 
 The optional service `native_profiles` maps registered project IDs to exact
 `executable`, `sha256`, `version` and `history` values. An original binary, matching
@@ -63,12 +64,19 @@ does not extend to embedded mode. Native writes still require normal explicit
 ownership and authorization. Read commands may update local bookkeeping, so this
 is a database-schema boundary rather than a promise of zero filesystem writes.
 
-## Evidence still required
+## Bounded compatibility evidence
 
-Use only a newly initialized disposable database with the pinned legacy binary
-and an explicitly authorized isolated backend. Prove actual create/claim/close,
-authentic close event readback, active-wisp routing, restart, wrong project and
-failed connection behavior, complete captures and stopped owned processes.
-Installed Dolt 1.85.0 is not publicly proven compatible with Beads 1.0.2's upstream
-1.86.0 test backend; stop if the new disposable proof rejects it. No fallback
-installation or actual popo data access is implied.
+The disposable proof exercised native create/claim/close, authentic ordinary-task
+and active-wisp event readback, reader restart and source-identity guards. All 50
+captured operations completed successfully. Working-root hashes matched across
+history reads, the event scheduler remained OFF, and the owned server stopped
+gracefully. A separate read against its verified stopped endpoint returned the
+actual connection refusal and failed closed without local fallback; process and
+scratch cleanup completed. These checks ran through noninteractive Reslop.
+
+The active-wisp evidence covers history routing after a native direct claim; it
+does not establish service admission of wisps. No existing project database was
+opened or migrated, and no real popo compatibility or PR/main acceptance is
+implied. Future probes still require a newly initialized disposable database,
+the pinned legacy binary and an explicitly authorized isolated backend. Stop on
+incompatibility; no fallback installation is authorized.
