@@ -2,6 +2,7 @@
 import hashlib
 import os
 from contextlib import contextmanager
+from functools import lru_cache
 from pathlib import Path
 import re
 import sqlite3
@@ -31,50 +32,87 @@ class GitFailure(ValueError):
 
 def private_directory(path):
     try:
-        if os.name=='nt':
-            from ..service.cli import _windows_private
-            _windows_private(path)
-        else:
-            info=path.stat()
-            if info.st_uid!=os.getuid() or info.st_mode&0o077:return False
-        return True
+        if os.name=='nt':return _windows_private_directory(path)
+        info=path.stat()
+        return info.st_uid==os.getuid() and not info.st_mode&0o077
     except Exception:return False
+
+@lru_cache(maxsize=1)
+def _windows_api():
+    import ctypes
+    from ctypes import wintypes as w
+    adv=ctypes.WinDLL('advapi32',use_last_error=True);kernel=ctypes.WinDLL('kernel32',use_last_error=True)
+    class Attributes(ctypes.Structure):
+        _fields_=[('length',w.DWORD),('descriptor',w.LPVOID),('inherit',w.BOOL)]
+    pointer=ctypes.POINTER
+    bindings=[(adv,'OpenProcessToken',w.BOOL,[w.HANDLE,w.DWORD,pointer(w.HANDLE)]),
+        (adv,'GetTokenInformation',w.BOOL,[w.HANDLE,w.DWORD,w.LPVOID,w.DWORD,pointer(w.DWORD)]),
+        (adv,'ConvertSidToStringSidW',w.BOOL,[w.LPVOID,pointer(w.LPWSTR)]),
+        (adv,'ConvertStringSecurityDescriptorToSecurityDescriptorW',w.BOOL,[w.LPCWSTR,w.DWORD,pointer(w.LPVOID),pointer(w.DWORD)]),
+        (adv,'GetNamedSecurityInfoW',w.DWORD,[w.LPCWSTR,w.DWORD,w.DWORD,*[pointer(w.LPVOID)]*5]),
+        (adv,'IsValidSid',w.BOOL,[w.LPVOID]),(adv,'IsValidAcl',w.BOOL,[w.LPVOID]),
+        (adv,'GetAclInformation',w.BOOL,[w.LPVOID,w.LPVOID,w.DWORD,w.DWORD]),
+        (adv,'GetAce',w.BOOL,[w.LPVOID,w.DWORD,pointer(w.LPVOID)]),
+        (kernel,'GetCurrentProcess',w.HANDLE,[]),(kernel,'CloseHandle',w.BOOL,[w.HANDLE]),
+        (kernel,'LocalFree',w.LPVOID,[w.LPVOID]),
+        (kernel,'CreateDirectoryW',w.BOOL,[w.LPCWSTR,pointer(Attributes)])]
+    for library,name,result,args in bindings:
+        function=getattr(library,name);function.restype=result;function.argtypes=args
+    return ctypes,w,adv,kernel,Attributes
+
+def _sid_text(sid):
+    c,w,adv,kernel,_=_windows_api();text=w.LPWSTR()
+    if not adv.IsValidSid(sid) or not adv.ConvertSidToStringSidW(sid,c.byref(text)):return None
+    try:return text.value
+    finally:kernel.LocalFree(c.cast(text,w.LPVOID))
+
+def _current_sid():
+    c,w,adv,kernel,_=_windows_api();token=w.HANDLE()
+    try:
+        if not adv.OpenProcessToken(kernel.GetCurrentProcess(),8,c.byref(token)):raise c.WinError(c.get_last_error())
+        size=w.DWORD();adv.GetTokenInformation(token,1,None,0,c.byref(size))
+        if not 0<size.value<=65536:raise OSError('token_identity_unavailable')
+        buffer=c.create_string_buffer(size.value)
+        if not adv.GetTokenInformation(token,1,buffer,size,c.byref(size)):raise c.WinError(c.get_last_error())
+        value=_sid_text(c.cast(buffer,c.POINTER(w.LPVOID))[0])
+        if value is None:raise OSError('token_identity_unavailable')
+        return value
+    finally:
+        if token:kernel.CloseHandle(token)
+
+def _windows_private_directory(path):
+    c,w,adv,kernel,_=_windows_api();owner=w.LPVOID();acl=w.LPVOID();descriptor=w.LPVOID()
+    class Size(c.Structure):_fields_=[('count',w.DWORD),('used',w.DWORD),('free',w.DWORD)]
+    class Header(c.Structure):_fields_=[('kind',w.BYTE),('flags',w.BYTE),('size',w.WORD)]
+    try:
+        if adv.GetNamedSecurityInfoW(str(path),1,5,c.byref(owner),None,c.byref(acl),None,c.byref(descriptor)):return False
+        current=_current_sid()
+        if _sid_text(owner)!=current or not acl or not adv.IsValidAcl(acl):return False
+        info=Size()
+        if not adv.GetAclInformation(acl,c.byref(info),c.sizeof(info),2) or not 0<info.count<=4096:return False
+        allowed={current,'S-1-5-18','S-1-5-32-544'}
+        for index in range(info.count):
+            ace=w.LPVOID()
+            if not adv.GetAce(acl,index,c.byref(ace)):return False
+            header=c.cast(ace,c.POINTER(Header)).contents
+            if header.kind==1:continue  # Deny ACEs cannot grant private data access.
+            if header.kind!=0 or header.size<16 or _sid_text(w.LPVOID(ace.value+8)) not in allowed:return False
+        return True
+    finally:
+        if descriptor:kernel.LocalFree(descriptor)
 
 def create_private_directory(path):
     """Create exclusively; existing directories/ACLs are never modified."""
     path=Path(path);safe_config_path(path/'.guard')
     if os.name!='nt':path.mkdir(mode=0o700);return
-    import ctypes
-    from ctypes import wintypes as w
-    adv=ctypes.WinDLL('advapi32',use_last_error=True);kernel=ctypes.WinDLL('kernel32',use_last_error=True)
-    adv.OpenProcessToken.argtypes=[w.HANDLE,w.DWORD,ctypes.POINTER(w.HANDLE)];adv.OpenProcessToken.restype=w.BOOL
-    adv.GetTokenInformation.argtypes=[w.HANDLE,w.DWORD,w.LPVOID,w.DWORD,ctypes.POINTER(w.DWORD)];adv.GetTokenInformation.restype=w.BOOL
-    adv.ConvertSidToStringSidW.argtypes=[w.LPVOID,ctypes.POINTER(w.LPWSTR)];adv.ConvertSidToStringSidW.restype=w.BOOL
-    adv.ConvertStringSecurityDescriptorToSecurityDescriptorW.argtypes=[w.LPCWSTR,w.DWORD,ctypes.POINTER(w.LPVOID),ctypes.POINTER(w.DWORD)]
-    adv.ConvertStringSecurityDescriptorToSecurityDescriptorW.restype=w.BOOL
-    kernel.GetCurrentProcess.restype=w.HANDLE
-    kernel.CloseHandle.argtypes=[w.HANDLE];kernel.CloseHandle.restype=w.BOOL
-    kernel.LocalFree.argtypes=[w.LPVOID];kernel.LocalFree.restype=w.LPVOID
-    class Attributes(ctypes.Structure):
-        _fields_=[('length',w.DWORD),('descriptor',w.LPVOID),('inherit',w.BOOL)]
-    kernel.CreateDirectoryW.argtypes=[w.LPCWSTR,ctypes.POINTER(Attributes)];kernel.CreateDirectoryW.restype=w.BOOL
-    token=w.HANDLE();sid_text=w.LPWSTR();descriptor=w.LPVOID()
+    c,w,adv,kernel,Attributes=_windows_api();descriptor=w.LPVOID();sid=_current_sid()
     try:
-        if not adv.OpenProcessToken(kernel.GetCurrentProcess(),8,ctypes.byref(token)):raise ctypes.WinError(ctypes.get_last_error())
-        size=w.DWORD();adv.GetTokenInformation(token,1,None,0,ctypes.byref(size))
-        if not 0<size.value<=65536:raise OSError('token_identity_unavailable')
-        buffer=ctypes.create_string_buffer(size.value)
-        if not adv.GetTokenInformation(token,1,buffer,size,ctypes.byref(size)):raise ctypes.WinError(ctypes.get_last_error())
-        sid=ctypes.cast(buffer,ctypes.POINTER(w.LPVOID))[0]
-        if not adv.ConvertSidToStringSidW(sid,ctypes.byref(sid_text)):raise ctypes.WinError(ctypes.get_last_error())
-        sddl='O:'+sid_text.value+'D:P(A;OICI;FA;;;'+sid_text.value+')(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)'
-        if not adv.ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl,1,ctypes.byref(descriptor),None):raise ctypes.WinError(ctypes.get_last_error())
-        attributes=Attributes(ctypes.sizeof(Attributes),descriptor,False)
-        if not kernel.CreateDirectoryW(str(path),ctypes.byref(attributes)):raise ctypes.WinError(ctypes.get_last_error())
+        sddl='O:'+sid+'D:P(A;OICI;FA;;;'+sid+')(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)'
+        if not adv.ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl,1,c.byref(descriptor),None):raise c.WinError(c.get_last_error())
+        attributes=Attributes(c.sizeof(Attributes),descriptor,False)
+        if not kernel.CreateDirectoryW(str(path),c.byref(attributes)):raise c.WinError(c.get_last_error())
     finally:
         if descriptor:kernel.LocalFree(descriptor)
-        if sid_text:kernel.LocalFree(ctypes.cast(sid_text,w.LPVOID))
-        if token:kernel.CloseHandle(token)
 
 @contextmanager
 def capture_directory():

@@ -1,5 +1,6 @@
 """Safe receipts preserve failure boundaries without exporting private exception text."""
 import json
+import os
 from pathlib import Path
 import tempfile
 import threading
@@ -215,3 +216,32 @@ class FailureReceiptTests(unittest.TestCase):
         marker=target/'keep';marker.write_text('owned',encoding='utf-8')
         with self.assertRaises(OSError):create(target)
         self.assertEqual(marker.read_text(encoding='utf-8'),'owned')
+
+    def test_private_directory_verification_never_starts_a_subprocess(self):
+        target=self.root/'native-private';diagnostics.create_private_directory(target)
+        with patch('subprocess.run',side_effect=AssertionError('no verifier subprocess')):
+            self.assertTrue(diagnostics.private_directory(target))
+
+    @unittest.skipUnless(os.name=='nt','Windows ACL contract')
+    def test_native_acl_check_rejects_public_null_empty_and_foreign_owner_descriptors(self):
+        c,w,adv,kernel,_=diagnostics._windows_api();sid=diagnostics._current_sid()
+        adv.GetSecurityDescriptorOwner.argtypes=[w.LPVOID,c.POINTER(w.LPVOID),c.POINTER(w.BOOL)]
+        adv.GetSecurityDescriptorOwner.restype=w.BOOL
+        adv.GetSecurityDescriptorDacl.argtypes=[w.LPVOID,c.POINTER(w.BOOL),c.POINTER(w.LPVOID),c.POINTER(w.BOOL)]
+        adv.GetSecurityDescriptorDacl.restype=w.BOOL
+        allows='(A;;FA;;;'+sid+')(A;;FA;;;SY)(A;;FA;;;BA)'
+        cases=[('O:'+sid+'D:P'+allows,True),('O:'+sid+'D:P'+allows+'(A;;FR;;;WD)',False),
+               ('O:SYD:P'+allows,False),('O:'+sid,False),('O:'+sid+'D:',False),
+               ('O:'+sid+'D:P(D;;FA;;;WD)'+allows,True)]
+        for sddl,want in cases:
+            def query(path,object_type,information,owner_out,group_out,acl_out,sacl_out,descriptor_out):
+                descriptor=w.LPVOID();owner=w.LPVOID();acl=w.LPVOID();default=w.BOOL();present=w.BOOL()
+                self.assertTrue(adv.ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl,1,c.byref(descriptor),None))
+                self.assertTrue(adv.GetSecurityDescriptorOwner(descriptor,c.byref(owner),c.byref(default)))
+                self.assertTrue(adv.GetSecurityDescriptorDacl(descriptor,c.byref(present),c.byref(acl),c.byref(default)))
+                c.cast(owner_out,c.POINTER(w.LPVOID))[0]=owner.value
+                c.cast(acl_out,c.POINTER(w.LPVOID))[0]=acl.value
+                c.cast(descriptor_out,c.POINTER(w.LPVOID))[0]=descriptor.value
+                return 0
+            with self.subTest(sddl=sddl),patch.object(adv,'GetNamedSecurityInfoW',side_effect=query):
+                self.assertEqual(diagnostics.private_directory(self.root),want)

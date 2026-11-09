@@ -32,6 +32,8 @@ Git capture is created privately and verified before the Git process can write
 raw output. Windows creation uses an exclusive new directory with a protected
 DACL for the current user, SYSTEM and administrators; existing ACLs are untouched.
 An unverifiable capture directory stops the operation before Git starts.
+Owner/DACL verification runs in-process through Win32 APIs within the existing
+Git budget, so each Git operation does not launch a verifier subprocess.
 
 When possible, captured Git stdout/stderr prefixes are retained privately under
 `task-tower-git-failure-<id>` in that worker's established temporary directory.
