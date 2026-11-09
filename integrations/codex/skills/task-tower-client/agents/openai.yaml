@@ -1,0 +1,6 @@
+interface:
+  display_name: "Task Tower Client"
+  short_description: "Connect projects to Task Tower scheduling"
+  default_prompt: "Use $task-tower-client to connect this project and submit its tasks to the existing Task Tower planner."
+policy:
+  allow_implicit_invocation: true
