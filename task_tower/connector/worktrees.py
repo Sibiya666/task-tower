@@ -37,6 +37,93 @@ class Worktrees:
                 raise GitFailure(git_receipt(args,result,tmp))
             text=(Path(tmp)/'stdout.log').read_text(encoding='utf-8')
             return text if raw else text.strip()
+    def inspect_preparing(self,receipt,original_command):
+        """Read-only observations, not approval, attach, resume or fence release."""
+        from ..preparing_recovery import parse_receipt,fingerprint
+        r=parse_receipt(receipt);attempt=r['attempt_id'];key=r['command_id']
+        if (not isinstance(original_command,dict) or r['connector_id']!=self.store.connector_id or r['project_id'] not in self.projects
+                or r['native_owner']!='tower-'+attempt or fingerprint(original_command)!=r['command_sha256']
+                or any(original_command.get(k)!=r[k] for k in ('command_id','attempt_id','project_id','base_sha'))
+                or original_command.get('kind')!='execute'):
+            raise ValueError('preparing_command_changed')
+        repo,root=self.projects[r['project_id']];target=root/attempt
+        safe_config_path(target/'.tower-guard')
+        expected=dict(project_id=r['project_id'],path=str(target),branch=r['branch'],
+            base_sha=r['base_sha'],state='preparing',review=False)
+        with self.store.lock:
+            prior=self.store.worktree(attempt);old=self.store.command(key)
+            known={'command','phase','thread_id','turn_id','resource_id','decision','execution','cleanup_resources','cleanup_confirmed'}
+            if (set(old)-known or prior!=expected or prior.get('review') is not False or fingerprint(prior)!=r['worktree_sha256']
+                    or old['command']!=original_command or old['phase']!='needs_reconciliation'
+                    or any(old.get(k) is not None for k in ('thread_id','turn_id','resource_id','decision','execution'))
+                    or old.get('cleanup_resources') not in (None,[])
+                    or (old.get('cleanup_confirmed') is not None and old.get('cleanup_confirmed') is not True)
+                    or any(d['command']['attempt_id']==attempt and d['command']['command_id']!=key for d in self.store.commands())
+                    or any(e['attempt_id']==attempt for e in self.store.pending_events())):
+                raise ValueError('preparing_history_uncertain')
+        def exists(path):
+            try:Path(path).lstat()
+            except FileNotFoundError:return False
+            except OSError:raise ValueError('preparing_filesystem_unverified') from None
+            return True
+        if exists(target):raise ValueError('preparing_target_present')
+        deadline=time.monotonic()+10
+        def git(*args,raw=False):
+            remaining=deadline-time.monotonic()
+            if remaining<=0:raise ValueError('preparing_observation_deadline')
+            return self._git(repo,*args,timeout=remaining,raw=raw)
+        try:
+            if not os.path.samefile(repo,git('rev-parse','--show-toplevel')):
+                raise ValueError('preparing_repository_changed')
+            if git('status','--porcelain','--untracked-files=all'):
+                raise ValueError('preparing_repository_dirty')
+            entries=git('ls-files','-v','-z').split('\0')
+            if (entries[-1]!='' or len(entries)<2
+                    or any(not entry.startswith('H ') or len(entry)<=2 for entry in entries[:-1])):
+                raise ValueError('preparing_repository_unverified')
+            ref='refs/heads/'+r['branch']
+            actual=git('for-each-ref','--format=%(refname)%00%(objectname)%00%(objecttype)%00%(symref)',ref)
+            if actual.split('\0')!=[ref,r['branch_sha'],'commit','']:
+                raise ValueError('preparing_branch_changed')
+            markers=('MERGE_HEAD','CHERRY_PICK_HEAD','REVERT_HEAD','rebase-merge','rebase-apply',
+                'sequencer','index.lock','HEAD.lock','packed-refs.lock',ref+'.lock')
+            for marker in markers:
+                path=Path(git('rev-parse','--git-path',marker))
+                if not path.is_absolute():path=repo/path
+                if exists(path):raise ValueError('preparing_repository_busy')
+            registrations=git('worktree','list','--porcelain','-z',raw=True)
+            if not registrations.endswith('\0\0'):
+                raise ValueError('preparing_registration_unknown')
+            seen=set()
+            for block in registrations[:-2].split('\0\0'):
+                fields=block.split('\0');keys=[field.partition(' ')[0] for field in fields]
+                if (not fields[0].startswith('worktree ') or len(keys)!=len(set(keys))
+                        or any(key not in ('worktree','HEAD','branch','detached','bare','locked','prunable') for key in keys)):
+                    raise ValueError('preparing_registration_unknown')
+                attrs={key:(field.partition(' ')[2] if ' ' in field else None) for key,field in zip(keys,fields)}
+                if not Path(attrs['worktree']).is_absolute():
+                    raise ValueError('preparing_registration_unknown')
+                if 'bare' in attrs:
+                    if attrs['bare'] is not None or any(key in attrs for key in ('HEAD','branch','detached')):
+                        raise ValueError('preparing_registration_unknown')
+                elif (re.fullmatch('[0-9a-f]{40}',attrs.get('HEAD') or '') is None
+                        or ('branch' in attrs)==('detached' in attrs)
+                        or ('detached' in attrs and attrs['detached'] is not None)
+                        or ('branch' in attrs and (not (attrs['branch'] or '').startswith('refs/heads/')
+                            or len(attrs['branch'] or '')<=len('refs/heads/')))):
+                    raise ValueError('preparing_registration_unknown')
+                registered=os.path.normcase(str(Path(attrs['worktree']).resolve()))
+                if registered in seen:raise ValueError('preparing_registration_unknown')
+                seen.add(registered)
+                if registered==os.path.normcase(str(target.resolve())) or attrs.get('branch')==ref:
+                    raise ValueError('preparing_registration_present')
+            if os.path.normcase(str(repo.resolve())) not in seen:
+                raise ValueError('preparing_registration_unknown')
+        except (OSError,RuntimeError):
+            raise ValueError('preparing_filesystem_unverified') from None
+        return dict(prior)
+
+
     def prepare(self,project_id,attempt_id,base_sha):return self._prepare(project_id,attempt_id,base_sha,False)
     def prepare_review(self,project_id,attempt_id,base_sha):return self._prepare(project_id,attempt_id,base_sha,True)
     def prepare_revision(self,project,attempt,base_sha,update_base=None):

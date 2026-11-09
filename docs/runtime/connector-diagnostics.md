@@ -49,3 +49,9 @@ historical detail, not a successful operation or an inferred failure reason.
 Inspection does not make `needs_reconciliation` resumable. Preserve claims,
 capacity and unknown-outcome fences until a separately authorized supported
 reconciliation procedure applies. This change adds no recovery operation.
+
+The internal `Worktrees.inspect_preparing` library verifies a known pre-executor
+preparing intent and bounded Git observations without mutation. It is not a CLI
+recovery command, does not release fences, and does not support old author or
+committed handoffs. Explicit operator approval and a separate supported recovery
+procedure remain necessary before any attach or execution.
