@@ -20,7 +20,8 @@ class Worktrees:
             if not repo.is_dir():raise ValueError('invalid_repository')
             if root==repo or repo in root.parents:raise ValueError('worktree_root_inside_repository')
             self.projects[key]=(repo,root)
-    def _git(self,repo,*args,timeout=10,raw=False):
+    @staticmethod
+    def _git(repo,*args,timeout=10,raw=False):
         env={k:v for k,v in os.environ.items() if not k.upper().startswith('GIT_') and k.upper() not in ('GH_TOKEN','GITHUB_TOKEN')}
         env['GIT_TERMINAL_PROMPT']='0'
         env.update(GIT_CONFIG_NOSYSTEM='1',GIT_CONFIG_GLOBAL=os.devnull,GIT_NO_LAZY_FETCH='1',GIT_NO_REPLACE_OBJECTS='1')
