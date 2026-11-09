@@ -1,8 +1,8 @@
 # Task Tower: connector and diagnostic map
 
 Verified 2026-11-09 against the working changes on
-`codex/prepare-diagnostics-20261109`, based on
-`3d096092621b931af2618eea1fba78bad4315491`. This is a source map, not a claim
+`codex/preparing-only-recovery-20261109`, based on accepted
+`ba432c60ca08d4eae5029b4263eb8e1536555562`. This is a source map, not a claim
 that the changed code is deployed or that a historical failure is resolved.
 
 | Boundary | Source and responsibility |
@@ -12,12 +12,14 @@ that the changed code is deployed or that a historical failure is resolved.
 | Git source | [worktrees](../task_tower/connector/worktrees.py): exact-source/clean-worktree checks and bounded Git operations |
 | Transport state | [store](../task_tower/connector/store.py): owned journal, ordered events and unknown-effect fences |
 | Safe inspection | [diagnostics](../task_tower/connector/diagnostics.py): typed receipts, private raw evidence and read-only snapshots |
+| Preparing contract | [receipt/source](../task_tower/preparing_recovery.py): exact operator-digest binding and fixed clean engine identity. This library component enables no recovery route. |
 
 The operator command and its limits are in
 [connector diagnostics](runtime/connector-diagnostics.md). Core verification:
 `python -m unittest discover -s tests -v`; focused diagnostic contracts:
 `python -m unittest tests.test_connector_diagnostics -v`. Run final checks through
 Reslop as required by the working agreements and retain raw evidence locally.
+Preparing contract/preflight checks: `python -m unittest tests.test_preparing_recovery -v`.
 
 Beads remains the canonical task/owner/dependency/history engine. See
 [current direction](current-direction.md) and [project intake](project-intake.md).
