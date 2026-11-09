@@ -85,11 +85,32 @@ class SourceTests(GitCase):
         (self.root/'untracked.py').write_text('pass\n',encoding='utf-8')
         with self.assertRaisesRegex(ValueError,'^preparing_source_unverified$'):recovery.code_source()
 
+    def test_index_flags_cannot_hide_changed_engine_bytes(self):
+        for flag in ('--assume-unchanged','--skip-worktree'):
+            with self.subTest(flag=flag):
+                self.git(self.root,'update-index',flag,'task_tower/preparing_recovery.py')
+                self.module.write_text('# changed but hidden from status\n',encoding='utf-8')
+                try:
+                    self.assertEqual(self.git(self.root,'status','--porcelain'),'')
+                    with self.assertRaisesRegex(ValueError,'^preparing_source_unverified$'):recovery.code_source()
+                finally:
+                    self.module.write_text('# disposable source\n',encoding='utf-8')
+                    self.git(self.root,'update-index','--no-assume-unchanged','--no-skip-worktree','task_tower/preparing_recovery.py')
+
     def test_nested_package_cannot_claim_ancestor_repository_identity(self):
         nested=self.root/'nested'/'task_tower'/'preparing_recovery.py'
         nested.parent.mkdir(parents=True);nested.write_text('# nested\n',encoding='utf-8')
         with patch.object(recovery,'__file__',str(nested)),self.assertRaisesRegex(ValueError,'^preparing_source_unverified$'):
             recovery.code_source()
+
+    def test_missing_or_incomplete_index_observation_denies(self):
+        from task_tower.connector.worktrees import Worktrees
+        actual=Worktrees._git
+        for report in ('','H task_tower/preparing_recovery.py','H \0','H file\0\0'):
+            def observe(root,*args,**kwargs):
+                return report if args==('ls-files','-v','-z') else actual(root,*args,**kwargs)
+            with self.subTest(report=report),patch.object(Worktrees,'_git',side_effect=observe):
+                with self.assertRaisesRegex(ValueError,'^preparing_source_unverified$'):recovery.code_source()
 
     def test_git_failure_never_exposes_exception_text(self):
         from task_tower.connector.worktrees import Worktrees
