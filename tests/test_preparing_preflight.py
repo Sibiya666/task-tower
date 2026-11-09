@@ -159,5 +159,29 @@ class PreparingPreflightTests(GitCase):
         self.assertEqual(git.call_count,1)
 
 
+    def test_repository_link_replacement_after_constructor_denies(self):
+        original=Path.lstat
+        def observed(path,*args,**kwargs):
+            return SimpleNamespace(st_mode=stat.S_IFLNK,st_file_attributes=0) if path==self.root else original(path,*args,**kwargs)
+        with patch.object(Path,'lstat',observed),patch.object(self.trees,'_git',wraps=self.trees._git) as git:
+            with self.assertRaises(ValueError):self.inspect()
+            git.assert_not_called()
+
+    def test_repository_replacement_during_observation_denies(self):
+        clone=Path(self.transport.name)/'replacement';saved=Path(self.transport.name)/'original'
+        self.git(self.root,'clone','--no-hardlinks','--quiet',str(self.root),str(clone))
+        self.git(clone,'branch',self.r['branch'],self.head)
+        original=self.trees._git;swapped=[]
+        def observed(repo,*args,**kwargs):
+            value=original(repo,*args,**kwargs)
+            if args==('rev-parse','--show-toplevel') and not swapped:
+                self.root.rename(saved);clone.rename(self.root);swapped.append(True)
+            return value
+        with patch.object(self.trees,'_git',side_effect=observed):
+            with self.assertRaises(ValueError):self.inspect()
+        self.assertEqual(swapped,[True])
+        self.assertEqual(self.store.worktree('attempt1'),self.intent)
+
+
 
 if __name__=='__main__':unittest.main()

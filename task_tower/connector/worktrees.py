@@ -73,6 +73,8 @@ class Worktrees:
             if remaining<=0:raise ValueError('preparing_observation_deadline')
             return self._git(repo,*args,timeout=remaining,raw=raw)
         try:
+            safe_config_path(repo/'.tower-guard')
+            repository_identity=repo.stat()
             if not os.path.samefile(repo,git('rev-parse','--show-toplevel')):
                 raise ValueError('preparing_repository_changed')
             if git('status','--porcelain','--untracked-files=all'):
@@ -119,6 +121,10 @@ class Worktrees:
                     raise ValueError('preparing_registration_present')
             if os.path.normcase(str(repo.resolve())) not in seen:
                 raise ValueError('preparing_registration_unknown')
+            safe_config_path(repo/'.tower-guard')
+            if not os.path.samestat(repository_identity,repo.stat()):
+                raise ValueError('preparing_repository_changed')
+            if time.monotonic()>deadline:raise ValueError('preparing_observation_deadline')
         except (OSError,RuntimeError):
             raise ValueError('preparing_filesystem_unverified') from None
         return dict(prior)
