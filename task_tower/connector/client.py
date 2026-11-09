@@ -10,6 +10,7 @@ import threading
 from urllib.parse import urlsplit,quote
 from ..service.beads import strict_json,identity
 from .app_server import DecisionRequired,TRANSPORT_FAILURES
+from .diagnostics import failure_receipt
 
 class _ResponseReader(io.RawIOBase):
     def __init__(self,sock,deadline):
@@ -251,9 +252,11 @@ class LifecycleConnector(Connector):
 
     def _execute_lifecycle(self,command,worker):
         key=command['command_id'];kind=command['kind'];attempt=command['attempt_id']
+        stage='validate'
         try:
             self.api.validate_command(key)
             if kind=='deliver':
+                stage='delivery'
                 resources=sorted({getattr(app,'resource_id',previous) for previous,app in worker['apps'].items()})
                 self.store.update(key,phase='starting',cleanup_resources=resources)
                 if command.get('attempt',{}).get('delivery_policy',{}).get('mode') in ('local','owner_pr'):
@@ -279,6 +282,7 @@ class LifecycleConnector(Connector):
                 self.store.update(key,phase='completed')
                 return
             if kind=='quiesce':
+                stage='quiesce'
                 if attempt in self.store.cleanup_reservations() and not worker['apps']:raise ValueError('cleanup_binding_unknown')
                 self.store.update(key,phase='starting');closed=set()
                 for previous,app in list(worker['apps'].items()):
@@ -289,6 +293,7 @@ class LifecycleConnector(Connector):
                 if attempt in self.store.cleanup_reservations():raise ValueError('cleanup_binding_unknown')
                 self.store.lifecycle_transition(key,'completed','quiescent');return
             if kind=='respond':
+                stage='respond'
                 target=command['target_command_id'];app=worker['apps'].get(target);reply=worker['replies'].get(target)
                 if (app is None and reply is None) or self.store.command(target)['phase']!='needs_input':raise ValueError('approval_process_missing')
                 original=self.store.command(target).get('decision')
@@ -313,6 +318,7 @@ class LifecycleConnector(Connector):
                 worker['replies'][key]=reply
                 self.store.update(key,phase='needs_input',decision=request)
                 self.store.lifecycle_event(attempt,'approval',command_id=key,decision_id=str(uuid.uuid4()),request=request)
+            stage='prepare'
             if kind=='review':
                 # Author worktree must still have exactly the complete source reviewed.
                 source=self.worktrees.source(command['project_id'],attempt,command['base_sha'])
@@ -323,6 +329,7 @@ class LifecycleConnector(Connector):
             else:tree=self.worktrees.prepare(command['project_id'],attempt,command['base_sha'])
             self.api.validate_command(key)
             if kind=='revise':
+                stage='thread_attach'
                 prior=next((d for d in reversed(self.store.commands()) if d['command']['attempt_id']==attempt and d['command'].get('kind') in ('execute','revise') and d['thread_id']==command['thread_id'] and d['command']['command_id'] in worker['apps']),None)
                 if prior is None:prior=next((d for d in reversed(self.store.commands()) if d['command']['attempt_id']==attempt and d['command'].get('kind') in ('execute','revise') and d['thread_id']==command['thread_id']),None)
                 if prior is None:raise ValueError('author_thread_unknown')
@@ -334,21 +341,24 @@ class LifecycleConnector(Connector):
                 self.api.validate_command(key)
                 thread=app.attach_thread(command['thread_id'],key,tree['path'],resume=resumed)
             else:
+                stage='thread_create'
                 app=self.app_factory(tree['path'],request_handler=on_request);worker['apps'][key]=app
                 self.api.validate_command(key)
                 thread=app.create_thread(tree['path'],command_id=key)
             if not hasattr(app,'resource_id'):app.resource_id=key
             self.store.update(key,resource_id=app.resource_id)
             self.api.validate_command(key)
+            stage='turn_start'
             result=app.start_turn(thread,key,command['input'])
             if result['phase']!='executing':raise ValueError('turn_start_unknown')
             self.store.lifecycle_event(attempt,'started',command_id=key,thread_id=thread,turn_id=result['turn_id'])
-        except Exception:
-            self.store.lifecycle_transition(key,'needs_reconciliation','failed')
+        except Exception as error:
+            self.store.lifecycle_transition(key,'needs_reconciliation','failed',failure_receipt=failure_receipt(stage,error))
 
     def _poll_lifecycle(self,key,app,worker):
         import uuid
         data=self.store.command(key);command=data['command'];attempt=command['attempt_id']
+        stage='notifications'
         try:
             for message in app.notifications():
                 p=message.get('params',{});method=message.get('method')
@@ -367,17 +377,19 @@ class LifecycleConnector(Connector):
                     if turn.get('status')!='completed':raise ValueError('turn_not_completed')
                     text='\n'.join(i['text'] for i in turn.get('items',[]) if isinstance(i,dict) and i.get('type')=='agentMessage' and isinstance(i.get('text'),str))
                     payload=dict(thread_id=data['thread_id'],turn_id=data['turn_id'],result=text)
+                    stage='source_capture'
                     source=self.worktrees.source(command['project_id'],attempt,command['base_sha'])
                     if command['kind']=='review':
                         self.worktrees.prepare_review(command['project_id'],attempt+'-r-'+key[:12],command['source']['head_sha'])
                         if source!=command['source']:raise ValueError('source_changed_during_review')
+                        stage='review_validate'
                         from ..service.lifecycle import validate_review
                         validate_review(text,source,data['thread_id'])
                         app.close();worker['apps'].pop(key)
                     else:payload['source']=source
                     self.store.lifecycle_transition(key,'completed','completed',**payload)
-        except Exception:
-            self.store.lifecycle_transition(key,'needs_reconciliation','failed')
+        except Exception as error:
+            self.store.lifecycle_transition(key,'needs_reconciliation','failed',failure_receipt=failure_receipt(stage,error))
 
     def close(self):
         self.stop.set()

@@ -1,0 +1,43 @@
+# Connector failure inspection
+
+Use the installed project source and its known operator config:
+
+```console
+python -m task_tower.connector.cli inspect <known-attempt-id> --config <private-connector-config>
+```
+
+This command reads only the configured connector transport journal. It does not
+read the API credential, contact a model/API, start a service, construct a
+ConnectorStore, recover a command, acknowledge an event or modify task ownership.
+It uses SQLite `mode=ro`, `query_only` and one bounded read transaction. The
+connector identity, schema, project scope and journal file identity must match.
+Missing/linked/foreign/malformed journals fail closed; no database is created.
+The SQL read has a two-second budget, a 32-command limit and a 1 MiB JSON budget.
+
+Exit 0 returns versioned JSON containing safe command phases, registration
+booleans, worktree state/base, pending outbox count and any saved failure receipt.
+Exit 4 with `inspection_unavailable` means the read could not be verified; it is
+not evidence that a command, task, process or external effect is absent. Invalid
+operator configuration retains the existing exit 2 boundary. No prompts, argv,
+private paths or exception strings appear in the inspection output.
+
+New lifecycle failures preserve a typed stage and an allowlisted reason together
+with the existing failed event. Git failures additionally record bounded exit,
+cleanup and truncation facts. Disk-full, permission and branch-exists reasons are
+derived from that failing command's captured stderr, never guessed from later
+state. A failed or unknown `turn_start` is still unknown execution.
+
+When possible, captured Git stdout/stderr prefixes are retained privately under
+`task-tower-git-failure-<id>` in that worker's established temporary directory.
+The receipt identifies the local artifact and SHA256 of each captured prefix;
+it never exports its absolute path. Failure to retain raw evidence is explicit.
+Truncation/unknown tails remain unknown; these hashes do not prove full output.
+Keep artifacts local and outside commits, and use only the known worker temp
+binding to locate one. Do not scan private directories to find a missing binding
+or publish operational artifact identifiers in GitHub comments.
+
+Older failures have no typed receipt. `failure_receipt: null` means unavailable
+historical detail, not a successful operation or an inferred failure reason.
+Inspection does not make `needs_reconciliation` resumable. Preserve claims,
+capacity and unknown-outcome fences until a separately authorized supported
+reconciliation procedure applies. This change adds no recovery operation.

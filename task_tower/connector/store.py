@@ -164,9 +164,14 @@ CREATE TABLE IF NOT EXISTS claims (key TEXT PRIMARY KEY,data TEXT NOT NULL);
         with self.lock,self.db:self.db.execute('INSERT INTO outbox(event_id,data) VALUES (?,?)',(event['event_id'],encoded(event)))
         return event
 
-    def lifecycle_transition(self,key,phase,kind,**payload):
+    def lifecycle_transition(self,key,phase,kind,*,failure_receipt=None,**payload):
         with self.lock,self.db:
-            data=self.command(key);data['phase']=phase;self._save(data)
+            data=self.command(key)
+            if failure_receipt is not None:
+                from .diagnostics import validate_receipt
+                if kind!='failed':raise ValueError('failure_event_required')
+                data['failure_receipt']=validate_receipt(failure_receipt)
+            data['phase']=phase;self._save(data)
             event=dict(version=1,event_id=str(uuid.uuid4()),attempt_id=data['command']['attempt_id'],connector_id=self.connector_id,lifecycle=dict(kind=kind,command_id=key,**payload))
             if len(encoded(event).encode('utf-8'))>65536:raise ValueError('event_body_limit')
             self.db.execute('INSERT INTO outbox(event_id,data) VALUES (?,?)',(event['event_id'],encoded(event)))

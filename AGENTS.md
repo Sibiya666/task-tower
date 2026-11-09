@@ -2,6 +2,8 @@
 
 ## Current direction (user decision 2026-11-06)
 
+Connector/source navigation: [project map](docs/PROJECT_MAP.md), verified 2026-11-09. This map does not grant execution or recovery authority.
+
 The operative route is **Beads + Superpowers + ready-made Codex**, recorded in [current direction](docs/current-direction.md). Read that document for current work. It supersedes the Windows qualification programme, plan B, the B-to-C prerequisite chain and older documents claiming to be the current authority. Do not load or resume those plans automatically. OS details of existing overlay/CI are implementation facts, not an executor qualification programme.
 
 Beads/Dolt is the sole task/dependency/owner/history engine. Superpowers is the development method. Use the existing Codex executor and supported tools/plugins; Task Tower owns Books, overlay and only the necessary integration. GitHub owns code, PR, CI and accepted main. Choose agent composition per task with independent substantive review. Do not build another task engine, revive the legacy conveyor or impose a fixed role graph.
