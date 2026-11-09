@@ -74,6 +74,10 @@ def code_source():
         sha=git('rev-parse','HEAD')
         if _SHA.fullmatch(sha) is None or git('status','--porcelain'):
             raise ValueError('preparing_source_unverified')
+        entries=git('ls-files','-v','-z').split('\0')
+        if (entries[-1]!='' or len(entries)<2
+                or any(not entry.startswith('H ') or len(entry)<=2 for entry in entries[:-1])):
+            raise ValueError('preparing_source_unverified')
         return sha
     except (OSError,ValueError):
         raise ValueError('preparing_source_unverified') from None
