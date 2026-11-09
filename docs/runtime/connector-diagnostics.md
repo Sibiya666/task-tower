@@ -15,7 +15,8 @@ Missing/linked/foreign/malformed journals fail closed; no database is created.
 The SQL read has a two-second budget, a 32-command limit and a 1 MiB JSON budget.
 
 Exit 0 returns versioned JSON containing safe command phases, registration
-booleans, worktree state/base, pending outbox count and any saved failure receipt.
+booleans, worktree state/base, that attempt's pending outbox count and any saved
+failure receipt.
 Exit 4 with `inspection_unavailable` means the read could not be verified; it is
 not evidence that a command, task, process or external effect is absent. Invalid
 operator configuration retains the existing exit 2 boundary. No prompts, argv,
@@ -26,6 +27,11 @@ with the existing failed event. Git failures additionally record bounded exit,
 cleanup and truncation facts. Disk-full, permission and branch-exists reasons are
 derived from that failing command's captured stderr, never guessed from later
 state. A failed or unknown `turn_start` is still unknown execution.
+
+Git capture is created privately and verified before the Git process can write
+raw output. Windows creation uses an exclusive new directory with a protected
+DACL for the current user, SYSTEM and administrators; existing ACLs are untouched.
+An unverifiable capture directory stops the operation before Git starts.
 
 When possible, captured Git stdout/stderr prefixes are retained privately under
 `task-tower-git-failure-<id>` in that worker's established temporary directory.

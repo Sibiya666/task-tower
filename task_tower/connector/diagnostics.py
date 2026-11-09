@@ -1,9 +1,11 @@
 """Typed local failure facts. Never serialize exception text, argv or private paths."""
 import hashlib
 import os
+from contextlib import contextmanager
 from pathlib import Path
 import re
 import sqlite3
+import shutil
 import tempfile
 import time
 import uuid
@@ -13,6 +15,7 @@ from ..service.beads import identity,strict_json
 STAGES=frozenset({'validate','prepare','thread_create','thread_attach','turn_start',
                   'notifications','source_capture','review_validate','delivery','quiesce','respond'})
 REASONS=frozenset({'unclassified','git_disk_full','git_permission_denied','git_branch_exists',
+    'git_capture_not_private','git_capture_unavailable','git_capture_cleanup_unknown',
     'git_operation_unknown','git_cleanup_unconfirmed','dirty_worktree','unowned_worktree',
     'foreign_worktree','foreign_repository','unknown_sha','worktree_unknown_or_conflict',
     'source_changed_during_review','turn_not_completed','turn_start_unknown',
@@ -37,6 +40,58 @@ def private_directory(path):
         return True
     except Exception:return False
 
+def create_private_directory(path):
+    """Create exclusively; existing directories/ACLs are never modified."""
+    path=Path(path);safe_config_path(path/'.guard')
+    if os.name!='nt':path.mkdir(mode=0o700);return
+    import ctypes
+    from ctypes import wintypes as w
+    adv=ctypes.WinDLL('advapi32',use_last_error=True);kernel=ctypes.WinDLL('kernel32',use_last_error=True)
+    adv.OpenProcessToken.argtypes=[w.HANDLE,w.DWORD,ctypes.POINTER(w.HANDLE)];adv.OpenProcessToken.restype=w.BOOL
+    adv.GetTokenInformation.argtypes=[w.HANDLE,w.DWORD,w.LPVOID,w.DWORD,ctypes.POINTER(w.DWORD)];adv.GetTokenInformation.restype=w.BOOL
+    adv.ConvertSidToStringSidW.argtypes=[w.LPVOID,ctypes.POINTER(w.LPWSTR)];adv.ConvertSidToStringSidW.restype=w.BOOL
+    adv.ConvertStringSecurityDescriptorToSecurityDescriptorW.argtypes=[w.LPCWSTR,w.DWORD,ctypes.POINTER(w.LPVOID),ctypes.POINTER(w.DWORD)]
+    adv.ConvertStringSecurityDescriptorToSecurityDescriptorW.restype=w.BOOL
+    kernel.GetCurrentProcess.restype=w.HANDLE
+    kernel.CloseHandle.argtypes=[w.HANDLE];kernel.CloseHandle.restype=w.BOOL
+    kernel.LocalFree.argtypes=[w.LPVOID];kernel.LocalFree.restype=w.LPVOID
+    class Attributes(ctypes.Structure):
+        _fields_=[('length',w.DWORD),('descriptor',w.LPVOID),('inherit',w.BOOL)]
+    kernel.CreateDirectoryW.argtypes=[w.LPCWSTR,ctypes.POINTER(Attributes)];kernel.CreateDirectoryW.restype=w.BOOL
+    token=w.HANDLE();sid_text=w.LPWSTR();descriptor=w.LPVOID()
+    try:
+        if not adv.OpenProcessToken(kernel.GetCurrentProcess(),8,ctypes.byref(token)):raise ctypes.WinError(ctypes.get_last_error())
+        size=w.DWORD();adv.GetTokenInformation(token,1,None,0,ctypes.byref(size))
+        if not 0<size.value<=65536:raise OSError('token_identity_unavailable')
+        buffer=ctypes.create_string_buffer(size.value)
+        if not adv.GetTokenInformation(token,1,buffer,size,ctypes.byref(size)):raise ctypes.WinError(ctypes.get_last_error())
+        sid=ctypes.cast(buffer,ctypes.POINTER(w.LPVOID))[0]
+        if not adv.ConvertSidToStringSidW(sid,ctypes.byref(sid_text)):raise ctypes.WinError(ctypes.get_last_error())
+        sddl='O:'+sid_text.value+'D:P(A;OICI;FA;;;'+sid_text.value+')(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)'
+        if not adv.ConvertStringSecurityDescriptorToSecurityDescriptorW(sddl,1,ctypes.byref(descriptor),None):raise ctypes.WinError(ctypes.get_last_error())
+        attributes=Attributes(ctypes.sizeof(Attributes),descriptor,False)
+        if not kernel.CreateDirectoryW(str(path),ctypes.byref(attributes)):raise ctypes.WinError(ctypes.get_last_error())
+    finally:
+        if descriptor:kernel.LocalFree(descriptor)
+        if sid_text:kernel.LocalFree(ctypes.cast(sid_text,w.LPVOID))
+        if token:kernel.CloseHandle(token)
+
+@contextmanager
+def capture_directory():
+    parent=Path(tempfile.gettempdir()).absolute()
+    path=parent/('tower-connector-git-'+uuid.uuid4().hex)
+    try:create_private_directory(path)
+    except OSError:raise ValueError('git_capture_unavailable') from None
+    before=path.stat()
+    try:yield path
+    finally:
+        try:
+            safe_config_path(path/'.guard');after=path.stat()
+            if ((before.st_dev,before.st_ino)!=(after.st_dev,after.st_ino)
+                    or path.resolve().parent!=parent.resolve()):raise ValueError('capture_identity_changed')
+            shutil.rmtree(path)
+        except (OSError,ValueError):raise ValueError('git_capture_cleanup_unknown') from None
+
 def git_receipt(args,result,directory):
     operation='worktree_add' if tuple(args[:2])==('worktree','add') else args[0] if args and args[0] in ('fetch','merge') else 'read'
     captured={}
@@ -59,7 +114,7 @@ def git_receipt(args,result,directory):
         name='task-tower-git-failure-'+uuid.uuid4().hex
         target=Path(tempfile.gettempdir())/name
         try:
-            safe_config_path(target/'.guard');target.mkdir(mode=0o700)
+            create_private_directory(target)
             if not private_directory(target):raise ValueError('artifact_not_private')
             for stream,raw in captured.items():
                 with safe_config_path(target/(stream+'.log')).open('xb') as out:out.write(raw)
@@ -142,7 +197,7 @@ def inspect_attempt(path,connector,attempt,projects):
             if (data['project_id'] not in scopes or data['state'] not in ('ready','preparing','merge_pending','base_update_intent')
                     or not isinstance(data['base_sha'],str) or re.fullmatch('[a-f0-9]{40}',data['base_sha']) is None):raise ValueError('inspection_unavailable')
             worktree=dict(state=data['state'],base_sha=data['base_sha'])
-        count=db.execute('SELECT COUNT(*) FROM outbox WHERE acked=0').fetchone()[0]
+        count=db.execute("SELECT COUNT(*) FROM outbox WHERE acked=0 AND json_extract(data,'$.attempt_id')=? AND json_extract(data,'$.connector_id')=?",(attempt,connector)).fetchone()[0]
         after=path.stat()
         if (before.st_dev,before.st_ino)!=(after.st_dev,after.st_ino):raise ValueError('inspection_unavailable')
         return dict(version=1,commands=commands,worktree=worktree,pending_outbox_count=count)

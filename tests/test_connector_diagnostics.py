@@ -185,3 +185,33 @@ class FailureReceiptTests(unittest.TestCase):
             receipt=diagnostics.git_receipt(('worktree','add'),dict(exit_code=128,status='failed',cleanup_confirmed=True),self.root)
         self.assertFalse(receipt['artifact']['retained'])
         self.assertIsNone(receipt['artifact']['id'])
+
+    def test_inspect_does_not_count_events_owned_by_another_attempt(self):
+        event=self.store.lifecycle_event('other-attempt','started',command_id='foreign')
+        event.update(attempt_id='attempt',connector_id='other-host')
+        with self.store.lock,self.store.db:
+            self.store.db.execute('INSERT INTO outbox(event_id,data) VALUES (?,?)',('foreign-event',json.dumps(event)))
+        result=diagnostics.inspect_attempt(self.store.path,'host1','attempt',{'p'})
+        self.assertEqual(result['pending_outbox_count'],0)
+        self.assertEqual(len(self.store.pending_events()),2)
+
+    def test_unverified_initial_capture_never_launches_git_or_writes_raw(self):
+        launches=[]
+        def launch(argv,cwd,timeout,env=None,*,capture):
+            launches.append(True)
+            (Path(capture['directory'])/'stdout.log').write_bytes(b'private output')
+            return dict(status='passed',exit_code=0,cleanup_confirmed=True)
+        with (patch('task_tower.connector.worktrees.private_directory',return_value=False,create=True),
+              patch('task_tower.connector.worktrees.run_command',side_effect=launch)):
+            with self.assertRaises(ValueError) as caught:object.__new__(Worktrees)._git(self.root,'status','--porcelain')
+        self.assertEqual(launches,[])
+        self.assertEqual(caught.exception.receipt['reason'],'git_capture_not_private')
+
+    def test_private_directory_creation_is_exclusive_and_private_on_this_host(self):
+        create=getattr(diagnostics,'create_private_directory',None)
+        self.assertTrue(callable(create),'private capture creation is missing')
+        target=self.root/'private-capture';create(target)
+        self.assertTrue(diagnostics.private_directory(target))
+        marker=target/'keep';marker.write_text('owned',encoding='utf-8')
+        with self.assertRaises(OSError):create(target)
+        self.assertEqual(marker.read_text(encoding='utf-8'),'owned')
