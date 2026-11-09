@@ -7,6 +7,7 @@
 - [Оверлей: запуск, управление, интерьеры и данные](overlay-usage.md).
 - [Подключение локального Beads, хронология и публичный результат](local-beads-books.md).
 - [Bootstrap: существующий Codex и Superpowers](bootstrap.md).
+- [Trusted intake: existing native IDs and append-only operator reload](project-intake.md).
 - [Headless: Docker, host-коннектор и явные операторские действия](runtime/headless-operation.md).
 - [Происхождение скриншотов и обработка фона](screenshots/README.md).
 

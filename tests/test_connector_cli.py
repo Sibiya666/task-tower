@@ -77,6 +77,22 @@ class OperatorCLITests(unittest.TestCase):
         self.assertEqual(self.native.calls, calls)
         self.assertFalse(any('--claim' in c or 'close' in c for c in calls))
 
+    def test_adopt_command_uses_authenticated_route_and_preserves_native(self):
+        plan=copy.deepcopy(PLAN)
+        for task in plan['tasks']:task['parents']=[]
+        digest=plan_digest(plan)
+        self.store.approved_plans['p']=self.store.approved_plans['p']|{digest}
+        # Create only fixture state, then exercise real CLI/HTTP readback adoption.
+        self.store.import_plan('fixture','p',DIGEST,PLAN)
+        self.store.db.execute('DELETE FROM plan_imports');self.store.db.commit()
+        before=copy.deepcopy(self.native.rows)
+        self.plan.write_text(json.dumps(plan),encoding='utf-8')
+        args=self.import_args(digest=digest);args[1]='adopt'
+        status,out=self.invoke(*args)
+        self.assertEqual(status,0,out)
+        self.assertEqual(json.loads(out)['state'],'published')
+        self.assertEqual(self.native.rows,before)
+
     def test_ready_prints_only_published_dependency_ready_view_without_claim(self):
         self.store.import_plan('setup', 'p', DIGEST, PLAN)
         self.native.rows['outside-a'] = dict(id='outside-a', status='open')

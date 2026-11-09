@@ -23,13 +23,15 @@ from ..service.beads import strict_json,identity,bead_id
 from ..service.cli import read_token,_absolute
 from ..service.store import encoded,plan_digest
 
-def load_config(path):
+def load_config(path,*,document=None):
     path=_absolute(str(path))
-    with path.open('rb') as f:raw=f.read(65537)
+    if document is None:
+        with path.open('rb') as f:raw=f.read(65537)
+    else:raw=document
     if len(raw)>65536:raise ValueError('configuration_limit')
     value=strict_json(raw.decode('utf-8'))
     required={'version','connector_id','endpoint','token_file','journal','app_server','projects','assignment'}
-    if (not isinstance(value,dict) or set(value)-{'max_active_tasks','delivery_projects'} not in (required,required-{'assignment'}|{'assignments'})
+    if (not isinstance(value,dict) or set(value)-{'max_active_tasks','delivery_projects','delivery_policies'} not in (required,required-{'assignment'}|{'assignments'})
             or type(value['version']) is not int or value['version']!=1):raise ValueError('invalid_configuration')
     identity(value['connector_id'])
     for k in ('token_file','journal','app_server'):value[k]=_absolute(value[k])
@@ -46,6 +48,9 @@ def load_config(path):
     scope=value.get('delivery_projects',{})
     if (not isinstance(scope,dict) or set(scope)-set(value['projects']) or any(not isinstance(r,str) or re.fullmatch('[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9_][A-Za-z0-9_.-]*',r) is None for r in scope.values())):raise ValueError('invalid_delivery_scope')
     value['delivery_projects']=scope
+    from ..delivery_policy import policies
+    policies(value['projects'],scope,value.get('delivery_policies'))
+    value['delivery_policies']=value.get('delivery_policies',{})
     value['assignments']=assignments
     if type(value.get('max_active_tasks',2)) is not int or not 1<=value.get('max_active_tasks',2)<=32:raise ValueError('invalid_capacity')
     return value
@@ -59,9 +64,10 @@ def main(argv=None):
     ready=sub.add_parser('ready')
     ready.add_argument('--project-id',required=True);ready.add_argument('--config',required=True)
     plan=sub.add_parser('plan');plans=plan.add_subparsers(dest='plan_action',required=True)
-    action=plans.add_parser('import')
-    for flag in ('project-id','request-id','digest','plan-file','config'):
-        action.add_argument('--'+flag,required=True)
+    for operation in ('import','adopt'):
+        action=plans.add_parser(operation)
+        for flag in ('project-id','request-id','digest','plan-file','config'):
+            action.add_argument('--'+flag,required=True)
     decision=sub.add_parser('decision');ds=decision.add_subparsers(dest='decision_action',required=True)
     for name in ('list','respond'):
         action=ds.add_parser(name);action.add_argument('--config',required=True)
@@ -81,7 +87,7 @@ def main(argv=None):
                 if len(raw)>65536:raise ValueError('plan_file_limit')
                 plan=strict_json(raw.decode('utf-8'))
                 if plan_digest(plan)!=args.digest:raise ValueError('plan_digest_mismatch')
-                value=api.request('POST','/v1/plans/import',dict(version=1,project_id=args.project_id,
+                value=api.request('POST','/v1/plans/'+args.plan_action,dict(version=1,project_id=args.project_id,
                     request_id=args.request_id,digest=args.digest,plan=plan))['batch']
             print(json.dumps(value,ensure_ascii=True,allow_nan=False))
             return 0 if args.action=='ready' or value.get('state')=='published' else 4
@@ -91,7 +97,7 @@ def main(argv=None):
             elif args.decision_action=='list':value=api.decisions()
             else:value=api.respond(args.decision_id,args.answer)
             print(json.dumps(value,ensure_ascii=True));return 0
-        if args.action=='work':return work(cfg)
+        if args.action=='work':return work(cfg,config_path=args.config)
         if 'assignment' not in cfg:raise ValueError('legacy_assignment_required')
         store=ConnectorStore(cfg['journal'],cfg['connector_id'])
         trees=Worktrees(cfg['projects'],store)
@@ -145,7 +151,7 @@ def main(argv=None):
             print('connector: owned process cleanup unconfirmed; reconciliation required',file=sys.stderr)
             return 4
 
-def work(cfg):
+def work(cfg,*,config_path=None):
     """Explicit foreground run. Only configured assignments may be admitted.
 
     A blocked third claim waits in native Beads, never in a second task queue.
@@ -156,16 +162,27 @@ def work(cfg):
         trees=Worktrees(cfg['projects'],store)
         api=APIClient(cfg['endpoint'],cfg['connector_id'],read_token(cfg['token_file']))
         connector=LifecycleConnector(store,api,trees,lambda cwd,request_handler=None:AppServer(store,executable=cfg['app_server'],cwd=Path(cwd),request_handler=request_handler),max_active_tasks=cfg.get('max_active_tasks',2))
-        if cfg.get('delivery_projects'):
+        if cfg.get('delivery_projects') or cfg.get('delivery_policies'):
             from .delivery import Delivery,GitHubHost,MainReviewer
+            from ..delivery_policy import policies
+            from .handoff import HandoffDelivery
+            policy=policies(cfg['projects'],cfg.get('delivery_projects',{}),cfg.get('delivery_policies'))
+            remote={p:v['repository'] for p,v in policy.items() if v['mode']!='local'}
+            automatic={p:v['repository'] for p,v in policy.items() if v['mode']=='task_tower'}
             main_reviewer=MainReviewer(trees,store,lambda cwd:AppServer(store,executable=cfg['app_server'],cwd=Path(cwd)),connector.stop)
-            host=GitHubHost(trees,store,cfg['delivery_projects'],reviewer=main_reviewer)
-            connector.delivery=Delivery(host,store,cfg['delivery_projects'])
+            host=GitHubHost(trees,store,remote,reviewer=main_reviewer) if remote else None
+            connector.delivery=HandoffDelivery(host,store,trees,policy,Delivery(host,store,automatic) if automatic else None)
         admitted=set();next_admission=0
+        if config_path is not None:
+            from ..intake_reload import ConfigReloader
+            reload=ConfigReloader(config_path,cfg,'assignments',load_config)
         while True:
             connector.tick()
             if time.monotonic()>=next_admission:
                 next_admission=time.monotonic()+2
+                if config_path is not None:
+                    try:cfg=reload()
+                    except Exception:continue  # Live transports continue; no new admission.
                 for assignment in cfg['assignments']:
                     key=(assignment['project_id'],assignment['bead_id'])
                     if key in admitted:continue

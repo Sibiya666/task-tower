@@ -28,7 +28,7 @@ def plan_digest(plan):
 def utc(): return datetime.now(timezone.utc).isoformat()
 
 
-def validate_plan(plan):
+def validate_plan(plan,*,external_closed=False):
     if not isinstance(plan,dict) or set(plan)!={'tasks'} or not isinstance(plan['tasks'],list) or not 1<=len(plan['tasks'])<=32:
         raise ServiceError('invalid_plan',400)
     tasks={}
@@ -44,9 +44,11 @@ def validate_plan(plan):
         deps=task['depends_on']
         if not isinstance(deps,list) or len(deps)>31 or any(not isinstance(d,str) for d in deps) or len(set(deps))!=len(deps):
             raise ServiceError('invalid_dependencies',400)
+        for dep in deps:bead_id(dep)
         tasks[key]=task
     visited,active=set(),set()
     def visit(key):
+        if external_closed and key not in tasks:return
         if key not in tasks or key in active: raise ServiceError('invalid_dependency_graph',400)
         if key in visited:return
         active.add(key)
@@ -61,10 +63,13 @@ from .acceptance import AcceptanceStore
 
 
 class Store(LifecycleStore,AcceptanceStore):
-    def __init__(self,path,beads,*,approved_plans=None,max_active_tasks=2,delivery_projects=None):
+    def __init__(self,path,beads,*,approved_plans=None,max_active_tasks=2,delivery_projects=None,delivery_policies=None):
         if type(max_active_tasks) is not int or not 1<=max_active_tasks<=32:raise ValueError('invalid_capacity')
         self.delivery_projects=dict(delivery_projects or {})
+        from ..delivery_policy import policies
+        self.delivery_policies=policies(beads.projects,self.delivery_projects,delivery_policies)
         if any(p not in beads.projects or not isinstance(r,str) or __import__('re').fullmatch(r'[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9_][A-Za-z0-9_.-]*',r) is None for p,r in self.delivery_projects.items()):raise ValueError('invalid_delivery_scope')
+        self.delivery_projects={p:v['repository'] for p,v in self.delivery_policies.items() if v['mode']=='task_tower'}
         self.max_active_tasks=max_active_tasks
         self.path=safe_config_path(Path(path).absolute())
         self.beads=beads
@@ -146,7 +151,8 @@ class Store(LifecycleStore,AcceptanceStore):
 
     def _published(self,project):
         result=set()
-        for row in self.db.execute("SELECT data FROM plan_imports WHERE project_id=? AND state='published'",(project,)):
+        for row in self.db.execute("SELECT digest,data FROM plan_imports WHERE project_id=? AND state='published'",(project,)):
+            if row['digest'] not in self.approved_plans.get(project,()):continue
             result.update(t['id'] for t in json.loads(row['data'])['plan']['tasks'])
         return result
 
@@ -183,6 +189,10 @@ class Store(LifecycleStore,AcceptanceStore):
                 actor=actor,phase='claim_pending',execution_state='not_started',connection_state='connected',
                 correction_count=0,thread_id=None,turn_id=None,worktree_ref=None,head_sha=None,base_sha=None,
                 pr_number=None,main_sha=None)
+            if project_id in self.delivery_policies:
+                data['delivery_policy']=dict(self.delivery_policies[project_id])
+            if self.beads.profile_fingerprint(project_id) is not None:
+                data['native_profile_digest']=self.beads.profile_fingerprint(project_id)
             # Commit intent before crossing the native boundary.
             with self.db:
                 self.db.execute('INSERT INTO attempts VALUES (?,?,?,?,?,?,?,?,?)',
@@ -203,6 +213,48 @@ class Store(LifecycleStore,AcceptanceStore):
                 self.db.execute('UPDATE commands SET phase=?,outcome=? WHERE request_id=?',
                                 (data['phase'],encoded(data),request_id))
             return data
+
+    def adopt_plan(self,request_id,project,digest,plan):
+        identity(request_id);self.beads.project(project)
+        if not isinstance(plan,dict) or set(plan)!={'tasks'} or not isinstance(plan['tasks'],list):
+            raise ServiceError('invalid_plan',400)
+        clean={'tasks':[]}
+        for task in plan['tasks']:
+            if not isinstance(task,dict) or set(task)!={'id','title','description','depends_on','parents'}:
+                raise ServiceError('invalid_plan',400)
+            parents=task['parents']
+            if (not isinstance(parents,list) or len(parents)>31 or any(not isinstance(x,str) for x in parents)
+                    or len(set(parents))!=len(parents) or task['id'] in parents):
+                raise ServiceError('invalid_parents',400)
+            for parent in parents:bead_id(parent)
+            clean['tasks'].append({k:v for k,v in task.items() if k!='parents'})
+        validate_plan(clean,external_closed=True)
+        if not isinstance(digest,str) or plan_digest(plan)!=digest or digest not in self.approved_plans.get(project,()):
+            raise ServiceError('plan_not_approved',403)
+        tasks={t['id']:t for t in plan['tasks']}
+        with self.lock:
+            row=self.db.execute('SELECT * FROM plan_imports WHERE request_id=?',(request_id,)).fetchone()
+            if row:
+                if row['project_id']!=project or row['digest']!=digest:raise ServiceError('request_conflict')
+                return self._import_outcome(row)
+            for row in self.db.execute('SELECT * FROM plan_imports WHERE project_id=?',(project,)):
+                if row['digest']==digest:
+                    with self.db:self.db.execute('INSERT INTO plan_imports VALUES (?,?,?,?,?,?,?)',
+                        (request_id,project,digest,row['state'],row['data'],utc(),utc()))
+                    return self._import_outcome(row)
+                if set(tasks)&{t['id'] for t in json.loads(row['data'])['plan']['tasks']}:
+                    raise ServiceError('import_task_conflict')
+            data=dict(plan=plan,request_id=request_id,project_id=project,digest=digest,adopted=True)
+            with self.db:self.db.execute('INSERT INTO plan_imports VALUES (?,?,?,?,?,?,?)',
+                (request_id,project,digest,'importing',encoded(data),utc(),utc()))
+            state='needs_reconciliation';deadline=time.monotonic()+60
+            try:
+                self._verify_import(project,tasks,'open',deadline)
+                self._verify_import(project,tasks,'open',deadline)
+                state='published'
+            except Exception:pass
+            with self.db:self.db.execute('UPDATE plan_imports SET state=?,updated_at=? WHERE request_id=?',(state,utc(),request_id))
+            return dict(request_id=request_id,project_id=project,digest=digest,state=state)
 
     def import_plan(self,request_id,project,digest,plan):
         identity(request_id);self.beads.project(project)
@@ -252,16 +304,24 @@ class Store(LifecycleStore,AcceptanceStore):
         for task in tasks.values():
             row=self.beads.show(project,task['id'],deadline=deadline)
             self._verify_row(task,row,status)
+            if 'parents' in task:
+                for dependency in task['depends_on']:
+                    if dependency not in tasks:
+                        dep=self.beads.show(project,dependency,deadline=deadline)
+                        if dep.get('status')!='closed':raise ServiceError('adoption_dependency_not_closed')
 
     def _verify_row(self,task,row,status,owner=None):
         deps=row.get('dependencies',[])
         if not isinstance(deps,list) or any(not isinstance(d,dict) for d in deps):
             raise ServiceError('import_readback_mismatch')
         actual=[d.get('id') for d in deps if d.get('dependency_type')=='blocks']
+        parents=[d.get('id') for d in deps if d.get('dependency_type')=='parent-child']
+        hierarchy_ok=(sorted(parents)==sorted(task['parents']) and len(actual)+len(parents)==len(deps)) if 'parents' in task else len(actual)==len(deps)
         if (row.get('status')!=status or (row.get('assignee') or None)!=owner
                 or row.get('title')!=task['title'] or row.get('description')!=task['description']
                 or any(not isinstance(d,str) for d in actual)
-                or sorted(actual)!=sorted(task['depends_on']) or len(actual)!=len(deps)
+                or sorted(actual)!=sorted(task['depends_on']) or not hierarchy_ok
+                or ('parents' in task and row.get('metadata'))
                 or (status=='deferred' and not row.get('defer_until'))
                 or (status!='deferred' and row.get('defer_until'))):
             raise ServiceError('import_readback_mismatch')
@@ -270,6 +330,8 @@ class Store(LifecycleStore,AcceptanceStore):
         """Fresh native read-only boundary; cached attempt is never executable authority."""
         with self.lock:
             data=self.attempt(attempt_id,connector_id)
+            if data.get('delivery_policy')!=self.delivery_policies.get(data['project_id']):raise ServiceError('delivery_policy_changed')
+            if data.get('native_profile_digest')!=self.beads.profile_fingerprint(data['project_id']):raise ServiceError('native_profile_changed')
             allowed={'awaiting_merge','postmerge'} if delivery else {'claimed','executing','reviewing','revising','needs_input'} if lifecycle else {'claimed'}
             if data['phase'] not in allowed or (not lifecycle and not delivery and data['execution_state']!='not_started'):
                 raise ServiceError('execution_fenced')

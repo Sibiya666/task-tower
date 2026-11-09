@@ -361,7 +361,7 @@ class GitHubHost:
         push=self._trusted_git(path,'remote','get-url','--push','--all','origin',env=env)
         allowed={'https://github.com/'+r,'https://github.com/'+r+'.git','git@github.com:'+r+'.git'}
         if remote not in allowed or push not in allowed:raise ValueError('remote_repository_mismatch')
-    def prepare_pr(self,a):
+    def prepare_pr(self,a,*,base_ref='main'):
         from pathlib import Path
         from urllib.parse import quote
         r=self.projects[a['project_id']];tree=self.trees.prepare(a['project_id'],a['attempt_id'],a['base_sha']);path=Path(tree['path'])
@@ -369,11 +369,11 @@ class GitHubHost:
         if tree['branch']!='codex/headless-'+a['attempt_id'] or self.trees.source(a['project_id'],a['attempt_id'],a['base_sha'])!=a['source']:raise ValueError('source_changed_before_push')
         self._push(path,tree['branch'],r,env=env)
         owner=r.split('/')[0];branch=tree['branch']
-        existing=self._pages(r,'/pulls?state=open&head='+quote(owner+':'+branch,safe='')+'&base=main')
+        existing=self._pages(r,'/pulls?state=open&head='+quote(owner+':'+branch,safe='')+'&base='+quote(base_ref,safe=''))
         if len(existing)>1:raise ValueError('duplicate_pr')
         if existing:p=existing[0]['number']
         else:
-            row=self._request(r,'POST','/pulls',dict(title='Headless delivery '+a['bead_id'],head=branch,base='main',body='Beads task: '+a['bead_id']+'; attempt: '+a['attempt_id']+'\nIndependent review is recorded by the trusted connector.'))
+            row=self._request(r,'POST','/pulls',dict(title='Headless delivery '+a['bead_id'],head=branch,base=base_ref,body='Beads task: '+a['bead_id']+'; attempt: '+a['attempt_id']+'\nIndependent review is recorded by the trusted connector.'))
             p=row['number']
         return self.read_pr(r,p)
     def _push(self,path,branch,repository,env=None):

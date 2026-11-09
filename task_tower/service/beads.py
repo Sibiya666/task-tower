@@ -71,7 +71,7 @@ def native_runner(argv, cwd, timeout, env):
 
 
 class Beads:
-    def __init__(self, executable, projects, *, runner=None, timeout=10):
+    def __init__(self, executable, projects, *, runner=None, timeout=10,native_profiles=None):
         self.executable = Path(executable)
         if not self.executable.is_absolute() or not 0 < timeout <= 30:
             raise ValueError('invalid_native_configuration')
@@ -79,6 +79,8 @@ class Beads:
         if not self.projects or any(not p.is_absolute() or not p.is_dir() for p in self.projects.values()):
             raise ValueError('invalid_project_configuration')
         self.runner, self.timeout = runner or native_runner, timeout
+        from .native_profiles import profiles
+        self.native_profiles=profiles(self.projects,native_profiles or {})
 
     def project(self, project):
         identity(project)
@@ -88,11 +90,40 @@ class Beads:
     def _run(self, project, actor, args, deadline=None):
         directory = self.project(project)
         identity(actor)
-        remaining = self.timeout if deadline is None else min(self.timeout,deadline-time.monotonic())
+        deadline=min(deadline if deadline is not None else float('inf'),time.monotonic()+self.timeout)
+        remaining=deadline-time.monotonic()
         if remaining <= 0: raise ServiceError('native_deadline')
         try:
-            return self.runner([str(self.executable),'--sandbox','--actor',actor,*args,'--json'],
-                               directory, remaining, environment(directory))
+            profile=self.native_profiles.get(project);executable=self.executable
+            if profile:
+                from .native_profiles import guard
+                guard(directory,profile,deadline);executable=Path(profile['executable'])
+                remaining=deadline-time.monotonic()
+                if remaining<=0:raise ServiceError('native_deadline')
+                version=self.runner([str(executable),'version','--json'],directory,remaining,environment(directory))
+                if not isinstance(version,dict) or version.get('version')!=profile['version']:raise ServiceError('native_version_fence')
+                if deadline is not None:
+                    remaining=min(self.timeout,deadline-time.monotonic())
+                    if remaining<=0:raise ServiceError('native_deadline')
+            env=environment(directory)
+            if profile:env.update(BEADS_DOLT_AUTO_START='0',BD_OTEL_METRICS_URL='',BD_OTEL_LOGS_URL='',BD_OTEL_STDOUT='false')
+            if profile and profile['history']=='dolt-server-events-v1':
+                r=profile['history_reader']
+                env.update(BEADS_DOLT_SERVER_MODE='1',BEADS_DOLT_SERVER_HOST=r['host'],BEADS_DOLT_SERVER_PORT=str(r['port']),
+                    BEADS_DOLT_SERVER_DATABASE=r['database'],BEADS_DOLT_SERVER_USER=r['user'],BEADS_DOLT_SERVER_TLS='false')
+                from .dolt_events import password
+                if r['password_file'] is not None and deadline-time.monotonic()<5:raise ServiceError('native_deadline')
+                env['BEADS_DOLT_PASSWORD']=password(r['password_file'])
+                with tempfile.TemporaryDirectory(prefix='tower-native-credentials-') as temp:
+                    # Empty passwords otherwise fall back to the host's Beads
+                    # credential store. Never consult that unrelated authority.
+                    credentials=Path(temp)/'empty.json';credentials.write_text('{}\n',encoding='utf-8')
+                    env['BEADS_CREDENTIALS_FILE']=str(credentials)
+                    remaining=deadline-time.monotonic()
+                    if remaining<=0:raise ServiceError('native_deadline')
+                    return self.runner([str(executable),'--sandbox','--actor',actor,*args,'--json'],directory,remaining,env)
+            return self.runner([str(executable),'--sandbox','--actor',actor,*args,'--json'],
+                               directory, remaining, env)
         except ServiceError: raise
         except Exception: raise ServiceError('native_outcome_unknown') from None
 
@@ -133,18 +164,40 @@ class Beads:
             raise ServiceError('claim_readback_mismatch')
         return row
 
-    def history(self,project,bead):
+    def history(self,project,bead,*,deadline=None):
         bead_id(bead)
-        rows=self._run(project,'task-tower-service',['history',bead,'--events','--limit','100'])
+        self.ensure_event_history(project)
+        deadline=min(deadline if deadline is not None else float('inf'),time.monotonic()+self.timeout)
+        profile=self.native_profiles.get(project)
+        if profile and profile['history']=='dolt-server-events-v1':
+            from .native_profiles import guard
+            from .dolt_events import read_events
+            guard(self.project(project),profile,deadline)
+            remaining=deadline-time.monotonic()
+            if remaining<=0:raise ServiceError('native_deadline')
+            return read_events(self.project(project),bead,profile['history_reader'],self.runner,remaining)
+        rows=self._run(project,'task-tower-service',['history',bead,'--events','--limit','100'],deadline)
         if not isinstance(rows,list) or len(rows)>100 or any(not isinstance(r,dict) for r in rows):raise ServiceError('native_invalid_history')
         return rows
+
+    def profile_fingerprint(self,project):
+        import hashlib
+        profile=self.native_profiles.get(project)
+        if profile is None:return None
+        return hashlib.sha256(json.dumps(profile,sort_keys=True,separators=(',',':'),ensure_ascii=True).encode('ascii')).hexdigest()
+
+    def ensure_event_history(self,project):
+        self.project(project)
+        if self.native_profiles.get(project,{}).get('history')=='unavailable':raise ServiceError('native_event_history_unsupported')
 
     def close(self, project, bead, actor, reason):
         # Caller supplies separately verified acceptance; this primitive grants none.
         self.project(project);bead_id(bead);identity(actor)
+        self.ensure_event_history(project)
         if not isinstance(reason,str) or not 1<=len(reason)<=4096 or '\x00' in reason:
             raise ServiceError('invalid_reason',400)
         deadline=time.monotonic()+30
+        if self.native_profiles.get(project,{}).get('history')=='dolt-server-events-v1':self.history(project,bead,deadline=deadline)
         row=self.show(project,bead,deadline=deadline)
         if row.get('assignee')!=actor: raise ServiceError('owner_conflict')
         self._run(project,actor,['close',bead,'--reason',reason],deadline)

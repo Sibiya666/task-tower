@@ -256,9 +256,16 @@ class LifecycleConnector(Connector):
             if kind=='deliver':
                 resources=sorted({getattr(app,'resource_id',previous) for previous,app in worker['apps'].items()})
                 self.store.update(key,phase='starting',cleanup_resources=resources)
+                if command.get('attempt',{}).get('delivery_policy',{}).get('mode') in ('local','owner_pr'):
+                    self.store.update(key,cleanup_confirmed=False)
                 result=self.delivery.run(command,self.api,self.stop)
                 if result is not None:
-                    if result.get('phase')!='accepted' or not result.get('canonical_close'):raise ValueError('confirmed_delivery_required')
+                    handoff=result.get('phase')=='handoff'
+                    if handoff:
+                        from ..delivery_policy import validate_receipt
+                        a=command['attempt']
+                        validate_receipt(result.get('receipt'),a['delivery_policy'],a['head_sha'],a['base_sha'])
+                    elif result.get('phase')!='accepted' or not result.get('canonical_close'):raise ValueError('confirmed_delivery_required')
                     self.store.update(key,cleanup_confirmed=False)
                     closed=set()
                     for previous,app in list(worker['apps'].items()):
@@ -267,6 +274,8 @@ class LifecycleConnector(Connector):
                         app.close();closed.add(getattr(app,'resource_id',previous));worker['apps'].pop(previous);worker['replies'].pop(previous,None)
                     self.store.confirm_cleanup(attempt,closed)
                     if attempt in self.store.cleanup_reservations():raise ValueError('cleanup_binding_unknown')
+                    if handoff:
+                        self.store.lifecycle_transition(key,'completed','saved_result',receipt=result['receipt']);return
                 self.store.update(key,phase='completed')
                 return
             if kind=='quiesce':
