@@ -16,7 +16,6 @@ that the changed code is deployed or that a historical failure is resolved.
 | Preparing preflight | [worktrees](../task_tower/connector/worktrees.py): read-only command, preparing intent and bounded Git observations; no attach, resume or fence release. |
 | Preparing attach | [runner](../task_tower/connector/preparing_recovery.py) and [worktrees](../task_tower/connector/worktrees.py): exact approved source, intent before contained existing-branch attach, clean identity readback and atomic known result; unknown outcomes stay fenced. No public recovery route. |
 | Preparing native admission | [service contract](../task_tower/service/preparing_recovery.py): default-empty constructor registry, fresh native eligibility, one durable deterministic control and safe status; no dedicated HTTP/config admission. Check: `python -m unittest tests.test_service_preparing_admission -v`. |
-
 | Preparing acknowledgement | [service contract](../task_tower/service/preparing_recovery.py): atomic known result/control ACK/original execute/event; failed controls stay unknown and known duplicates never requeue. Check: `python -m unittest tests.test_service_preparing_recovery -v`. |
 
 
