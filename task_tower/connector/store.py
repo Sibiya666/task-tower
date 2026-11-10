@@ -54,6 +54,30 @@ CREATE TABLE IF NOT EXISTS preparing_operations (operation_id TEXT PRIMARY KEY,a
             if self.db is not None:self.db.close();self.db=None
             for f in self.guards:f.close()
             self.guards=[]
+    def preparing_control(self,command):
+        from ..preparing_recovery import parse_receipt
+        from ..service.preparing_recovery import command_ids
+        fields={'version','kind','command_id','attempt_id','project_id','base_sha','receipt'}
+        if not isinstance(command,dict) or set(command)!=fields or type(command['version']) is not int or command['version']!=1 or command['kind']!='prepare_existing':raise ValueError('invalid_preparing_control')
+        r=parse_receipt(command['receipt'])
+        if r['connector_id']!=self.connector_id or any(command[k]!=r[k] for k in ('attempt_id','project_id','base_sha')) or command['command_id']!=command_ids(r)[0]:raise ValueError('preparing_control_mismatch')
+        return r
+    def preparing_failed(self,key):
+        with self.lock:
+            event=str(uuid.uuid5(uuid.NAMESPACE_URL,'task-tower:preparing:failed:'+identity(key)))
+            return self.db.execute('SELECT 1 FROM outbox WHERE event_id=?',(event,)).fetchone() is not None
+    def fail_preparing_control(self,command):
+        r=self.preparing_control(command)
+        with self.lock,self.db:
+            prior=self.preparing_operation(r['operation_id'])
+            if prior is not None and prior['state']=='prepared':return
+            event=dict(version=1,event_id=str(uuid.uuid5(uuid.NAMESPACE_URL,'task-tower:preparing:failed:'+command['command_id'])),attempt_id=r['attempt_id'],connector_id=self.connector_id,lifecycle=dict(kind='failed',command_id=command['command_id']))
+            raw=encoded(event);previous=self.db.execute('SELECT data FROM outbox WHERE event_id=?',(event['event_id'],)).fetchone()
+            if previous is not None:
+                if previous[0]!=raw:raise ValueError('preparing_failure_conflict')
+                return
+            self.db.execute('INSERT INTO outbox(event_id,data) VALUES (?,?)',(event['event_id'],raw))
+
     def receive(self,command):
         fields={'version','command_id','attempt_id','project_id','base_sha','input'}
         managed=isinstance(command,dict) and command.get('kind') in ('execute','review','revise','quiesce','respond','deliver','main_review')

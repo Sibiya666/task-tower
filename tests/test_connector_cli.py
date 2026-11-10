@@ -58,6 +58,22 @@ class OperatorCLITests(unittest.TestCase):
         self.assertFalse((self.root/'trees').exists())
         return status, out.getvalue()
 
+    def test_preparing_receipt_cli_has_no_journal_writer_and_strict_registry(self):
+        from tests.fixtures.preparing_recovery import receipt
+        from task_tower.preparing_recovery import fingerprint
+        r=dict(receipt(),project_id='p');self.plan.write_text(json.dumps(r),encoding='utf-8')
+        self.cfg['approved_preparing']={'p':[fingerprint(r)]};self.config.write_text(json.dumps(self.cfg),encoding='utf-8')
+        with patch.object(cli,'ConnectorStore',side_effect=AssertionError('second journal writer')),patch.object(cli,'APIClient') as api:
+            api.return_value.admit_preparing.return_value={'project_id':'p','state':'pending'}
+            api.return_value.preparing_status.return_value={'project_id':'p','state':'pending'}
+            for args in [('preparing','admit','--receipt-file',str(self.plan)),('preparing','status',r['operation_id'])]:
+                self.assertEqual(self.invoke(*args)[0],0)
+            api.return_value.admit_preparing.assert_called_once_with(r)
+        for bad in (None,{'p':['*']},{'foreign':[]},{'p':'a'*64}):
+            self.cfg['approved_preparing']=bad;self.config.write_text(json.dumps(self.cfg),encoding='utf-8')
+            with patch.object(cli,'read_token') as token:
+                self.assertEqual(self.invoke('ready','--project-id','p')[0],2);token.assert_not_called()
+
     def import_args(self, **overrides):
         fields = dict(project_id='p', request_id='import-1', digest=DIGEST, plan_file=str(self.plan))
         fields.update(overrides)

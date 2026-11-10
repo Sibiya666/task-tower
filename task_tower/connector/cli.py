@@ -31,7 +31,7 @@ def load_config(path,*,document=None):
     if len(raw)>65536:raise ValueError('configuration_limit')
     value=strict_json(raw.decode('utf-8'))
     required={'version','connector_id','endpoint','token_file','journal','app_server','projects','assignment'}
-    if (not isinstance(value,dict) or set(value)-{'max_active_tasks','delivery_projects','delivery_policies'} not in (required,required-{'assignment'}|{'assignments'})
+    if (not isinstance(value,dict) or set(value)-{'max_active_tasks','delivery_projects','delivery_policies','approved_preparing'} not in (required,required-{'assignment'}|{'assignments'})
             or type(value['version']) is not int or value['version']!=1):raise ValueError('invalid_configuration')
     identity(value['connector_id'])
     for k in ('token_file','journal','app_server'):value[k]=_absolute(value[k])
@@ -51,6 +51,10 @@ def load_config(path,*,document=None):
     from ..delivery_policy import policies
     policies(value['projects'],scope,value.get('delivery_policies'))
     value['delivery_policies']=value.get('delivery_policies',{})
+    from ..service.preparing_recovery import approval_registry
+    if 'approved_preparing' in value:
+        if not isinstance(value['approved_preparing'],dict):raise ValueError('invalid_preparing_approvals')
+        value['approved_preparing']=approval_registry(value['approved_preparing'],value['projects'])
     value['assignments']=assignments
     if type(value.get('max_active_tasks',2)) is not int or not 1<=value.get('max_active_tasks',2)<=32:raise ValueError('invalid_capacity')
     return value
@@ -72,6 +76,11 @@ def main(argv=None):
     for name in ('list','respond'):
         action=ds.add_parser(name);action.add_argument('--config',required=True)
         if name=='respond':action.add_argument('decision_id');action.add_argument('--answer',choices=('approve','decline'),required=True)
+    preparing=sub.add_parser('preparing');ps=preparing.add_subparsers(dest='preparing_action',required=True)
+    for name in ('admit','status'):
+        action=ps.add_parser(name);action.add_argument('--config',required=True)
+        if name=='admit':action.add_argument('--receipt-file',required=True)
+        else:action.add_argument('operation_id')
     store=app=connector=None;command=None
     try:
         args=parser.parse_args(argv);cfg=load_config(args.config)
@@ -81,6 +90,17 @@ def main(argv=None):
             except ValueError:
                 print(json.dumps(dict(version=1,error='inspection_unavailable')));return 4
             print(json.dumps(value,ensure_ascii=True,allow_nan=False));return 0
+        if args.action=='preparing':
+            if args.preparing_action=='admit':
+                from ..preparing_recovery import parse_receipt,validate_receipt
+                with Path(args.receipt_file).open('rb') as stream:raw=stream.read(65537)
+                if len(raw)>65536:raise ValueError('receipt_file_limit')
+                r=parse_receipt(strict_json(raw.decode('utf-8')))
+                validate_receipt(r,cfg.get('approved_preparing',{}),connector_id=cfg['connector_id'],source_sha=r['engine_sha'])
+            api=APIClient(cfg['endpoint'],cfg['connector_id'],read_token(cfg['token_file']))
+            value=api.admit_preparing(r) if args.preparing_action=='admit' else api.preparing_status(args.operation_id)
+            if value['project_id'] not in cfg['projects']:raise ValueError('project_forbidden')
+            print(json.dumps(value,ensure_ascii=True));return 0
         if args.action in ('ready','plan'):
             identity(args.project_id)
             if args.project_id not in cfg['projects']:raise ValueError('project_forbidden')
@@ -167,7 +187,7 @@ def work(cfg,*,config_path=None):
     try:
         trees=Worktrees(cfg['projects'],store)
         api=APIClient(cfg['endpoint'],cfg['connector_id'],read_token(cfg['token_file']))
-        connector=LifecycleConnector(store,api,trees,lambda cwd,request_handler=None:AppServer(store,executable=cfg['app_server'],cwd=Path(cwd),request_handler=request_handler),max_active_tasks=cfg.get('max_active_tasks',2))
+        connector=LifecycleConnector(store,api,trees,lambda cwd,request_handler=None:AppServer(store,executable=cfg['app_server'],cwd=Path(cwd),request_handler=request_handler),max_active_tasks=cfg.get('max_active_tasks',2),approved_preparing=cfg.get('approved_preparing'))
         if cfg.get('delivery_projects') or cfg.get('delivery_policies'):
             from .delivery import Delivery,GitHubHost,MainReviewer
             from ..delivery_policy import policies

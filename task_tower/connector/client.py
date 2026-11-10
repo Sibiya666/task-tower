@@ -62,6 +62,24 @@ class APIClient:
     def claim(self,body):return self.request('POST','/v1/claims',body)['attempt']
     def validate(self,attempt):return self.request('POST','/v1/attempts/'+quote(identity(attempt),safe='')+'/validate',{'version':1})['attempt']
     def send_event(self,event):return self.request('POST','/v1/events',event)
+    def admit_preparing(self,receipt):
+        from ..preparing_recovery import parse_receipt,fingerprint
+        r=parse_receipt(receipt)
+        result=self._preparing_status(self.request('POST','/v1/preparing',dict(version=1,receipt=r))['preparing'])
+        if any(result[k]!=r[k] for k in ('operation_id','project_id','attempt_id')) or result['receipt_sha256']!=fingerprint(r):raise ValueError('preparing_response_mismatch')
+        return result
+    def preparing_status(self,key):
+        result=self._preparing_status(self.request('GET','/v1/preparing/'+quote(identity(key),safe=''))['preparing'])
+        if result['operation_id']!=key:raise ValueError('preparing_response_mismatch')
+        return result
+    @staticmethod
+    def _preparing_status(value):
+        import re
+        fields={'operation_id','project_id','attempt_id','receipt_sha256','state','control_command_id','execute_command_id'}
+        if not isinstance(value,dict) or set(value)!=fields or value['state'] not in ('pending','prepared','unknown'):raise ValueError('invalid_preparing_status')
+        for k in fields-{'state','receipt_sha256'}:identity(value[k])
+        if not isinstance(value['receipt_sha256'],str) or re.fullmatch('[0-9a-f]{64}',value['receipt_sha256']) is None:raise ValueError('invalid_preparing_status')
+        return value
     def commands(self):return self.request('GET','/v1/commands')['commands']
     def validate_command(self,key):return self.request('POST','/v1/commands/'+quote(identity(key),safe='')+'/validate',{'version':1})['attempt']
     def dispatch(self,key,base):return self.request('POST','/v1/attempts/'+quote(identity(key),safe='')+'/dispatch',dict(version=1,base_sha=base))['attempt']
@@ -164,9 +182,12 @@ class LifecycleConnector(Connector):
     Control-plane HTTP and delivery never run on a live RPC polling thread. These
     fixed workers are transport owners, not model-selected assistants/schedulers.
     """
-    def __init__(self,store,api,worktrees,app_factory,*,max_active_tasks=2,delivery=None):
+    def __init__(self,store,api,worktrees,app_factory,*,max_active_tasks=2,delivery=None,approved_preparing=None):
         super().__init__(store,api,None,worktrees)
         if type(max_active_tasks) is not int or not 1<=max_active_tasks<=32:raise ValueError('invalid_capacity')
+        from ..service.preparing_recovery import approval_registry
+        self.approved_preparing=approval_registry(approved_preparing,getattr(worktrees,'projects',{}))
+        self.preparing_lock=threading.Lock()
         self.max_active_tasks=max_active_tasks;self.app_factory=app_factory;self.delivery=delivery
         self.workers={};self.worker_guard=threading.RLock();self.stop=threading.Event();self.seen=set()
 
@@ -182,6 +203,8 @@ class LifecycleConnector(Connector):
         for command in commands:
             key=command['command_id'];attempt=command['attempt_id']
             if key in self.seen:continue
+            if command['kind']=='prepare_existing':
+                self._prepare_existing_control(command);continue
             if command['kind']=='deliver':
                 if self.delivery is None:continue
                 try:self.api.validate_command(key)
@@ -217,6 +240,27 @@ class LifecycleConnector(Connector):
                 # workers must keep draining notifications while a reply is sent.
                 self._execute_lifecycle(command,worker)
         return True
+
+    def _prepare_existing_control(self,command):
+        # Keep control out of inbox: original-history preflight must stay exact.
+        if not self.preparing_lock.acquire(blocking=False):return
+        try:
+            try:
+                from ..preparing_recovery import validate_receipt
+                from .preparing_recovery import PreparingRecovery
+                r=self.store.preparing_control(command)
+                if self.store.preparing_failed(command['command_id']):return
+                validate_receipt(r,self.approved_preparing,connector_id=self.store.connector_id,source_sha=r['engine_sha'])
+                self.api.validate_command(command['command_id'])
+            except Exception:return  # No local effect before both approvals.
+            try:
+                with self.worker_guard:
+                    worker=self.workers.get(r['attempt_id'])
+                    if worker is not None and self._occupied(worker):raise ValueError('preparing_worker_active')
+                PreparingRecovery(self.store,self.worktrees,approved=self.approved_preparing).run(r)
+                self.seen.add(command['command_id'])
+            except Exception:self.store.fail_preparing_control(command)
+        finally:self.preparing_lock.release()
 
     def _work(self,attempt,worker):
         import queue
