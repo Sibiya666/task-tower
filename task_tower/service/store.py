@@ -359,6 +359,10 @@ class Store(PreparingStore,LifecycleStore,AcceptanceStore):
             return data
 
     def record_event(self,event):
+        if isinstance(event,dict) and 'preparing' in event:return self.record_preparing_event(event)
+        if isinstance(event,dict):
+            failure=self.record_preparing_failure(event)
+            if failure is not None:return failure
         if isinstance(event,dict) and 'lifecycle' in event:return self.record_lifecycle_event(event)
         if isinstance(event,dict) and self.attempt(event.get('attempt_id'),event.get('connector_id')).get('managed'):
             raise ServiceError('managed_event_required',403)

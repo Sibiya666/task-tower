@@ -81,5 +81,12 @@ Internal service preparing admission/status uses a bounded, default-empty constr
 approval registry. It verifies exact receipt/source history and fresh native
 owner/profile/task/dependencies, rejects decisions/additional commands, and reserves
 one deterministic control on the same unknown/fenced attempt, owner and capacity.
-Ordinary execute/resume gates remain. This adds no HTTP/config admission, prepared
-acknowledgement, control execution or live recovery; later approved parts are needed.
+Ordinary execute/resume gates remain.
+
+A typed known prepared acknowledgement now commits its event, control ACK, attempt
+transition and one deterministic original-input/source execute together. Fresh
+registry/native/history checks still apply. Repeated/lost replies read a known
+result; failed controls become unknown without requeue, release or model start.
+A late failure never downgrades a known prepared result. Connection-state changes
+alone attest no execution. This adds no dedicated admission/status HTTP/config
+route or connector processing; live recovery still requires separate authority.
