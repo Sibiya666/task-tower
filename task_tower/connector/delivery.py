@@ -373,7 +373,7 @@ class GitHubHost:
         if len(existing)>1:raise ValueError('duplicate_pr')
         if existing:p=existing[0]['number']
         else:
-            row=self._request(r,'POST','/pulls',dict(title='Headless delivery '+a['bead_id'],head=branch,base=base_ref,body='Beads task: '+a['bead_id']+'; attempt: '+a['attempt_id']+'\nIndependent review is recorded by the trusted connector.'))
+            row=self._request(r,'POST','/pulls',dict(title='Task Tower delivery',head=branch,base=base_ref,body='Source: https://github.com/'+r+'/commit/'+a['source']['head_sha']+'\nIndependent review is recorded by the trusted connector.'))
             p=row['number']
         return self.read_pr(r,p)
     def _push(self,path,branch,repository,env=None):
