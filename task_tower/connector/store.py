@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS inbox (command_id TEXT PRIMARY KEY,fingerprint TEXT N
 CREATE TABLE IF NOT EXISTS outbox (seq INTEGER PRIMARY KEY AUTOINCREMENT,event_id TEXT UNIQUE NOT NULL,data TEXT NOT NULL,acked INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS worktrees (attempt_id TEXT PRIMARY KEY,data TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS claims (key TEXT PRIMARY KEY,data TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS preparing_operations (operation_id TEXT PRIMARY KEY,attempt_id TEXT UNIQUE NOT NULL,data TEXT NOT NULL);
 """)
             with self.db:
                 row=self.db.execute("SELECT value FROM metadata WHERE key='connector_id'").fetchone()
@@ -176,3 +177,71 @@ CREATE TABLE IF NOT EXISTS claims (key TEXT PRIMARY KEY,data TEXT NOT NULL);
             if len(encoded(event).encode('utf-8'))>65536:raise ValueError('event_body_limit')
             self.db.execute('INSERT INTO outbox(event_id,data) VALUES (?,?)',(event['event_id'],encoded(event)))
             return data
+
+    def preparing_operation(self,key):
+        from ..preparing_recovery import parse_receipt,fingerprint
+        identity(key)
+        with self.lock:
+            row=self.db.execute('SELECT data FROM preparing_operations WHERE operation_id=?',(key,)).fetchone()
+            if row is None:return None
+            data=json.loads(row[0]);r=parse_receipt(data['receipt'])
+            if (set(data)!={'receipt','receipt_sha256','snapshot_sha256','state','result'}
+                    or r['operation_id']!=key or fingerprint(r)!=data['receipt_sha256']
+                    or data['state'] not in ('intent','unknown','prepared')
+                    or (data['state']!='prepared' and data['result'] is not None)):
+                raise ValueError('preparing_operation_invalid')
+            if data['state']=='prepared' and data['result']!=self._preparing_result(r):raise ValueError('preparing_operation_invalid')
+            return data
+
+    @staticmethod
+    def _preparing_result(r):
+        from ..preparing_recovery import fingerprint
+        return dict(version=1,state='prepared',receipt_sha256=fingerprint(r),**{k:r[k] for k in
+            ('operation_id','connector_id','project_id','attempt_id','command_id','engine_sha')})
+
+    def _preparing_snapshot(self,r):
+        from ..preparing_recovery import fingerprint
+        return fingerprint(dict(command=self.command(r['command_id']),worktree=self.worktree(r['attempt_id']),
+            commands=sorted(d['command']['command_id'] for d in self.commands() if d['command']['attempt_id']==r['attempt_id']),
+            events=sorted(e['event_id'] for e in self.pending_events() if e['attempt_id']==r['attempt_id'])))
+
+    def begin_preparing(self,r):
+        from ..preparing_recovery import parse_receipt,fingerprint
+        r=parse_receipt(r)
+        if r['connector_id']!=self.connector_id:raise ValueError('preparing_connector_mismatch')
+        with self.lock,self.db:
+            if self.db.execute('SELECT 1 FROM preparing_operations WHERE attempt_id=? OR operation_id=?',(r['attempt_id'],r['operation_id'])).fetchone():
+                raise ValueError('preparing_attempt_reserved')
+            original=self.command(r['command_id']);tree=self.worktree(r['attempt_id'])
+            command=None if original is None else original['command']
+            if (command is None or command['attempt_id']!=r['attempt_id'] or command['project_id']!=r['project_id']
+                    or fingerprint(command)!=r['command_sha256'] or fingerprint(tree)!=r['worktree_sha256']
+                    or fingerprint({k:original.get(k) for k in ('cleanup_resources','cleanup_confirmed')})!=r['cleanup_sha256']):
+                raise ValueError('preparing_baseline_changed')
+            data=dict(receipt=r,receipt_sha256=fingerprint(r),snapshot_sha256=self._preparing_snapshot(r),state='intent',result=None)
+            self.db.execute('INSERT INTO preparing_operations VALUES (?,?,?)',(r['operation_id'],r['attempt_id'],encoded(data)))
+            return data
+
+    def complete_preparing(self,r,tree):
+        from ..preparing_recovery import fingerprint
+        with self.lock,self.db:
+            data=self.preparing_operation(r['operation_id'])
+            if data is None or data['receipt_sha256']!=fingerprint(r) or data['state']!='intent':raise ValueError('preparing_operation_changed')
+            if data['snapshot_sha256']!=self._preparing_snapshot(r):raise ValueError('preparing_history_changed')
+            if tree!=dict(self.worktree(r['attempt_id']),state='ready'):raise ValueError('preparing_worktree_changed')
+            result=self._preparing_result(r);data.update(state='prepared',result=result)
+            event=dict(version=1,event_id=str(uuid.uuid4()),attempt_id=r['attempt_id'],connector_id=self.connector_id,preparing=result)
+            if len(encoded(event).encode('utf-8'))>65536:raise ValueError('event_body_limit')
+            self.db.execute('UPDATE preparing_operations SET data=? WHERE operation_id=?',(encoded(data),r['operation_id']))
+            self.db.execute('UPDATE worktrees SET data=? WHERE attempt_id=?',(encoded(tree),r['attempt_id']))
+            self.db.execute('INSERT INTO outbox(event_id,data) VALUES (?,?)',(event['event_id'],encoded(event)))
+            return result
+
+    def unknown_preparing(self,r):
+        from ..preparing_recovery import fingerprint
+        with self.lock,self.db:
+            data=self.preparing_operation(r['operation_id'])
+            if data is None or data['receipt_sha256']!=fingerprint(r):raise ValueError('preparing_operation_changed')
+            if data['state']=='intent':
+                data['state']='unknown'
+                self.db.execute('UPDATE preparing_operations SET data=? WHERE operation_id=?',(encoded(data),r['operation_id']))
