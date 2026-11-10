@@ -146,6 +146,7 @@ class LifecycleStore:
             row=self.db.execute("SELECT * FROM lifecycle_commands WHERE command_id=? AND connector_id=? AND state='queued'",(key,connector)).fetchone()
             if row is None:raise ServiceError('command_fenced')
             a=self.attempt(row['attempt_id'],connector);c=json.loads(row['data'])
+            if c['kind']=='prepare_existing':return self.validate_preparing_command(key,connector)
             if c['kind']=='deliver':
                 if a['phase'] not in ('awaiting_merge','postmerge') or a.get('active_command_id')!=key:raise ServiceError('delivery_fenced')
             elif c['kind'] not in ('respond','quiesce') and (a.get('active_command_id')!=key or a['phase'] not in ('executing','revising','reviewing') or a['execution_state']!='not_started'):

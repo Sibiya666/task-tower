@@ -76,3 +76,10 @@ Known duplicates read the saved result; unknown intent, Git or cleanup outcomes
 never replay. The original command remains fenced. This library is not a CLI
 recovery admission route and starts no model. Live reconciliation still needs
 a separate exact operator approval and the later supported service bridge.
+
+Internal service preparing admission/status uses a bounded, default-empty constructor
+approval registry. It verifies exact receipt/source history and fresh native
+owner/profile/task/dependencies, rejects decisions/additional commands, and reserves
+one deterministic control on the same unknown/fenced attempt, owner and capacity.
+Ordinary execute/resume gates remain. This adds no HTTP/config admission, prepared
+acknowledgement, control execution or live recovery; later approved parts are needed.

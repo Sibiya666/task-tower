@@ -59,12 +59,14 @@ def validate_plan(plan,*,external_closed=False):
 
 
 from .lifecycle import LifecycleStore
+from .preparing_recovery import PreparingStore,approval_registry
 from .acceptance import AcceptanceStore
 
 
-class Store(LifecycleStore,AcceptanceStore):
-    def __init__(self,path,beads,*,approved_plans=None,max_active_tasks=2,delivery_projects=None,delivery_policies=None):
+class Store(PreparingStore,LifecycleStore,AcceptanceStore):
+    def __init__(self,path,beads,*,approved_plans=None,max_active_tasks=2,delivery_projects=None,delivery_policies=None,approved_preparing=None):
         if type(max_active_tasks) is not int or not 1<=max_active_tasks<=32:raise ValueError('invalid_capacity')
+        self.approved_preparing=approval_registry(approved_preparing,beads.projects)
         self.delivery_projects=dict(delivery_projects or {})
         from ..delivery_policy import policies
         self.delivery_policies=policies(beads.projects,self.delivery_projects,delivery_policies)
@@ -97,6 +99,7 @@ class Store(LifecycleStore,AcceptanceStore):
             self.db.executescript("""
                 CREATE TABLE IF NOT EXISTS acceptance_effects (attempt_id TEXT PRIMARY KEY,request_id TEXT UNIQUE NOT NULL,fingerprint TEXT NOT NULL,state TEXT NOT NULL,data TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS acceptance_repository (repository TEXT PRIMARY KEY,attempt_id TEXT NOT NULL);
+                CREATE TABLE IF NOT EXISTS preparing_recoveries (operation_id TEXT PRIMARY KEY,attempt_id TEXT UNIQUE NOT NULL,connector_id TEXT NOT NULL,control_id TEXT UNIQUE NOT NULL,data TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS lifecycle_commands (
                   command_id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL, connector_id TEXT NOT NULL,
                   state TEXT NOT NULL, data TEXT NOT NULL);
@@ -335,6 +338,11 @@ class Store(LifecycleStore,AcceptanceStore):
             allowed={'awaiting_merge','postmerge'} if delivery else {'claimed','executing','reviewing','revising','needs_input'} if lifecycle else {'claimed'}
             if data['phase'] not in allowed or (not lifecycle and not delivery and data['execution_state']!='not_started'):
                 raise ServiceError('execution_fenced')
+            return self._native_execution(data)
+
+    def _native_execution(self,data):
+        """Shared read-only native checks under the same store RLock."""
+        with self.lock:
             deadline=time.monotonic()+30
             task=self._approved_task(data['project_id'],data['bead_id'])
             approved=False
