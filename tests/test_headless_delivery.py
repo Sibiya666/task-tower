@@ -88,6 +88,38 @@ class DeliveryTests(unittest.TestCase):
 
 
 class HostBoundaryTests(unittest.TestCase):
+    def test_public_pr_message_uses_source_commit_without_runtime_identities(self):
+        from task_tower.connector.delivery import GitHubHost
+        a=attempt()
+        for field in ('attempt_id','project_id','bead_id','connector_id','actor','author_thread_id'):
+            a[field]='private-runtime-'+field
+        a['review_threads']=['private-review-thread']
+        a['prompt']='private prompt C:/private/config/token.json'
+        branch='codex/headless-'+a['attempt_id']
+        requests=[]
+        class Trees:
+            def prepare(self,*args):return dict(path='fixture',branch=branch)
+            def source(self,*args):return a['source']
+        class Host(GitHubHost):
+            def _trusted_git(self,*args,**kw):return 'https://github.com/'+REPO
+            def _push(self,*args,**kw):pass
+            def _pages(self,*args):return [{'number':7}] if requests else []
+            def _request(self,r,method,path,payload):
+                requests.append((r,method,path,payload));return {'number':7}
+            def read_pr(self,r,p):return dict(repository=r,pr_number=p)
+        host=Host(Trees(),None,{a['project_id']:REPO},token='fixture')
+        self.assertEqual(host.prepare_pr(a),dict(repository=REPO,pr_number=7))
+        self.assertEqual(host.prepare_pr(a),dict(repository=REPO,pr_number=7))
+        self.assertEqual(len(requests),1)
+        r,method,path,payload=requests[0]
+        self.assertEqual((r,method,path),(REPO,'POST','/pulls'))
+        self.assertEqual((payload['head'],payload['base']),(branch,'main'))
+        public=payload['title']+'\n'+payload['body']
+        for private in [a[k] for k in ('attempt_id','project_id','bead_id','connector_id','actor','author_thread_id','prompt')]+a['review_threads']:
+            self.assertNotIn(private,public)
+        self.assertIn('https://github.com/'+REPO+'/commit/'+a['source']['head_sha'],payload['body'])
+        self.assertIn('Independent review is recorded by the trusted connector.',payload['body'])
+
     def test_fixed_adapter_rejects_wrong_remote_before_push(self):
         from task_tower.connector.delivery import GitHubHost
         class Trees:
