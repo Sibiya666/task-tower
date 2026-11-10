@@ -63,6 +63,18 @@ class PreparingJournalTests(unittest.TestCase):
             self.store.begin_preparing(dict(self.r,connector_id='foreign-connector'))
         self.assertIsNone(self.store.preparing_operation('op-1'));self.unchanged()
 
+    def test_receipt_baseline_must_match_before_intent(self):
+        for field in ('command_sha256','worktree_sha256','cleanup_sha256'):
+            with self.subTest(field=field),self.assertRaisesRegex(ValueError,'^preparing_baseline_changed$'):
+                self.store.begin_preparing(dict(self.r,**{field:'0'*64}))
+            self.assertIsNone(self.store.preparing_operation('op-1'));self.unchanged()
+
+    def test_receipt_identity_must_match_original_command(self):
+        for change in (dict(attempt_id='foreign-attempt',native_owner='tower-foreign-attempt',branch='codex/headless-foreign-attempt'),dict(project_id='foreign-project')):
+            with self.subTest(change=change),self.assertRaisesRegex(ValueError,'^preparing_baseline_changed$'):
+                self.store.begin_preparing(dict(self.r,**change))
+            self.assertIsNone(self.store.preparing_operation('op-1'));self.unchanged()
+
     def test_same_attempt_cannot_acquire_a_second_operation(self):
         self.store.begin_preparing(self.r)
         with self.assertRaises(ValueError):self.store.begin_preparing(dict(self.r,operation_id='op-2'))

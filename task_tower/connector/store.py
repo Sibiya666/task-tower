@@ -212,6 +212,12 @@ CREATE TABLE IF NOT EXISTS preparing_operations (operation_id TEXT PRIMARY KEY,a
         with self.lock,self.db:
             if self.db.execute('SELECT 1 FROM preparing_operations WHERE attempt_id=? OR operation_id=?',(r['attempt_id'],r['operation_id'])).fetchone():
                 raise ValueError('preparing_attempt_reserved')
+            original=self.command(r['command_id']);tree=self.worktree(r['attempt_id'])
+            command=None if original is None else original['command']
+            if (command is None or command['attempt_id']!=r['attempt_id'] or command['project_id']!=r['project_id']
+                    or fingerprint(command)!=r['command_sha256'] or fingerprint(tree)!=r['worktree_sha256']
+                    or fingerprint({k:original.get(k) for k in ('cleanup_resources','cleanup_confirmed')})!=r['cleanup_sha256']):
+                raise ValueError('preparing_baseline_changed')
             data=dict(receipt=r,receipt_sha256=fingerprint(r),snapshot_sha256=self._preparing_snapshot(r),state='intent',result=None)
             self.db.execute('INSERT INTO preparing_operations VALUES (?,?,?)',(r['operation_id'],r['attempt_id'],encoded(data)))
             return data
