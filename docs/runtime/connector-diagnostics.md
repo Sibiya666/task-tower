@@ -65,3 +65,14 @@ between writes rolls back all three records. Existing claims and command
 fences remain unchanged. This storage primitive does not validate Git,
 authorize attach or start execution; those require a separate approved runner.
 Disposable SQLite tests verify storage behavior, not actual Git delivery.
+
+The separate internal `PreparingRecovery` runner requires an explicitly approved
+receipt digest and actual fixed engine source before observations or intent.
+It keeps the read-only preflight and journal reservation under the same lock,
+then attaches only the known existing branch, without branch creation, force,
+reset, prune or remote guessing. A shared bounded Git deadline covers attach and
+exact clean target/base/branch/common-repository readback before atomic storage.
+Known duplicates read the saved result; unknown intent, Git or cleanup outcomes
+never replay. The original command remains fenced. This library is not a CLI
+recovery admission route and starts no model. Live reconciliation still needs
+a separate exact operator approval and the later supported service bridge.

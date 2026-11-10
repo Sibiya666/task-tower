@@ -130,6 +130,48 @@ class Worktrees:
         return dict(prior)
 
 
+    def attach_preparing(self,receipt,original_command):
+        from ..preparing_recovery import parse_receipt
+        r=parse_receipt(receipt);repo,root=self.projects[r['project_id']];target=root/r['attempt_id']
+        safe_config_path(repo/'.tower-guard');identity_before=repo.stat()
+        prior=self.inspect_preparing(r,original_command)
+        safe_config_path(repo/'.tower-guard')
+        if not os.path.samestat(identity_before,repo.stat()):raise ValueError('preparing_repository_changed')
+        root.mkdir(parents=True,exist_ok=True);safe_config_path(target/'.tower-guard')
+        deadline=time.monotonic()+10
+        remaining=deadline-time.monotonic()
+        if remaining<=0:raise ValueError('preparing_observation_deadline')
+        self._git(repo,'worktree','add','--no-guess-remote','--',str(target),r['branch'],timeout=remaining)
+        ready=self.verify_preparing_attachment(r,deadline=deadline)
+        safe_config_path(repo/'.tower-guard')
+        if not os.path.samestat(identity_before,repo.stat()):raise ValueError('preparing_repository_changed')
+        if ready!=dict(prior,state='ready'):raise ValueError('preparing_worktree_changed')
+        return ready
+
+    def verify_preparing_attachment(self,receipt,*,deadline=None):
+        from ..preparing_recovery import parse_receipt
+        r=parse_receipt(receipt);repo,root=self.projects[r['project_id']];target=root/r['attempt_id']
+        safe_config_path(repo/'.tower-guard');safe_config_path(target/'.tower-guard')
+        identity_before=target.stat()
+        deadline=time.monotonic()+10 if deadline is None else deadline
+        def git(where,*args):
+            remaining=deadline-time.monotonic()
+            if remaining<=0:raise ValueError('preparing_observation_deadline')
+            return self._git(where,*args,timeout=remaining)
+        if not os.path.samefile(target,git(target,'rev-parse','--show-toplevel')):raise ValueError('preparing_target_changed')
+        def common(where):
+            value=Path(git(where,'rev-parse','--git-common-dir'))
+            return value if value.is_absolute() else where/value
+        if not os.path.samefile(common(repo),common(target)):raise ValueError('preparing_repository_changed')
+        if git(target,'rev-parse','HEAD')!=r['base_sha'] or git(target,'rev-parse','--abbrev-ref','HEAD')!=r['branch']:raise ValueError('preparing_branch_changed')
+        if git(target,'status','--porcelain','--untracked-files=all'):raise ValueError('preparing_target_dirty')
+        entries=git(target,'ls-files','-v','-z').split('\0')
+        if entries[-1]!='' or len(entries)<2 or any(not value.startswith('H ') or len(value)<=2 for value in entries[:-1]):raise ValueError('preparing_target_unverified')
+        safe_config_path(target/'.tower-guard')
+        if not os.path.samestat(identity_before,target.stat()):raise ValueError('preparing_target_changed')
+        if time.monotonic()>deadline:raise ValueError('preparing_observation_deadline')
+        return dict(project_id=r['project_id'],path=str(target),branch=r['branch'],base_sha=r['base_sha'],state='ready',review=False)
+
     def prepare(self,project_id,attempt_id,base_sha):return self._prepare(project_id,attempt_id,base_sha,False)
     def prepare_review(self,project_id,attempt_id,base_sha):return self._prepare(project_id,attempt_id,base_sha,True)
     def prepare_revision(self,project,attempt,base_sha,update_base=None):
