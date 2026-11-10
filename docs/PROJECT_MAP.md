@@ -1,8 +1,8 @@
 # Task Tower: connector and diagnostic map
 
 Verified 2026-11-10 against the working changes on
-`codex/preparing-ack-20261110`, based on accepted
-`0e4764e5153f507b830a53ae387f0250923b2cbf`. This is a source map, not a claim
+`codex/preparing-http-20261110`, based on accepted
+`164091b6caba23124f941df47b20f0db1c51b752`. This is a source map, not a claim
 that the changed code is deployed or that a historical failure is resolved.
 
 | Boundary | Source and responsibility |
@@ -15,8 +15,9 @@ that the changed code is deployed or that a historical failure is resolved.
 | Preparing contract | [receipt/source](../task_tower/preparing_recovery.py): exact operator-digest binding and fixed clean engine identity, rejecting index flags that hide source changes. This library component enables no recovery route. |
 | Preparing preflight | [worktrees](../task_tower/connector/worktrees.py): read-only command, preparing intent and bounded Git observations; no attach, resume or fence release. |
 | Preparing attach | [runner](../task_tower/connector/preparing_recovery.py) and [worktrees](../task_tower/connector/worktrees.py): exact approved source, intent before contained existing-branch attach, clean identity readback and atomic known result; unknown outcomes stay fenced. No public recovery route. |
-| Preparing native admission | [service contract](../task_tower/service/preparing_recovery.py): default-empty constructor registry, fresh native eligibility, one durable deterministic control and safe status; no dedicated HTTP/config admission. Check: `python -m unittest tests.test_service_preparing_admission -v`. |
+| Preparing native admission | [service contract](../task_tower/service/preparing_recovery.py): default-empty registry, fresh native eligibility, one durable deterministic control and safe status. Check: `python -m unittest tests.test_service_preparing_admission -v`. |
 | Preparing acknowledgement | [service contract](../task_tower/service/preparing_recovery.py): atomic known result/control ACK/original execute/event; failed controls stay unknown and known duplicates never requeue. Check: `python -m unittest tests.test_service_preparing_recovery -v`. |
+| Preparing local API | [HTTP](../task_tower/service/api.py) and [service config](../task_tower/service/cli.py): authenticated project/attempt-scoped admission/status, typed ACK events and startup-only exact receipt approvals; no connector/CLI processing or live recovery authority. Check: `python -m unittest tests.test_service_preparing_api -v`. |
 
 
 The operator command and its limits are in

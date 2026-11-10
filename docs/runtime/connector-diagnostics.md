@@ -75,7 +75,7 @@ exact clean target/base/branch/common-repository readback before atomic storage.
 Known duplicates read the saved result; unknown intent, Git or cleanup outcomes
 never replay. The original command remains fenced. This library is not a CLI
 recovery admission route and starts no model. Live reconciliation still needs
-a separate exact operator approval and the later supported service bridge.
+a separate exact operator approval and the later connector/CLI bridge.
 
 Internal service preparing admission/status uses a bounded, default-empty constructor
 approval registry. It verifies exact receipt/source history and fresh native
@@ -88,5 +88,26 @@ transition and one deterministic original-input/source execute together. Fresh
 registry/native/history checks still apply. Repeated/lost replies read a known
 result; failed controls become unknown without requeue, release or model start.
 A late failure never downgrades a known prepared result. Connection-state changes
-alone attest no execution. This adds no dedicated admission/status HTTP/config
-route or connector processing; live recovery still requires separate authority.
+alone attest no execution. Live recovery still requires separate authority.
+
+The local service now exposes authenticated `POST /v1/preparing` with
+`{"version":1,"receipt":...}` and `GET /v1/preparing/{operation_id}`. Both retain
+connector ownership and project scope, including after scope revocation. Status
+contains only operation/project/attempt IDs, receipt digest, state and deterministic
+control/execute IDs; it contains no prompt, full receipt or private path. Typed
+prepared acknowledgements use the existing `/v1/events`; control validation uses
+the existing `/v1/commands/{command_id}/validate`. No connector processing or
+operator CLI recovery command is wired by this component.
+
+Optional service config `approved_preparing` maps known projects to at most 32
+exact approved receipt SHA256 strings each. Omission means empty; null, wildcard,
+unknown projects and malformed values are refused. These are operator inputs,
+never HTTP self-approval. The existing append-only `approved_plans` reload remains;
+`approved_preparing` cannot change through that reload. Applying a changed registry
+requires separately authorized controlled startup/config work, not this document.
+
+JSON admission remains limited to 65536 bytes under the unchanged total read
+deadline. Authenticated near-limit overflow can drain at most 131072 rejected
+bytes to deliver a reliable 413; larger declared bodies are not drained. This
+does not increase accepted receipt/event size or authorize a new claim, model
+start, fence release, runtime update or live reconciliation.
