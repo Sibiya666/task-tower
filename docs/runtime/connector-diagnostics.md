@@ -96,8 +96,7 @@ connector ownership and project scope, including after scope revocation. Status
 contains only operation/project/attempt IDs, receipt digest, state and deterministic
 control/execute IDs; it contains no prompt, full receipt or private path. Typed
 prepared acknowledgements use the existing `/v1/events`; control validation uses
-the existing `/v1/commands/{command_id}/validate`. No connector processing or
-operator CLI recovery command is wired by this component.
+the existing `/v1/commands/{command_id}/validate`.
 
 Optional service config `approved_preparing` maps known projects to at most 32
 exact approved receipt SHA256 strings each. Omission means empty; null, wildcard,
@@ -111,3 +110,15 @@ deadline. Authenticated near-limit overflow can drain at most 131072 rejected
 bytes to deliver a reliable 413; larger declared bodies are not drained. This
 does not increase accepted receipt/event size or authorize a new claim, model
 start, fence release, runtime update or live reconciliation.
+
+## Connector bridge (2026-11-10)
+
+Per-device Beads; same startup-only opt-in registry. Typed journal, known ACK
+before execute; unknown stays fenced. HTTP CLI opens no journal:
+
+```console
+python -m task_tower.connector.cli preparing admit --receipt-file <private-receipt> --config <private-connector-config>
+python -m task_tower.connector.cli preparing status <operation-id> --config <private-connector-config>
+```
+
+Live recovery/delivery/deployment gates remain.

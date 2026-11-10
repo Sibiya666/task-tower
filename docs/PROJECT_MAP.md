@@ -1,8 +1,8 @@
 # Task Tower: connector and diagnostic map
 
 Verified 2026-11-10 against the working changes on
-`codex/preparing-http-20261110`, based on accepted
-`164091b6caba23124f941df47b20f0db1c51b752`. This is a source map, not a claim
+`codex/preparing-bridge-20261110`, based on accepted
+`068ced56537226a3bdc891a2dfbefaeac9f337f5`. This is a source map, not a claim
 that the changed code is deployed or that a historical failure is resolved.
 
 | Boundary | Source and responsibility |
@@ -17,7 +17,8 @@ that the changed code is deployed or that a historical failure is resolved.
 | Preparing attach | [runner](../task_tower/connector/preparing_recovery.py) and [worktrees](../task_tower/connector/worktrees.py): exact approved source, intent before contained existing-branch attach, clean identity readback and atomic known result; unknown outcomes stay fenced. No public recovery route. |
 | Preparing native admission | [service contract](../task_tower/service/preparing_recovery.py): default-empty registry, fresh native eligibility, one durable deterministic control and safe status. Check: `python -m unittest tests.test_service_preparing_admission -v`. |
 | Preparing acknowledgement | [service contract](../task_tower/service/preparing_recovery.py): atomic known result/control ACK/original execute/event; failed controls stay unknown and known duplicates never requeue. Check: `python -m unittest tests.test_service_preparing_recovery -v`. |
-| Preparing local API | [HTTP](../task_tower/service/api.py) and [service config](../task_tower/service/cli.py): authenticated project/attempt-scoped admission/status, typed ACK events and startup-only exact receipt approvals; no connector/CLI processing or live recovery authority. Check: `python -m unittest tests.test_service_preparing_api -v`. |
+| Preparing local API | [HTTP](../task_tower/service/api.py) and [service config](../task_tower/service/cli.py): authenticated project/attempt-scoped admission/status, typed ACK events and startup-only exact receipt approvals; no live recovery authority. Check: `python -m unittest tests.test_service_preparing_api -v`. |
+| Preparing connector bridge | [CLI](../task_tower/connector/cli.py), typed journal/ACK. Check: `python -m unittest tests.test_preparing_integration tests.test_connector_cli -v`. |
 
 
 The operator command and its limits are in
