@@ -55,3 +55,13 @@ preparing intent and bounded Git observations without mutation. It is not a CLI
 recovery command, does not release fences, and does not support old author or
 committed handoffs. Explicit operator approval and a separate supported recovery
 procedure remain necessary before any attach or execution.
+
+The internal transport store also persists typed preparing-operation intents.
+Each receipt and attempt is reserved once; restart retains pending/unknown
+intents without replay. A known result, supplied ready-worktree record and
+one safe acknowledgement commit together, only if the original command,
+worktree and attempt-scoped pending-event snapshot still match. Failure
+between writes rolls back all three records. Existing claims and command
+fences remain unchanged. This storage primitive does not validate Git,
+authorize attach or start execution; those require a separate approved runner.
+Disposable SQLite tests verify storage behavior, not actual Git delivery.
