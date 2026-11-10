@@ -89,6 +89,19 @@ class PreparingAttachTests(GitCase):
         self.assertEqual(attaches,[]);self.assertFalse(self.target.exists());self.unchanged()
         self.assertEqual(self.store.preparing_operation('op-1')['state'],'unknown')
 
+    def test_target_replaced_after_final_readback_stays_unknown(self):
+        clone=Path(self.transport.name)/'clone';saved=Path(self.transport.name)/'saved'
+        self.git(self.root,'clone','--quiet','--branch',self.r['branch'],str(self.root),str(clone))
+        original=self.trees._git
+        def observed(repo,*args,**kw):
+            value=original(repo,*args,**kw)
+            if repo==self.target and args==('ls-files','-v','-z'):
+                self.target.rename(saved);clone.rename(self.target)
+            return value
+        with patch.object(self.trees,'_git',side_effect=observed):
+            with self.assertRaisesRegex(ValueError,'^preparing_attach_unknown$'):self.manager.run(self.r)
+        self.unchanged();self.assertEqual(self.store.preparing_operation('op-1')['state'],'unknown')
+
     def test_unknown_git_result_is_fenced_without_replay(self):
         with patch.object(self.trees,'attach_preparing',side_effect=RuntimeError('fixture unknown')):
             with self.assertRaises(ValueError):self.manager.run(self.r)

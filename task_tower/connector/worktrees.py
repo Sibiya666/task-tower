@@ -152,6 +152,7 @@ class Worktrees:
         from ..preparing_recovery import parse_receipt
         r=parse_receipt(receipt);repo,root=self.projects[r['project_id']];target=root/r['attempt_id']
         safe_config_path(repo/'.tower-guard');safe_config_path(target/'.tower-guard')
+        identity_before=target.stat()
         deadline=time.monotonic()+10 if deadline is None else deadline
         def git(where,*args):
             remaining=deadline-time.monotonic()
@@ -167,6 +168,7 @@ class Worktrees:
         entries=git(target,'ls-files','-v','-z').split('\0')
         if entries[-1]!='' or len(entries)<2 or any(not value.startswith('H ') or len(value)<=2 for value in entries[:-1]):raise ValueError('preparing_target_unverified')
         safe_config_path(target/'.tower-guard')
+        if not os.path.samestat(identity_before,target.stat()):raise ValueError('preparing_target_changed')
         if time.monotonic()>deadline:raise ValueError('preparing_observation_deadline')
         return dict(project_id=r['project_id'],path=str(target),branch=r['branch'],base_sha=r['base_sha'],state='ready',review=False)
 
