@@ -10,6 +10,7 @@ import time
 from urllib.parse import parse_qs, urlsplit
 
 from .beads import ServiceError, identity, strict_json
+from ..preparing_recovery import parse_receipt
 
 MAX_BODY=65536
 READ_TIMEOUT=5
@@ -76,11 +77,13 @@ def make_server(store,connectors,*,host='127.0.0.1',port=8765,poll_seconds=2,con
         def _send(self,status,value):
             # Drain only an explicitly bounded, fixed-length rejected POST body.
             # Closing with unread bytes can reset TCP and discard the JSON error.
+            # Authenticated near-limit overflow may drain up to twice MAX_BODY;
+            # accepted JSON and the original total read deadline stay unchanged.
             if self.command=='POST' and not getattr(self,'_body_consumed',False):
                 lengths=self.headers.get_all('Content-Length',[])
                 if (not self.headers.get('Transfer-Encoding') and len(lengths)==1
                         and lengths[0].isdigit() and len(lengths[0])<=6
-                        and 0<int(lengths[0])<=MAX_BODY):
+                        and 0<int(lengths[0])<=MAX_BODY*(2 if status==413 else 1)):
                     try:self.rfile.read(int(lengths[0]))
                     except OSError:
                         self.close_connection=True
@@ -135,6 +138,12 @@ def make_server(store,connectors,*,host='127.0.0.1',port=8765,poll_seconds=2,con
             self._project(entry,attempt['project_id'])
             return attempt
 
+        def _preparing_scope(self,value,connector,entry):
+            self._project(entry,value['project_id'])
+            attempt=self._owned(value['attempt_id'],connector,entry)
+            if attempt['project_id']!=value['project_id']:
+                raise ServiceError('preparing_project_forbidden',403)
+
         def _handle(self,method):
             request_id=None
             try:
@@ -156,6 +165,10 @@ def make_server(store,connectors,*,host='127.0.0.1',port=8765,poll_seconds=2,con
                         decisions=[d for d in store.decisions(connector)
                                    if store.attempt(d['attempt_id'],connector)['project_id'] in entry['projects']]
                         self._send(200,dict(decisions=decisions));return
+                    if uri.path.startswith('/v1/preparing/') and not query:
+                        operation=store.preparing_status(uri.path[len('/v1/preparing/'):],connector)
+                        self._preparing_scope(operation,connector,entry)
+                        self._send(200,dict(preparing=operation));return
                     raise ServiceError('route_not_found',404)
                 if uri.query:raise ServiceError('invalid_route',400)
                 body=self._body()
@@ -165,6 +178,10 @@ def make_server(store,connectors,*,host='127.0.0.1',port=8765,poll_seconds=2,con
                     except ServiceError:pass
                 if 'connector_id' in body and body['connector_id']!=connector:
                     raise ServiceError('connector_forbidden',403)
+                if uri.path=='/v1/preparing':
+                    self._fields(body,{'receipt'});receipt=parse_receipt(body['receipt'])
+                    self._preparing_scope(receipt,connector,entry)
+                    self._send(200,dict(preparing=store.admit_preparing(receipt,connector)));return
                 if uri.path.startswith('/v1/attempts/') and uri.path.endswith('/accept'):
                     self._fields(body,{'request_id','merge','evidence'})
                     key=uri.path[len('/v1/attempts/'):-len('/accept')];self._owned(key,connector,entry)
@@ -202,7 +219,10 @@ def make_server(store,connectors,*,host='127.0.0.1',port=8765,poll_seconds=2,con
                     result=operation(body['request_id'],body['project_id'],body['digest'],body['plan'])
                     self._send(200,dict(batch=result));return
                 if uri.path=='/v1/events':
-                    self._fields(body,{'event_id','attempt_id','connector_id','lifecycle'} if 'lifecycle' in body else {'event_id','attempt_id','connector_id','phase','execution_state','connection_state'} | ({'execution'} if 'execution' in body else set()))
+                    if 'preparing' in body:fields={'event_id','attempt_id','connector_id','preparing'}
+                    elif 'lifecycle' in body:fields={'event_id','attempt_id','connector_id','lifecycle'}
+                    else:fields={'event_id','attempt_id','connector_id','phase','execution_state','connection_state'} | ({'execution'} if 'execution' in body else set())
+                    self._fields(body,fields)
                     self._owned(body['attempt_id'],connector,entry)
                     self._send(200,dict(attempt=store.record_event(body)));return
                 if uri.path=='/v1/decisions':

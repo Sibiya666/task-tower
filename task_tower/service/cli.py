@@ -2,7 +2,9 @@
 
 Private config keys: version, executable, projects {id: absolute directory},
 journal, connectors {id: {token_file, projects}}, approved_plans {project: [sha256]},
-port, poll_seconds. Approval digests are operator inputs, never client assertions.
+port, poll_seconds; optional approved_preparing {project: [exact receipt sha256]}.
+Preparing approvals are startup-only, default empty. Approval digests are operator
+inputs, never client assertions.
 """
 import argparse
 import os
@@ -65,7 +67,7 @@ def load_config(path,*,document=None):
     if len(raw)>65536:raise ValueError('config_limit')
     value=strict_json(raw.decode('utf-8'))
     required={'version','executable','projects','journal','connectors','approved_plans','port','poll_seconds'}
-    if not isinstance(value,dict) or set(value)-{'max_active_tasks','delivery_projects','delivery_policies','native_profiles'} != required or type(value['version']) is not int or value['version']!=1:
+    if not isinstance(value,dict) or set(value)-{'max_active_tasks','delivery_projects','delivery_policies','native_profiles','approved_preparing'} != required or type(value['version']) is not int or value['version']!=1:
         raise ValueError('invalid_configuration')
     exe=_absolute(value['executable']);journal=_absolute(value['journal'])
     if not isinstance(value['projects'],dict) or not 1<=len(value['projects'])<=32:
@@ -77,6 +79,9 @@ def load_config(path,*,document=None):
         if not path.is_dir():raise ValueError('invalid_directory')
         projects[identity(key)]=path
     if len({str(p.resolve()).casefold() for p in projects.values()})!=len(projects):raise ValueError('project_alias')
+    from .preparing_recovery import approval_registry
+    if not isinstance(value.get('approved_preparing',{}),dict):raise ValueError('invalid_preparing_approvals')
+    preparing=approval_registry(value.get('approved_preparing',{}),projects)
     if not isinstance(value['connectors'],dict) or not 1<=len(value['connectors'])<=32:
         raise ValueError('invalid_connectors')
     connectors={}
@@ -97,7 +102,7 @@ def load_config(path,*,document=None):
                 or any(not isinstance(d,str) or re.fullmatch('[0-9a-f]{64}',d) is None for d in digests)):
             raise ValueError('invalid_approvals')
     return dict(executable=exe,projects=projects,journal=journal,connectors=connectors,native_profiles=value.get('native_profiles',{}),
-                approved_plans=approved,delivery_projects=value.get('delivery_projects',{}),delivery_policies=value.get('delivery_policies',{}),max_active_tasks=value.get('max_active_tasks',2),port=value['port'],poll_seconds=value['poll_seconds'])
+                approved_plans=approved,approved_preparing=preparing,delivery_projects=value.get('delivery_projects',{}),delivery_policies=value.get('delivery_policies',{}),max_active_tasks=value.get('max_active_tasks',2),port=value['port'],poll_seconds=value['poll_seconds'])
 
 
 def main(argv=None):
@@ -108,7 +113,7 @@ def main(argv=None):
         args=parser.parse_args(argv)
         config=load_config(args.config)
         beads=Beads(config['executable'],config['projects'],native_profiles=config.get('native_profiles'))
-        store=Store(config['journal'],beads,approved_plans=config['approved_plans'],delivery_projects=config['delivery_projects'],max_active_tasks=config['max_active_tasks'],delivery_policies=config.get('delivery_policies'))
+        store=Store(config['journal'],beads,approved_plans=config['approved_plans'],approved_preparing=config.get('approved_preparing',{}),delivery_projects=config['delivery_projects'],max_active_tasks=config['max_active_tasks'],delivery_policies=config.get('delivery_policies'))
         try:
             server=make_server(store,config['connectors'],host='0.0.0.0' if args.container_network else '127.0.0.1',
                                port=config['port'],poll_seconds=config['poll_seconds'],container_network=args.container_network)
