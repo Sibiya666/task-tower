@@ -1,8 +1,8 @@
 # Task Tower: connector and diagnostic map
 
 Verified 2026-11-10 against the working changes on
-`codex/preparing-journal-20261110`, based on accepted
-`19708771b731d007795425cfef6b0f672d9f0dca`. This is a source map, not a claim
+`codex/preparing-attach-20261110`, based on accepted
+`1eda5b0a553c5d648c477a5b8452d5de1b3de357`. This is a source map, not a claim
 that the changed code is deployed or that a historical failure is resolved.
 
 | Boundary | Source and responsibility |
@@ -14,12 +14,14 @@ that the changed code is deployed or that a historical failure is resolved.
 | Safe inspection | [diagnostics](../task_tower/connector/diagnostics.py): typed receipts, private raw evidence and read-only snapshots |
 | Preparing contract | [receipt/source](../task_tower/preparing_recovery.py): exact operator-digest binding and fixed clean engine identity, rejecting index flags that hide source changes. This library component enables no recovery route. |
 | Preparing preflight | [worktrees](../task_tower/connector/worktrees.py): read-only command, preparing intent and bounded Git observations; no attach, resume or fence release. |
+| Preparing attach | [runner](../task_tower/connector/preparing_recovery.py) and [worktrees](../task_tower/connector/worktrees.py): exact approved source, intent before contained existing-branch attach, clean identity readback and atomic known result; unknown outcomes stay fenced. No public recovery route. |
 
 The operator command and its limits are in
 [connector diagnostics](runtime/connector-diagnostics.md). Core verification:
 `python -m unittest discover -s tests -v`; focused diagnostic contracts:
 `python -m unittest tests.test_connector_diagnostics -v`. Run final checks through
 Reslop as required by the working agreements and retain raw evidence locally.
+Real disposable Git attach checks: `python -m unittest tests.test_preparing_attach -v`.
 Typed journal checks: `python -m unittest tests.test_preparing_operations -v`.
 Preparing contract/preflight checks: `python -m unittest tests.test_preparing_recovery tests.test_preparing_preflight -v`.
 
