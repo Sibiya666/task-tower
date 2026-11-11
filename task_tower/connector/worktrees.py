@@ -1,4 +1,5 @@
 """Trusted project-to-repository mapping. Git owns worktree creation."""
+from ..child_environment import child_environment as _integration_child_environment
 import os
 from pathlib import Path
 import re
@@ -22,7 +23,7 @@ class Worktrees:
             self.projects[key]=(repo,root)
     @staticmethod
     def _git(repo,*args,timeout=10,raw=False):
-        env={k:v for k,v in os.environ.items() if not k.upper().startswith('GIT_') and k.upper() not in ('GH_TOKEN','GITHUB_TOKEN')}
+        env={k:v for k,v in _integration_child_environment(os.environ).items() if not k.upper().startswith('GIT_') and k.upper() not in ('GH_TOKEN','GITHUB_TOKEN')}
         env['GIT_TERMINAL_PROMPT']='0'
         env.update(GIT_CONFIG_NOSYSTEM='1',GIT_CONFIG_GLOBAL=os.devnull,GIT_NO_LAZY_FETCH='1',GIT_NO_REPLACE_OBJECTS='1')
         deadline=time.monotonic()+timeout

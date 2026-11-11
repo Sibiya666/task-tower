@@ -84,6 +84,9 @@ CREATE TABLE IF NOT EXISTS preparing_operations (operation_id TEXT PRIMARY KEY,a
         if managed:
             fields={'version','kind','command_id','attempt_id','project_id','base_sha'}
             if command['kind'] in ('execute','review','revise','main_review'):fields|={'input','source'}
+            if command['kind'] in ('execute','review','revise','main_review') and 'issue_scope' in command:
+                from ..issue_runtime import validate_scope
+                validate_scope(command['issue_scope']);fields.add('issue_scope')
             if command['kind']=='deliver':fields.add('attempt')
             if command['kind']=='revise':
                 fields.add('thread_id')

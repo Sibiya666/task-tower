@@ -1,0 +1,43 @@
+{
+  "allowed_paths": [
+    "README.md",
+    "AGENTS.md",
+    "docs/**/*.md",
+    "task_tower/**/*.py",
+    "tests/**/*.py"
+  ],
+  "clarification_required_fields": [
+    "reproduction",
+    "expected_behavior",
+    "acceptance_criteria"
+  ],
+  "eligible_reporter_roles": [
+    "repository_owner",
+    "push_collaborator"
+  ],
+  "excluded_changes": [
+    "workflows",
+    "dependencies_lockfiles",
+    "executables_bootstrap",
+    "credentials_auth_acl_protection",
+    "admission_policy",
+    "migrations",
+    "destructive",
+    "recovery",
+    "other_repositories"
+  ],
+  "initially_enabled": false,
+  "max_active_authors": 1,
+  "max_admissions_per_day": 2,
+  "max_author_turns": 3,
+  "max_changed_lines": 1000,
+  "max_execution_minutes": 120,
+  "max_files": 20,
+  "repository": "Sibiya666/task-tower",
+  "verification": {
+    "command": "/task-tower verified <40-lowercase-hex-sha>",
+    "fresh_head_base_required": true,
+    "reporter": "original_numeric_reporter"
+  },
+  "version": 1
+}

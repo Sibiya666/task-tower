@@ -41,7 +41,7 @@ def strict_json(raw):
 					  parse_constant=lambda _: (_ for _ in ()).throw(ValueError('nonfinite JSON')))
 
 
-def validate_delivery(raw: bytes, headers, secret: bytes, binding) -> Delivery:
+def validate_signature(raw: bytes, headers, secret: bytes):
 	if not isinstance(raw, bytes) or len(raw) > MAX_BODY or not secret:
 		raise InvalidDelivery('invalid body or configuration')
 	headers = {k.lower(): v for k, v in headers.items()}
@@ -51,6 +51,11 @@ def validate_delivery(raw: bytes, headers, secret: bytes, binding) -> Delivery:
 	expected = 'sha256=' + hmac.new(secret, raw, hashlib.sha256).hexdigest()
 	if not hmac.compare_digest(expected, signature):
 		raise InvalidDelivery('invalid signature')
+	return headers
+
+
+def validate_delivery(raw: bytes, headers, secret: bytes, binding) -> Delivery:
+	headers = validate_signature(raw, headers, secret)
 	try:
 		body = strict_json(raw)
 		if not isinstance(body, dict):

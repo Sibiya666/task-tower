@@ -62,3 +62,6 @@ Display-конфигурация и admission observation не дают прав
 
 Датированная карта старых карточек остаётся в [backlog](backlog.md).
 Архив — справка, а не команда возобновить старое выполнение, worker или monitor.
+
+- [GitHub issue bot operator runbook](runtime/github-issue-webhook.md)
+- [Issue bot source map](PROJECT_MAP.md)

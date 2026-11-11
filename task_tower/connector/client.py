@@ -404,6 +404,9 @@ class LifecycleConnector(Connector):
         data=self.store.command(key);command=data['command'];attempt=command['attempt_id']
         stage='notifications'
         try:
+            if command.get('issue_scope') and time.time()>command['issue_scope']['deadline']:
+                app.close();worker['apps'].pop(key,None)
+                raise ValueError('issue_execution_deadline')
             for message in app.notifications():
                 p=message.get('params',{});method=message.get('method')
                 if method=='connector/interrupted':

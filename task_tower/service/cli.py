@@ -67,7 +67,7 @@ def load_config(path,*,document=None):
     if len(raw)>65536:raise ValueError('config_limit')
     value=strict_json(raw.decode('utf-8'))
     required={'version','executable','projects','journal','connectors','approved_plans','port','poll_seconds'}
-    if not isinstance(value,dict) or set(value)-{'max_active_tasks','delivery_projects','delivery_policies','native_profiles','approved_preparing'} != required or type(value['version']) is not int or value['version']!=1:
+    if not isinstance(value,dict) or set(value)-{'max_active_tasks','delivery_projects','delivery_policies','native_profiles','approved_preparing','issue_connections'} != required or type(value['version']) is not int or value['version']!=1:
         raise ValueError('invalid_configuration')
     exe=_absolute(value['executable']);journal=_absolute(value['journal'])
     if not isinstance(value['projects'],dict) or not 1<=len(value['projects'])<=32:
@@ -101,7 +101,9 @@ def load_config(path,*,document=None):
         if (not isinstance(digests,list) or len(digests)>1000
                 or any(not isinstance(d,str) or re.fullmatch('[0-9a-f]{64}',d) is None for d in digests)):
             raise ValueError('invalid_approvals')
-    return dict(executable=exe,projects=projects,journal=journal,connectors=connectors,native_profiles=value.get('native_profiles',{}),
+    from ..issue_bootstrap import validate_connections
+    issues=validate_connections(value.get('issue_connections',{}),projects)
+    return dict(executable=exe,projects=projects,journal=journal,connectors=connectors,native_profiles=value.get('native_profiles',{}),issue_connections=issues,
                 approved_plans=approved,approved_preparing=preparing,delivery_projects=value.get('delivery_projects',{}),delivery_policies=value.get('delivery_policies',{}),max_active_tasks=value.get('max_active_tasks',2),port=value['port'],poll_seconds=value['poll_seconds'])
 
 
@@ -112,8 +114,11 @@ def main(argv=None):
     try:
         args=parser.parse_args(argv)
         config=load_config(args.config)
+        if args.container_network and config.get('issue_connections'):raise ValueError('host_only_issue_binding')
         beads=Beads(config['executable'],config['projects'],native_profiles=config.get('native_profiles'))
-        store=Store(config['journal'],beads,approved_plans=config['approved_plans'],approved_preparing=config.get('approved_preparing',{}),delivery_projects=config['delivery_projects'],max_active_tasks=config['max_active_tasks'],delivery_policies=config.get('delivery_policies'))
+        from ..issue_bootstrap import build_issue_bindings
+        issue_bindings=build_issue_bindings(config)
+        store=Store(config['journal'],beads,issue_bindings=issue_bindings,approved_plans=config['approved_plans'],approved_preparing=config.get('approved_preparing',{}),delivery_projects=config['delivery_projects'],max_active_tasks=config['max_active_tasks'],delivery_policies=config.get('delivery_policies'))
         try:
             server=make_server(store,config['connectors'],host='0.0.0.0' if args.container_network else '127.0.0.1',
                                port=config['port'],poll_seconds=config['poll_seconds'],container_network=args.container_network)

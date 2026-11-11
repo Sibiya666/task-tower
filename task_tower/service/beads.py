@@ -1,4 +1,5 @@
 """Fixed, bounded native Beads operations against trusted project configuration."""
+from ..child_environment import child_environment as _integration_child_environment
 import json
 import math
 import os
@@ -44,7 +45,7 @@ def strict_json(raw):
 
 
 def environment(directory):
-    env = {k:v for k,v in os.environ.items()
+    env = {k:v for k,v in _integration_child_environment(os.environ).items()
            if not k.upper().startswith(('BD_', 'BEADS_', 'DOLT_', 'GIT_'))
            and k.upper() not in ('GH_TOKEN', 'GITHUB_TOKEN')}
     env.update(BEADS_DIR=str(directory / '.beads'), BD_EVENTS_JOURNAL='1',

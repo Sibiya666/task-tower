@@ -71,6 +71,13 @@ def advance(attempt,event,policy):
         elif a.get('author_thread_id') not in (None,thread):raise ServiceError('author_thread_changed')
         else:a['author_thread_id']=thread
         a.update(thread_id=thread,turn_id=turn,execution_state='running',connection_state='connected')
+    elif kind=='candidate':
+        c=event['candidate']
+        if a['phase']!='awaiting_merge' or not a.get('source_issue') or c.get('source')!=a['source_issue'] or (c.get('head_sha'),c.get('base_sha'))!=(a['head_sha'],a['base_sha']) or a.get('candidate') not in (None,c):raise ServiceError('candidate_fenced')
+        a['candidate']=copy.deepcopy(c)
+    elif kind=='reporter_verified':
+        if a['phase']!='awaiting_merge' or not a.get('candidate'):raise ServiceError('reporter_verification_fenced')
+        a['reporter_verification']=copy.deepcopy(event['verification'])
     elif kind=='merged':
         m=event['merge']
         if a['phase']!='awaiting_merge' or not isinstance(m,dict) or set(m)!={'repository','pr_number','head_sha','base_sha','main_sha'}:raise ServiceError('merge_fenced')
@@ -187,6 +194,7 @@ class LifecycleStore:
         if not isinstance(payload,dict):raise ServiceError('invalid_lifecycle_event',400)
         kind=payload.get('kind')
         expected={'dispatch':{'base_sha'},'resume':set(),'pause':set(),'disconnected':set(),'failed':{'command_id'},
+                  'candidate':{'command_id','candidate'},'reporter_verified':{'command_id','verification'},
                   'saved_result':{'command_id','receipt'},'merged':{'command_id','merge'},'delivery_changed':{'command_id','base_sha'},'quiescent':{'command_id'},'started':{'command_id','thread_id','turn_id'},
                   'completed':{'command_id','thread_id','turn_id','result'},
                   'approval':{'command_id','decision_id','request'},'responded':{'command_id'}}
@@ -219,6 +227,7 @@ class LifecycleStore:
                 elif kind=='responded' or (kind=='failed' and command['kind']=='respond'):
                     if command['kind']!='respond':raise ServiceError('response_fenced')
                 elif command['command_id']!=a.get('active_command_id'):raise ServiceError('command_superseded')
+                if kind in ('candidate','reporter_verified') and command['kind']!='deliver':raise ServiceError('candidate_fenced')
                 if kind=='merged' and (command['kind']!='deliver' or not isinstance(payload['merge'],dict) or payload['merge'].get('repository')!=self.delivery_projects.get(a['project_id'])):raise ServiceError('merge_fenced')
                 if kind=='delivery_changed' and command['kind']!='deliver':raise ServiceError('delivery_change_fenced')
                 if kind=='saved_result' and command['kind']!='deliver':raise ServiceError('handoff_fenced')
@@ -240,10 +249,19 @@ class LifecycleStore:
                     prior=json.loads(row[0])
                     if payload['thread_id']==prior.get('author_thread_id') or payload['thread_id'] in prior.get('review_threads',[]):
                         raise ServiceError('reviewer_not_new')
+            self.validate_issue_event(a,kind,payload)
+            if a.get('source_issue') and kind=='started' and a['phase'] in ('executing','revising'):
+                if a.get('issue_author_turns',0)>=3:raise ServiceError('issue_turn_budget')
+                a['issue_author_turns']=a.get('issue_author_turns',0)+1
             actions=advance(a,payload,{});a=actions[0]['changes']
             outgoing=[]
             for action in actions[1:]:
                 action=dict(action,version=1,command_id=str(uuid.uuid4()),attempt_id=a['attempt_id'],project_id=a['project_id'],base_sha=a['base_sha'])
+                if a.get('source_issue') and action['kind'] in ('execute','revise','review'):
+                    if action['kind'] in ('execute','revise') and a.get('issue_author_turns',0)>=3:
+                        action=dict(version=action['version'],kind='quiesce',command_id=action['command_id'],attempt_id=a['attempt_id'],project_id=a['project_id'],base_sha=a['base_sha'])
+                        a.update(phase='needs_input',quiescent=False)
+                    else:action['issue_scope']=dict(paths=a['issue_paths'],deadline=a['issue_admitted_at']+120*60)
                 if action['kind']=='deliver':
                     action['attempt']=dict(copy.deepcopy(a),approved_task=self._approved_task(a['project_id'],a['bead_id']))
                 elif action['kind']!='quiesce':

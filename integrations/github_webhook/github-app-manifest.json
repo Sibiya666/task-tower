@@ -1,0 +1,23 @@
+{
+  "name": "Task Tower Issues",
+  "url": "https://github.com/Sibiya666/task-tower",
+  "hook_attributes": {
+    "url": "https://REPLACE-WITH-ACCEPTED-DEPLOYMENT/api/github/webhook",
+    "active": true
+  },
+  "public": false,
+  "default_permissions": {
+    "metadata": "read",
+    "issues": "write",
+    "pull_requests": "write",
+    "contents": "write",
+    "actions": "read",
+    "checks": "read",
+    "statuses": "write",
+    "administration": "read"
+  },
+  "default_events": [
+    "issues",
+    "issue_comment"
+  ]
+}
