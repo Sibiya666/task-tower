@@ -33,3 +33,16 @@ Preparing contract/preflight checks: `python -m unittest tests.test_preparing_re
 Beads remains the canonical task/owner/dependency/history engine. See
 [current direction](current-direction.md) and [project intake](project-intake.md).
 Inspection neither launches a worker nor authorizes recovery or delivery.
+
+## Signed webhook transport
+
+Source verified 2026-11-11: working changes based on `1e6b6d2cf388dd1543bf508854055bd987ca6828`.
+[Receiver](../integrations/github_webhook/receiver.py),
+[HTTP entry](../integrations/github_webhook/api/index.py) and
+[inbox](../integrations/github_webhook/inbox.py): transport only.
+Check: `python -m unittest tests.test_issue_webhook_transport -v` (stdlib).
+Backend: Python 3.12+, operator-applied schema/dependencies. Optional disposable-DB check:
+`python -m integrations.github_webhook.inbox --check-postgres`, with operator-provided
+`WEBHOOK_TEST_DATABASE_URL`; not run. SQL fault/concurrency, deployment, independent
+review and PR/main gates remain. Operator must schedule `Inbox.prune(now)` for
+retention with offline consumers. Replay reads receipts; no requeue/native execution.
