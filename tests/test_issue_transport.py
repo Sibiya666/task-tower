@@ -49,6 +49,12 @@ class TransportTests(unittest.TestCase):
     def test_bot_and_unsupported_events_are_acknowledged_without_execution(self):
         self.remote.rows[0]["body"]["sender"]["type"]="Bot"
         self.t.tick();self.assertEqual(self.handler.calls,0);self.assertEqual(len(self.remote.acks),1)
+    def test_pull_request_comments_are_acknowledged_as_ignored_without_admission(self):
+        e=self.remote.rows[0];e.update(event='issue_comment',action='created')
+        e['body']['issue']['pull_request']={'url':'https://api.github.com/repos/owner/repo/pulls/12'}
+        self.t.tick();self.t.tick()
+        self.assertEqual(self.handler.calls,0)
+        self.assertEqual(len(self.remote.acks),2)
     def test_transport_ack_does_not_mean_task_acceptance(self):
         self.t.tick()
         self.assertEqual(self.handler.result["state"],"published")

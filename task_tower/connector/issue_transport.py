@@ -52,7 +52,7 @@ class IssueTransport:
                         with self.store.db:self.store.db.execute("INSERT INTO issue_transport_receipts VALUES (?,?,?,?)",(key,fingerprint,"intent","{}"))
                         try:
                             sender=event["body"].get("sender",{})
-                            eligible=event.get("event") in ("issues","issue_comment") and sender.get("type")=="User" and (event.get("event")=="issues" and event.get("action") in ("opened","edited","reopened") or event.get("event")=="issue_comment" and event.get("action") in ("created","edited","deleted"))
+                            eligible="pull_request" not in event["body"].get("issue",{}) and event.get("event") in ("issues","issue_comment") and sender.get("type")=="User" and (event.get("event")=="issues" and event.get("action") in ("opened","edited","reopened") or event.get("event")=="issue_comment" and event.get("action") in ("created","edited","deleted"))
                             receipt=self.handler(event,"issue-delivery-"+key) if eligible else dict(state="ignored")
                         except Exception:raise ValueError("delivery_effect_needs_reconciliation") from None
                     if not isinstance(receipt,dict):raise ValueError("invalid_effect_receipt")

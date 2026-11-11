@@ -209,7 +209,7 @@ class Store(IssueAdmissionStore,PreparingStore,LifecycleStore,AcceptanceStore):
                 task=self._approved_task(project_id,bead_id_)
                 issue=self.issue_guard(project_id,bead_id_,connector_id)
                 if issue:
-                    data.update(source_issue=issue['source_issue'],issue_policy_sha256=issue['policy_sha256'],issue_paths=issue['paths'],issue_base_sha=issue['base_sha'],issue_admitted_at=issue['admitted_at'])
+                    data.update(source_issue=issue['source_issue'],issue_source_revision=issue['source_revision'],issue_policy_sha256=issue['policy_sha256'],issue_paths=issue['paths'],issue_base_sha=issue['base_sha'],issue_admitted_at=issue['admitted_at'])
                 self._verify_import(project_id,{bead_id_:task},'open',time.monotonic()+30)
                 row=self.beads.claim(project_id,bead_id_,actor)
                 self._verify_row(task,row,'in_progress',actor)

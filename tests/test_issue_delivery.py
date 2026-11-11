@@ -41,3 +41,25 @@ class IssueDeliveryTests(unittest.TestCase):
     def test_current_reporter_confirmation_preserves_existing_protected_merge(self):
         self.issue(True);self.assertEqual(self.d.merge_expected(REPO,7,H,B)["head_sha"],H)
         self.assertEqual(self.host.calls.count("merge"),1)
+    def test_merged_candidate_is_not_revalidated_while_postmerge_checks_are_pending(self):
+        a=self.issue(True);self.d.merge_expected(REPO,7,H,B)
+        self.host.comments=[]
+        self.d._issue_candidate(dict(attempt=a,project_id='p'),None)
+        self.assertEqual(self.host.calls.count('merge'),1)
+    def test_persisted_merge_intent_reads_back_fact_without_requiring_open_pr(self):
+        self.issue(True)
+        d=self.d._load(REPO,7);d['phase']='merge_intent';self.d._save(d)
+        self.host.merge(REPO,7,H);self.host.comments=[]
+        result=self.d.merge_expected(REPO,7,H,B)
+        self.assertEqual(result['main_sha'],fixtures.M)
+        self.assertEqual(self.host.calls.count('merge'),1)
+    def test_restart_accepts_only_persisted_dynamic_candidate_fields(self):
+        a=attempt();a['source_issue']=S;self.d.prepare_pr(a)
+        d=self.d._load(REPO,7)
+        d['attempt']['candidate']=candidate_receipt(S,self.host.pr,21,'Check '+H,'2030-01-01T00:00:00Z')
+        d['attempt']['reporter_verification']={'comment_id':44}
+        self.d._save(d)
+        self.assertEqual(self.d.prepare_pr(a),dict(repository=REPO,pr_number=7))
+        self.assertEqual(self.host.calls.count('prepare'),1)
+        changed=copy.deepcopy(a);changed['author_thread_id']='different'
+        with self.assertRaisesRegex(ValueError,'delivery_source_changed'):self.d.prepare_pr(changed)

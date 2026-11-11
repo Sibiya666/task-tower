@@ -73,7 +73,8 @@ CREATE TABLE IF NOT EXISTS repository_delivery (repository TEXT PRIMARY KEY,atte
             row=self.store.db.execute('SELECT data FROM deliveries WHERE attempt_id=?',(a['attempt_id'],)).fetchone()
         if row:
             d=json.loads(row[0])
-            if d['attempt']!=a and d['phase']!='superseded':raise ValueError('delivery_source_changed')
+            dynamic={'candidate','reporter_verification'} if a.get('source_issue') else set()
+            if {k:v for k,v in d['attempt'].items() if k not in dynamic}!={k:v for k,v in a.items() if k not in dynamic} and d['phase']!='superseded':raise ValueError('delivery_source_changed')
             if d['phase']=='superseded':
                 if d['attempt']['base_sha']==a['base_sha'] or d.get('merge_result'):raise ValueError('delivery_source_changed')
                 prior=d.get('previous',[])+[{k:v for k,v in d.items() if k!='previous'}]
@@ -143,7 +144,9 @@ CREATE TABLE IF NOT EXISTS repository_delivery (repository TEXT PRIMARY KEY,atte
     def merge_expected(self,repository,pr,head,base):
         d=self._load(repository,pr)
         from ..reporter_verification import reporter_ready
-        if not d.get('merge_result') and not reporter_ready(d['attempt'],self.host):raise Pending('reporter_verification_pending')
+        # Once intent is durable, only read the merge fact; a completed merge
+        # cannot satisfy an open-PR reporter gate or be safely retried.
+        if not d.get('merge_result') and d['phase']!='merge_intent' and not reporter_ready(d['attempt'],self.host):raise Pending('reporter_verification_pending')
         self._lease(d)
         if (head,base)!=(d['attempt']['head_sha'],d['attempt']['base_sha']):raise ValueError('merge_source_mismatch')
         if d.get('merge_result'):return d['merge_result']
@@ -223,6 +226,7 @@ CREATE TABLE IF NOT EXISTS repository_delivery (repository TEXT PRIMARY KEY,atte
         original=command['attempt']
         if not original.get('source_issue'):return
         r=self.projects[command['project_id']];d=self._load(r,attempt=original['attempt_id']);a=d['attempt']
+        if d.get('merge_result') or d['phase']=='merge_intent':return
         pr=self.host.read_pr(r,d['pr_number'])
         self._pr(pr,r,d['pr_number'],a['head_sha'],a['base_sha'],a)
         if not d.get('candidate'):

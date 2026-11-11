@@ -88,6 +88,7 @@ def advance(attempt,event,policy):
         if a['phase']!='awaiting_merge':raise ServiceError('delivery_change_fenced')
         new=event['base_sha'];validate_source(dict(base_sha=new,head_sha=a['head_sha'],diff=''))
         if new==a['base_sha']:raise ServiceError('base_unchanged')
+        a.pop('candidate',None);a.pop('reporter_verification',None)
         if a.get('correction_count',0)>=3:pause()
         else:
             update=dict(old_base_sha=a['base_sha'],new_base_sha=new)

@@ -74,6 +74,15 @@ class IssueMessenger:
             raise ValueError("canonical_issue_acceptance_required")
         with self.store.lock:
             issue=s["issue_number"]; current=self._fresh(issue)
+            from ..issue_source import issue_revision
+            from datetime import datetime
+            admitted=a.get('issue_admitted_at')
+            if not isinstance(admitted,(int,float)) or not admitted>0 or issue_revision(s['repository_id'],current,self.host._pages(s['repository'],'/issues/'+str(issue)+'/comments'))!=a.get('issue_source_revision'):
+                raise ValueError('issue_revision_requires_owner')
+            for event in self.host._pages(s['repository'],'/issues/'+str(issue)+'/events'):
+                if event.get('event')=='reopened':
+                    stamp=datetime.fromisoformat(event['created_at'].replace('Z','+00:00'))
+                    if stamp.tzinfo is None or stamp.timestamp()>=admitted:raise ValueError('issue_revision_requires_owner')
             key,data,new=self._intent(effect_id,"close",a["main_sha"])
             if data["state"]=="confirmed": return data["receipt"]
             if new and current.get("state")=="open":

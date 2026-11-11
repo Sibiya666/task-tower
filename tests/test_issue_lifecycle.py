@@ -60,3 +60,28 @@ class IssueLifecycleTests(unittest.TestCase):
         self.assertEqual(a["reporter_verification"],receipt)
         self.s.validate_lifecycle_command(self.command()["command_id"],"c1")
         self.assertEqual(self.s.db.execute("SELECT count(*) FROM acceptance_repository").fetchone()[0],1)
+        original=self.source.host.read_pr
+        self.source.host.read_pr=lambda r,p:dict(original(r,p),merged=True,state='closed')
+        # Lost merge notification: existing repository ownership must permit
+        # factual readback instead of demanding an already closed PR be open.
+        self.s.validate_lifecycle_command(self.command()['command_id'],'c1')
+    def test_base_change_invalidates_candidate_and_requires_a_new_reporter_confirmation(self):
+        self.emit('candidate',candidate=self.c)
+        comment=dict(id=44,body='/task-tower verified '+H,user=dict(id=21,type='User'),created_at='2030-01-01T00:01:00Z',updated_at='2030-01-01T00:01:00Z',issue_url='https://api.github.com/repos/'+REPO+'/issues/12')
+        self.source.host.comments=[comment]
+        from task_tower.reporter_verification import validate_verification
+        self.emit('reporter_verified',verification=validate_verification(comment,self.c,self.source.host.read_pr(REPO,7)))
+        a=self.emit('delivery_changed',base_sha='c'*40)
+        self.assertNotIn('candidate',a)
+        self.assertNotIn('reporter_verification',a)
+        self.assertEqual(a['phase'],'revising')
+        new_head='d'*40;new_base='c'*40
+        self.complete('author',source=dict(head_sha=new_head,base_sha=new_base,diff=DIFF))
+        self.complete('review2',result=json.dumps(dict(verdict='approve',findings=[],head_sha=new_head,base_sha=new_base,reviewer_thread_id='review2')))
+        self.source.host.read_pr=lambda r,p:dict(repository=REPO,head_repository=REPO,number=7,head_sha=new_head,base_sha=new_base,state='open',merged=False)
+        candidate=candidate_receipt(self.a['source_issue'],self.source.host.read_pr(REPO,7),21,'Check '+new_head,'2030-01-01T00:02:00Z')
+        a=self.emit('candidate',candidate=candidate)
+        self.assertEqual(a['candidate'],candidate)
+        self.s.validate_lifecycle_command(self.command()['command_id'],'c1')
+        self.assertEqual(self.s.db.execute('SELECT count(*) FROM acceptance_repository').fetchone()[0],0)
+        with self.assertRaises(ServiceError):self.emit('reporter_verified',verification=validate_verification(comment,self.c,dict(repository=REPO,head_repository=REPO,number=7,head_sha=H,base_sha=B,state='open',merged=False)))
