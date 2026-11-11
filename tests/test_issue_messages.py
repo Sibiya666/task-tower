@@ -75,3 +75,8 @@ class MessageTests(unittest.TestCase):
         a=self.accepted();del a['issue_source_revision']
         with self.assertRaisesRegex(ValueError,'issue_revision_requires_owner'):self.m.finalize_issue(a,'done')
         self.assertEqual(self.host.closes,0)
+    def test_reopen_in_the_fractional_admission_second_is_fenced(self):
+        a=self.accepted();a['issue_admitted_at']=12.2
+        self.host.events=[dict(event='reopened',created_at='1970-01-01T00:00:12Z')]
+        with self.assertRaisesRegex(ValueError,'issue_revision_requires_owner'):self.m.finalize_issue(a,'done')
+        self.assertEqual(self.host.closes,0)
