@@ -159,6 +159,11 @@ def make_server(store,connectors,*,host='127.0.0.1',port=8765,poll_seconds=2,con
                     if uri.path.startswith('/v1/attempts/') and not query:
                         attempt=self._owned(uri.path[len('/v1/attempts/'):],connector,entry)
                         self._send(200,dict(attempt=attempt));return
+                    if uri.path=='/v1/issues' and set(query)=={'project_id','issue_number'} and all(len(v)==1 for v in query.values()):
+                        project=query['project_id'][0];self._project(entry,project)
+                        number=query['issue_number'][0]
+                        if not number.isdigit() or len(number)>12:raise ServiceError('invalid_issue_number',400)
+                        self._send(200,dict(issue=store.issue_lookup(project,int(number),connector)));return
                     if uri.path=='/v1/commands' and not query:
                         self._send(200,dict(commands=[c for c in store.lifecycle_commands(connector) if c['project_id'] in entry['projects']],poll_seconds=poll_seconds));return
                     if uri.path=='/v1/decisions' and not query:
@@ -207,6 +212,11 @@ def make_server(store,connectors,*,host='127.0.0.1',port=8765,poll_seconds=2,con
                     key=uri.path[len('/v1/attempts/'):-len('/validate')]
                     self._owned(key,connector,entry)
                     self._send(200,dict(attempt=store.validate_execution(key,connector)));return
+                if uri.path=='/v1/issues/admit':
+                    self._fields(body,{'request_id','project_id','issue_number','source_revision'})
+                    self._project(entry,body['project_id'])
+                    result=store.admit_issue(body['request_id'],body['project_id'],body['issue_number'],body['source_revision'],connector)
+                    self._send(200,dict(issue=result));return
                 if uri.path=='/v1/claims':
                     self._fields(body,{'request_id','project_id','bead_id','connector_id'})
                     self._project(entry,body['project_id'])

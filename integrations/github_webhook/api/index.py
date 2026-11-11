@@ -7,7 +7,7 @@ from http.server import BaseHTTPRequestHandler
 import json
 import sys
 
-from integrations.github_webhook.receiver import MAX_BODY, InvalidDelivery, strict_json, validate_delivery
+from integrations.github_webhook.receiver import MAX_BODY, InvalidDelivery, strict_json, validate_delivery, validate_signature
 from integrations.github_webhook.inbox import Inbox, Conflict, Unauthorized, postgres_transactions
 
 
@@ -25,6 +25,11 @@ class Application:
 			if len(raw) > MAX_BODY:
 				return 413, {'error': 'body too large'}
 			if path == '/api/github/webhook':
+				if {k.lower(): v for k,v in headers.items()}.get('x-github-event') == 'ping':
+					validate_signature(raw, headers, self.secret)
+					if not isinstance(strict_json(raw), dict):
+						raise ValueError()
+					return 200, {'status': 'pong', 'event': 'ping'}
 				delivery = validate_delivery(raw, headers, self.secret, self.binding)
 				return 202, asdict(self.inbox.record(delivery))
 			data = strict_json(raw)
@@ -86,7 +91,7 @@ class handler(BaseHTTPRequestHandler):
 				headers = dict(self.headers)
 				if len({k.lower() for k in self.headers}) != len(list(self.headers)):
 					raise ValueError()
-				code, body = configured_application().handle(self.command, self.path, headers, raw)
+				code, body = configured_application().handle(self.command, getattr(self, 'route', self.path), headers, raw)
 		except (ValueError, TimeoutError):
 			code, body = 400, {'error': 'invalid framing'}
 		except Exception:

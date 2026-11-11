@@ -1,4 +1,5 @@
 """Owned bidirectional stdio JSON-RPC. Correlation IDs grant no replay safety."""
+from ..child_environment import child_environment as _integration_child_environment
 import json
 import os
 from pathlib import Path
@@ -19,14 +20,20 @@ class DecisionRequired(RuntimeError):
 
 class StdioTransport:
     MAX_LINE=1048576
-    def __init__(self,executable,cwd,*,timeout=30,capacity=256,request_handler=None):
+    def __init__(self,executable,cwd,*,timeout=30,capacity=256,request_handler=None,profile_config=None):
         if not Path(executable).is_absolute() or not Path(cwd).is_absolute():raise ValueError('absolute_path_required')
         self.request_handler=request_handler
         self.timeout=timeout;self.q=queue.Queue(capacity);self.events=queue.Queue(capacity)
         self.failure_reason=None
         self.failed=threading.Event();self.serial=threading.RLock();self.counter=0;self.stderr_tail=bytearray()
-        env={k:v for k,v in os.environ.items() if k.upper() not in ('GH_TOKEN','GITHUB_TOKEN') and not k.upper().startswith(('BD_','BEADS_','DOLT_','TOWER_','TASK_TOWER_'))}
-        self.process=subprocess.Popen([str(executable),'app-server','--listen','stdio://'],cwd=cwd,env=env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0,start_new_session=os.name!='nt')
+        env={k:v for k,v in _integration_child_environment(os.environ).items() if k.upper() not in ('GH_TOKEN','GITHUB_TOKEN') and not k.upper().startswith(('BD_','BEADS_','DOLT_','TOWER_','TASK_TOWER_'))}
+        argv=[str(executable),'app-server','--listen','stdio://']
+        if profile_config:
+            import json
+            if any(k!='default_permissions' and not k.startswith('permissions.task-tower-issue.') for k in profile_config):raise ValueError('fixed_issue_profile_required')
+            from ..issue_runtime import profile_arguments
+            argv.extend(profile_arguments(profile_config))
+        self.process=subprocess.Popen(argv,cwd=cwd,env=env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,creationflags=subprocess.CREATE_NO_WINDOW if os.name=='nt' else 0,start_new_session=os.name!='nt')
         self.job=None
         if os.name=='nt':
             import ctypes
@@ -172,7 +179,8 @@ class AppServer:
         if data['phase'] not in ('queued','preparing'):raise ValueError('thread_creation_fenced')
         self.store.update(command_id,phase='creating_thread')
         try:
-            result=self.transport.request('thread/start',{'cwd':str(cwd)})
+            from ..issue_runtime import scope_parameters
+            result=self.transport.request('thread/start',dict(cwd=str(cwd),**scope_parameters(data['command'],cwd)))
             key=result['thread']['id']
             if not isinstance(key,str) or not key:raise RpcError('invalid_thread')
             self.store.update(command_id,thread_id=key,phase='prepared')
@@ -203,7 +211,8 @@ class AppServer:
         if data['phase']!='queued':raise ValueError('existing_thread_fenced')
         self.store.update(command_id,phase='creating_thread')
         if resume:
-            result=self.transport.request('thread/resume',{'threadId':thread_id,'cwd':str(cwd)})
+            from ..issue_runtime import scope_parameters
+            result=self.transport.request('thread/resume',dict(threadId=thread_id,cwd=str(cwd),**scope_parameters(data['command'],cwd)))
             if result.get('thread',{}).get('id')!=thread_id:raise RpcError('resume_identity_mismatch')
         self.store.update(command_id,phase='prepared',thread_id=thread_id)
         return thread_id

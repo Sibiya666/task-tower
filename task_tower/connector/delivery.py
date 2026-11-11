@@ -3,6 +3,7 @@
 The connector's single-owner journal fences every merge intent across restarts.
 A repository lease spans merge AND exact-main acceptance, including failures.
 """
+from ..child_environment import child_environment as _integration_child_environment
 import copy
 import json
 import re
@@ -72,7 +73,8 @@ CREATE TABLE IF NOT EXISTS repository_delivery (repository TEXT PRIMARY KEY,atte
             row=self.store.db.execute('SELECT data FROM deliveries WHERE attempt_id=?',(a['attempt_id'],)).fetchone()
         if row:
             d=json.loads(row[0])
-            if d['attempt']!=a and d['phase']!='superseded':raise ValueError('delivery_source_changed')
+            dynamic={'candidate','reporter_verification'} if a.get('source_issue') else set()
+            if {k:v for k,v in d['attempt'].items() if k not in dynamic}!={k:v for k,v in a.items() if k not in dynamic} and d['phase']!='superseded':raise ValueError('delivery_source_changed')
             if d['phase']=='superseded':
                 if d['attempt']['base_sha']==a['base_sha'] or d.get('merge_result'):raise ValueError('delivery_source_changed')
                 prior=d.get('previous',[])+[{k:v for k,v in d.items() if k!='previous'}]
@@ -132,13 +134,20 @@ CREATE TABLE IF NOT EXISTS repository_delivery (repository TEXT PRIMARY KEY,atte
         if (actual!=status or not isinstance(actual,dict) or type(actual.get('id')) is not int or actual['id']<1
                 or actual.get('head_sha')!=head or actual.get('context')!='task-tower/pr-acceptance' or actual.get('state')!='success'
                 or actual.get('review')!=review):raise ValueError('genuine_acceptance_required')
+        from ..reporter_verification import reporter_ready
+        if not reporter_ready(a,self.host):raise Pending('reporter_verification_pending')
         # Re-read H/B after every status/CI/protection read, immediately before intent.
         row=self.host.read_pr(repository,pr);self._pr(row,repository,pr,head,base,a)
         if row.get('mergeable') is None or row.get('mergeable_state') in ('unknown','blocked'):raise Pending('mergeability_pending')
         if row.get('mergeable') is not True or row.get('mergeable_state')!='clean':raise ValueError('not_mergeable')
         return dict(repository=repository,pr_number=pr,head_sha=head,base_sha=base,status_id=status['id'])
     def merge_expected(self,repository,pr,head,base):
-        d=self._load(repository,pr);self._lease(d)
+        d=self._load(repository,pr)
+        from ..reporter_verification import reporter_ready
+        # Once intent is durable, only read the merge fact; a completed merge
+        # cannot satisfy an open-PR reporter gate or be safely retried.
+        if not d.get('merge_result') and d['phase']!='merge_intent' and not reporter_ready(d['attempt'],self.host):raise Pending('reporter_verification_pending')
+        self._lease(d)
         if (head,base)!=(d['attempt']['head_sha'],d['attempt']['base_sha']):raise ValueError('merge_source_mismatch')
         if d.get('merge_result'):return d['merge_result']
         if d['phase']=='merge_intent':return self._merge_readback(d)
@@ -166,6 +175,7 @@ CREATE TABLE IF NOT EXISTS repository_delivery (repository TEXT PRIMARY KEY,atte
         while not stop.is_set():
             api.validate_command(key)
             try:
+                self._issue_candidate(command,api)
                 merge=self.merge_expected(r,p,a['head_sha'],a['base_sha'])
                 self._notify_merge(command,api,merge)
                 evidence=self.verify_main(r,p,merge['main_sha'])
@@ -179,11 +189,74 @@ CREATE TABLE IF NOT EXISTS repository_delivery (repository TEXT PRIMARY KEY,atte
                     if current.get('accepted_evidence')!=evidence:raise ValueError('acceptance_needs_reconciliation') from None
                     if current['phase']=='accepted':accepted=current
                     else:accepted=api.accept(a['attempt_id'],key,merge,evidence)  # Existing durable intent: readback only.
-                self.release(accepted);return accepted
+                d=self._load(r,p)
+                if accepted.get('source_issue'):
+                    d.update(accepted_attempt=accepted,public_completion='pending');self._save(d)
+                self.release(accepted)
+                if accepted.get('source_issue'):
+                    try:self._finish_public_issue(d)
+                    except Exception:pass  # Canonical acceptance remains true; public effect intent is retained.
+                return accepted
             except SourceChanged as error:return self._changed(command,error)
             except Pending:
                 stop.wait(2)
         raise ValueError('delivery_interrupted')
+
+    def _finish_public_issue(self,d):
+        from .issue_messages import IssueMessenger
+        a=d['accepted_attempt'];source=a['source_issue'];messenger=IssueMessenger(self.host,self.store,source)
+        body='Accepted result: https://github.com/'+source['repository']+'/commit/'+a['main_sha']+'\nPR: https://github.com/'+source['repository']+'/pull/'+str(a['pr_number'])+'\nExact-main checks and independent postmerge acceptance completed; canonical task closure was verified.'
+        messenger.ensure_comment('accepted:'+a['main_sha'],source['issue_number'],body)
+        receipt=messenger.finalize_issue(a,'close:'+a['main_sha'])
+        d.update(public_completion='confirmed',public_receipt=receipt);self._save(d)
+
+    def retry_public_closures(self):
+        with self.store.lock:
+            rows=[json.loads(r[0]) for r in self.store.db.execute('SELECT data FROM deliveries')]
+        for d in rows:
+            if d.get('public_completion')=='pending' and d.get('accepted_attempt',{}).get('phase')=='accepted':
+                try:self._finish_public_issue(d)
+                except Exception:pass  # Readback may confirm an old effect; no execution/native replay.
+
+    def _issue_candidate(self,command,api):
+        import uuid
+        from datetime import datetime,timezone
+        from ..reporter_verification import candidate_receipt,reporter_ready,validate_verification
+        from .issue_messages import IssueMessenger
+        original=command['attempt']
+        if not original.get('source_issue'):return
+        r=self.projects[command['project_id']];d=self._load(r,attempt=original['attempt_id']);a=d['attempt']
+        if d.get('merge_result') or d['phase']=='merge_intent':return
+        pr=self.host.read_pr(r,d['pr_number'])
+        self._pr(pr,r,d['pr_number'],a['head_sha'],a['base_sha'],a)
+        if not d.get('candidate'):
+            instructions='Inspect and test the exact commit https://github.com/'+r+'/commit/'+a['head_sha']+' against the issue acceptance criteria. Check out this full commit SHA on your device before testing: '+a['head_sha']
+            d['candidate']=candidate_receipt(a['source_issue'],pr,a['source_issue']['reporter_id'],instructions,datetime.now(timezone.utc).isoformat())
+            a['candidate']=d['candidate'];self._save(d)
+        candidate=d['candidate'];a['candidate']=candidate
+        if not d.get('candidate_event'):
+            d['candidate_event']=dict(version=1,event_id=str(uuid.uuid4()),attempt_id=a['attempt_id'],connector_id=self.store.connector_id,lifecycle=dict(kind='candidate',command_id=command['command_id'],candidate=candidate))
+            with self.store.lock,self.store.db:
+                self.store.db.execute('INSERT INTO outbox(event_id,data) VALUES (?,?)',(d['candidate_event']['event_id'],encoded(d['candidate_event'])))
+                self._save(d)
+        api.send_event(d['candidate_event']);self.store.ack(d['candidate_event']['event_id'])
+        messenger=IssueMessenger(self.host,self.store,a['source_issue'])
+        body='Candidate: '+candidate['url']+'\nExact commit: `'+a['head_sha']+'`\n\n'+candidate['instructions']+'\n\nOriginal reporter: after checking this version, reply exactly `/task-tower verified '+a['head_sha']+'`. To request changes, reply `/task-tower changes '+a['head_sha']+'`.'
+        messenger.ensure_comment('candidate:'+candidate['candidate_sha256'],a['source_issue']['issue_number'],body)
+        if not reporter_ready(a,self.host):raise Pending('reporter_verification_pending')
+        rows=self.host._pages(r,'/issues/'+str(a['source_issue']['issue_number'])+'/comments')
+        verified=[]
+        for row in rows:
+            try:verified.append(validate_verification(row,candidate,pr))
+            except (ValueError,TypeError,KeyError):pass
+        if not verified:raise Pending('reporter_verification_pending')
+        receipt=max(verified,key=lambda v:v['created_at'])
+        if not d.get('verification_event') or d['verification_event']['lifecycle']['verification']!=receipt:
+            d['verification_event']=self.store.lifecycle_event(a['attempt_id'],'reporter_verified',command_id=command['command_id'],verification=receipt)
+            self._save(d)
+        event=d['verification_event'];api.send_event(event);self.store.ack(event['event_id'])
+        a['reporter_verification']=receipt;self._save(d)
+        api.validate_command(command['command_id'])
 
     def _notify_merge(self,command,api,merge):
         import uuid
@@ -369,11 +442,17 @@ class GitHubHost:
         if tree['branch']!='codex/headless-'+a['attempt_id'] or self.trees.source(a['project_id'],a['attempt_id'],a['base_sha'])!=a['source']:raise ValueError('source_changed_before_push')
         self._push(path,tree['branch'],r,env=env)
         owner=r.split('/')[0];branch=tree['branch']
+        body='Source: https://github.com/'+r+'/commit/'+a['source']['head_sha']+'\nIndependent review is recorded by the trusted connector.'
+        if a.get('source_issue'):
+            from .issue_messages import source_identity
+            issue=source_identity(a['source_issue'])
+            if issue['repository']!=r:raise ValueError('source_issue_repository_mismatch')
+            body+='\nSource issue: https://github.com/'+r+'/issues/'+str(issue['issue_number'])
         existing=self._pages(r,'/pulls?state=open&head='+quote(owner+':'+branch,safe='')+'&base='+quote(base_ref,safe=''))
         if len(existing)>1:raise ValueError('duplicate_pr')
         if existing:p=existing[0]['number']
         else:
-            row=self._request(r,'POST','/pulls',dict(title='Task Tower delivery',head=branch,base=base_ref,body='Source: https://github.com/'+r+'/commit/'+a['source']['head_sha']+'\nIndependent review is recorded by the trusted connector.'))
+            row=self._request(r,'POST','/pulls',dict(title='Task Tower delivery',head=branch,base=base_ref,body=body))
             p=row['number']
         return self.read_pr(r,p)
     def _push(self,path,branch,repository,env=None):
@@ -490,7 +569,7 @@ class GitHubHost:
         import os,sys,tempfile
         from pathlib import Path
         from ..processes import run_command
-        env={k:v for k,v in os.environ.items() if k.upper() not in ('GH_TOKEN','GITHUB_TOKEN') and not k.upper().startswith(('GIT_','PYTHON'))}
+        env={k:v for k,v in _integration_child_environment(os.environ).items() if k.upper() not in ('GH_TOKEN','GITHUB_TOKEN') and not k.upper().startswith(('GIT_','PYTHON'))}
         env['PYTHONUTF8']='1'
         with tempfile.TemporaryDirectory(prefix='headless-validation-') as temp:
             result=run_command([sys.executable,'-B',*args],path,120,env=env,capture={'directory':Path(temp),'max_bytes_per_stream':2097152})
@@ -518,6 +597,7 @@ class MainReviewer:
         brief=build_brief(a['approved_task'],'reviewer',source)
         brief['input']['text']+='\nExact-main acceptance evidence (trusted data):\n'+encoded(proof)
         command=dict(version=1,kind='main_review',command_id=key,attempt_id=a['attempt_id']+'-postmerge',project_id=a['project_id'],base_sha=a['base_sha'],source=source,input=brief['input'])
+        if a.get('source_issue'):command['issue_scope']=dict(paths=[],deadline=time.time()+self.timeout)
         self.store.receive(command);app=None;result=None
         try:
             app=self.app_factory(path);thread=app.create_thread(path,command_id=key)

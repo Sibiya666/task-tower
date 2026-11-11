@@ -92,3 +92,7 @@ host-loopback-only port publishing. The ordinary host API still requires loopbac
 container-network binding is explicit and limited to the Linux Docker namespace.
 A stopped/failed smoke, fixture verdict or model completion never proves real
 pilot delivery. Preserve all PR/main gates, unknown fences and canonical claims.
+
+## Issue bot source map
+
+For the issue bot module/entry-point map and setup commands, see [docs/PROJECT_MAP.md](docs/PROJECT_MAP.md), verified 2026-11-11 against the working branch (not production acceptance).

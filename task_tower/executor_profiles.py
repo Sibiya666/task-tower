@@ -15,8 +15,8 @@ def profile_fingerprint(profile):
 
 
 def child_environment(environ):
-    return {key: value for key, value in environ.items()
-            if key.upper() not in ('GH_TOKEN', 'GITHUB_TOKEN')}
+    from .child_environment import child_environment as filtered
+    return filtered(environ)
 
 
 def _path(value, *, directory=False):

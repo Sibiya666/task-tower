@@ -31,7 +31,7 @@ def load_config(path,*,document=None):
     if len(raw)>65536:raise ValueError('configuration_limit')
     value=strict_json(raw.decode('utf-8'))
     required={'version','connector_id','endpoint','token_file','journal','app_server','projects','assignment'}
-    if (not isinstance(value,dict) or set(value)-{'max_active_tasks','delivery_projects','delivery_policies','approved_preparing'} not in (required,required-{'assignment'}|{'assignments'})
+    if (not isinstance(value,dict) or set(value)-{'max_active_tasks','delivery_projects','delivery_policies','approved_preparing','issue_connections'} not in (required,required-{'assignment'}|{'assignments'})
             or type(value['version']) is not int or value['version']!=1):raise ValueError('invalid_configuration')
     identity(value['connector_id'])
     for k in ('token_file','journal','app_server'):value[k]=_absolute(value[k])
@@ -55,6 +55,10 @@ def load_config(path,*,document=None):
     if 'approved_preparing' in value:
         if not isinstance(value['approved_preparing'],dict):raise ValueError('invalid_preparing_approvals')
         value['approved_preparing']=approval_registry(value['approved_preparing'],value['projects'])
+    from ..issue_bootstrap import validate_connections
+    value['issue_connections']=validate_connections(value.get('issue_connections',{}),value['projects'])
+    for project,c in value['issue_connections'].items():
+        if Path(c['source_repository'])!=Path(value['projects'][project]['repository']):raise ValueError('issue_repository_binding_changed')
     value['assignments']=assignments
     if type(value.get('max_active_tasks',2)) is not int or not 1<=value.get('max_active_tasks',2)<=32:raise ValueError('invalid_capacity')
     return value
@@ -196,8 +200,14 @@ def work(cfg,*,config_path=None):
             remote={p:v['repository'] for p,v in policy.items() if v['mode']!='local'}
             automatic={p:v['repository'] for p,v in policy.items() if v['mode']=='task_tower'}
             main_reviewer=MainReviewer(trees,store,lambda cwd:AppServer(store,executable=cfg['app_server'],cwd=Path(cwd)),connector.stop)
-            host=GitHubHost(trees,store,remote,reviewer=main_reviewer) if remote else None
-            connector.delivery=HandoffDelivery(host,store,trees,policy,Delivery(host,store,automatic) if automatic else None)
+            from ..issue_bootstrap import app_host,RoutedGitHubHost
+            issue_hosts={p:app_host(p,c,trees,store,main_reviewer) for p,c in cfg.get('issue_connections',{}).items()}
+            if any(p not in automatic for p in issue_hosts):raise ValueError('protected_issue_delivery_required')
+            host=RoutedGitHubHost(trees,store,remote,issue_hosts,main_reviewer) if issue_hosts else GitHubHost(trees,store,remote,reviewer=main_reviewer) if remote else None
+            automatic_delivery=Delivery(host,store,automatic) if automatic else None
+            connector.delivery=HandoffDelivery(host,store,trees,policy,automatic_delivery)
+        from ..issue_bootstrap import build_connector_transports
+        issue_transports=build_connector_transports(cfg,store,api,connector,locals().get('issue_hosts',{}))
         admitted=set();next_admission=0
         if config_path is not None:
             from ..intake_reload import ConfigReloader
@@ -206,6 +216,10 @@ def work(cfg,*,config_path=None):
             connector.tick()
             if time.monotonic()>=next_admission:
                 next_admission=time.monotonic()+2
+                if issue_transports and locals().get('automatic_delivery') is not None:automatic_delivery.retry_public_closures()
+                for transport in issue_transports:
+                    try:transport.tick()
+                    except Exception:pass  # Durable transport intent/fence retained; never a new native request.
                 if config_path is not None:
                     try:cfg=reload()
                     except Exception:continue  # Live transports continue; no new admission.

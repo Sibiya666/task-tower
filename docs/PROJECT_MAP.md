@@ -46,3 +46,24 @@ Backend: Python 3.12+, operator-applied schema/dependencies. Optional disposable
 `WEBHOOK_TEST_DATABASE_URL`; not run. SQL fault/concurrency, deployment, independent
 review and PR/main gates remain. Operator must schedule `Inbox.prune(now)` for
 retention with offline consumers. Replay reads receipts; no requeue/native execution.
+
+## GitHub issue bot integration
+
+Verified 2026-11-11 against the working branch `codex/github-issue-bot`, based on `eecece98f5a215d0cd9f5245b9229645f23b8380`. This describes source, not a live deployment or accepted pilot. Existing project direction and other modules remain unchanged.
+
+| Area | Responsibility |
+| --- | --- |
+| `.github/ISSUE_TEMPLATE/task-tower.md` | Reporter request fields; empty template comments require clarification |
+| `integrations/github_webhook/receiver.py`, `inbox.py`, `schema.sql` | Signed transport, PostgreSQL durability, scoped delivery leases/ACK and persistent dedup |
+| `integrations/github_webhook/package.py` | Default-deny Vercel staging and five fixed API routes |
+| `task_tower/issue_source.py`, `issue_intake.py`, `issue_runtime.py` | Fresh GitHub identities/context, fixed policy/scope and narrow runtime capability check |
+| `task_tower/service/issue_admission.py` | Opt-in policy-backed native admission and immutable source mapping in the existing service journal |
+| `task_tower/connector/github_app.py`, `issue_transport.py`, `issue_messages.py` | Host-only App credentials, foreground inbox consumption and idempotent public effects |
+| `task_tower/connector/store.py` | Validates and preserves optional issue-bound runtime scope in the existing command journal |
+| `task_tower/reporter_verification.py` | Original-reporter confirmation of exact candidate and fresh readback |
+| `task_tower/issue_bootstrap.py`, `issue_operator.py` | Startup-only binding and explicit safe setup helpers |
+| Existing service/connector CLI, lifecycle, delivery and acceptance | Native claims, independent review, candidate events, protected merge, exact-main acceptance and canonical closure |
+
+The [operator runbook](runtime/github-issue-webhook.md) lists actual entry points and setup boundaries. Existing service: `python -m task_tower.service.cli --config <private-service-config>`. Existing connector: `python -m task_tower.connector.cli work --config <private-connector-config>`. No extra service/worker is installed by this integration. Deployment package: `python -m integrations.github_webhook.package --out <new-staging-directory>`.
+
+Addressed bot checks use the individual `tests.test_issue_*`, `tests.test_reporter_verification` or `tests.test_github_app_host` module for the change. Full acceptance command: `python -m unittest discover -s tests -v`, at the end of development. Preserve all hosted PR/main and independent acceptance gates.

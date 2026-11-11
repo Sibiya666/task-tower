@@ -4,6 +4,8 @@ import re
 
 def accept(attempt,evidence):
     a=attempt;e=evidence
+    from ..reporter_verification import require_reporter_receipt
+    require_reporter_receipt(a)
     required={'version','kind','repository','pr_number','head_sha','base_sha','main_sha','runtime_tests','ci_run_id','artifact_digests','postmerge_review','fetch','validation'}
     if not isinstance(e,dict) or set(e)!=required or type(e['version']) is not int or e['version']!=1:raise ValueError('invalid_acceptance')
     if a.get('phase')!='postmerge' or any(e.get(k)!=a.get(k) for k in ('repository','pr_number','head_sha','base_sha','main_sha')):raise ValueError('acceptance_identity_mismatch')
@@ -34,10 +36,14 @@ class AcceptanceStore:
         policy=self.delivery_policies.get(a['project_id'])
         if policy!=a.get('delivery_policy') and a.get('delivery_policy') is not None:raise ServiceError('delivery_policy_changed')
         if policy and policy['mode'] in ('local','owner_pr'):return
+        if a.get('source_issue') and not a.get('reporter_verification'):return
         r=self.delivery_projects.get(a['project_id'])
         if r is None:raise ServiceError('delivery_not_configured',403)
         row=self.db.execute('SELECT attempt_id FROM acceptance_repository WHERE repository=?',(r,)).fetchone()
         if row and row[0]!=a['attempt_id']:raise ServiceError('repository_delivery_busy',retryable=True)
+        # An existing owner must be able to read back its durable merge intent
+        # after the PR closes. Every NEW merge still rechecks reporter at host.
+        if not row and a.get('source_issue') and a.get('phase')!='postmerge':self.validate_issue_event(a,'reporter_verified',dict(verification=a['reporter_verification']))
         with self.db:self.db.execute('INSERT OR IGNORE INTO acceptance_repository VALUES (?,?)',(r,a['attempt_id']))
 
     def accept_delivery(self,request_id,attempt_id,connector_id,merge,evidence):
@@ -52,7 +58,7 @@ class AcceptanceStore:
         identity(request_id)
         with self.lock:
             a=self.attempt(attempt_id,connector_id)
-            fingerprint=encoded([merge,evidence])
+            fingerprint=encoded([merge,evidence,a['reporter_verification']]) if a.get('source_issue') and a.get('reporter_verification') else encoded([merge,evidence])
             row=self.db.execute('SELECT * FROM acceptance_effects WHERE attempt_id=?',(attempt_id,)).fetchone()
             if row:
                 if row['fingerprint']!=fingerprint or row['request_id']!=request_id:raise ServiceError('acceptance_conflict')

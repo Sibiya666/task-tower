@@ -1,4 +1,5 @@
 """Independent bounded review through a pinned, read-only reviewer protocol."""
+from .child_environment import child_environment as _integration_child_environment
 import hashlib
 import json
 import math
@@ -71,7 +72,7 @@ class ReviewRunner:
                           f'Request JSON: {request}. Return only the required review JSON for task {task_id}, commit {commit}.')
                 argv = [executable, 'exec', '--json', '--sandbox', 'read-only', '--output-schema', str(schema),
                         '--output-last-message', str(result), '-C', str(checkout), prompt]
-            env = {key: value for key, value in os.environ.items() if key.upper() not in ('GH_TOKEN', 'GITHUB_TOKEN')}
+            env = {key: value for key, value in _integration_child_environment(os.environ).items() if key.upper() not in ('GH_TOKEN', 'GITHUB_TOKEN')}
             execution = run_command(argv, checkout, timeout, env=env)
             if execution['status'] != 'passed':
                 return unavailable('Reviewer process did not complete successfully (' + execution['status'] + ').')

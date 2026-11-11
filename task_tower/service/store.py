@@ -63,8 +63,10 @@ from .preparing_recovery import PreparingStore,approval_registry
 from .acceptance import AcceptanceStore
 
 
-class Store(PreparingStore,LifecycleStore,AcceptanceStore):
-    def __init__(self,path,beads,*,approved_plans=None,max_active_tasks=2,delivery_projects=None,delivery_policies=None,approved_preparing=None):
+from .issue_admission import IssueAdmissionStore
+
+class Store(IssueAdmissionStore,PreparingStore,LifecycleStore,AcceptanceStore):
+    def __init__(self,path,beads,*,approved_plans=None,max_active_tasks=2,delivery_projects=None,delivery_policies=None,approved_preparing=None,issue_bindings=None):
         if type(max_active_tasks) is not int or not 1<=max_active_tasks<=32:raise ValueError('invalid_capacity')
         self.approved_preparing=approval_registry(approved_preparing,beads.projects)
         self.delivery_projects=dict(delivery_projects or {})
@@ -130,6 +132,7 @@ class Store(PreparingStore,LifecycleStore,AcceptanceStore):
                     self._save_attempt(data)
                 self.db.execute("UPDATE commands SET phase='needs_reconciliation' WHERE phase='claim_pending'")
                 self.db.execute("UPDATE plan_imports SET state='needs_reconciliation',updated_at=? WHERE state='importing'",(utc(),))
+            self._configure_issues(issue_bindings)
         except BaseException:
             self.close();raise
 
@@ -153,7 +156,7 @@ class Store(PreparingStore,LifecycleStore,AcceptanceStore):
             return data
 
     def _published(self,project):
-        result=set()
+        result=self.issue_published(project)
         for row in self.db.execute("SELECT digest,data FROM plan_imports WHERE project_id=? AND state='published'",(project,)):
             if row['digest'] not in self.approved_plans.get(project,()):continue
             result.update(t['id'] for t in json.loads(row['data'])['plan']['tasks'])
@@ -204,6 +207,9 @@ class Store(PreparingStore,LifecycleStore,AcceptanceStore):
                     (str(uuid.uuid4()),request_id,fingerprint,attempt_id,'claim_pending',None,utc()))
             try:
                 task=self._approved_task(project_id,bead_id_)
+                issue=self.issue_guard(project_id,bead_id_,connector_id)
+                if issue:
+                    data.update(source_issue=issue['source_issue'],issue_source_revision=issue['source_revision'],issue_policy_sha256=issue['policy_sha256'],issue_paths=issue['paths'],issue_base_sha=issue['base_sha'],issue_admitted_at=issue['admitted_at'])
                 self._verify_import(project_id,{bead_id_:task},'open',time.monotonic()+30)
                 row=self.beads.claim(project_id,bead_id_,actor)
                 self._verify_row(task,row,'in_progress',actor)
@@ -301,6 +307,8 @@ class Store(PreparingStore,LifecycleStore,AcceptanceStore):
         for row in self.db.execute("SELECT data FROM plan_imports WHERE project_id=? AND state='published'",(project,)):
             for task in json.loads(row[0])['plan']['tasks']:
                 if task['id']==bead:return task
+        issue=self.issue_task(project,bead)
+        if issue is not None:return issue
         raise ServiceError('unpublished_task',403)
 
     def _verify_import(self,project,tasks,status,deadline):
@@ -345,7 +353,9 @@ class Store(PreparingStore,LifecycleStore,AcceptanceStore):
         with self.lock:
             deadline=time.monotonic()+30
             task=self._approved_task(data['project_id'],data['bead_id'])
-            approved=False
+            issue=self.issue_guard(data['project_id'],data['bead_id'],data['connector_id'])
+            approved=issue is not None
+            if issue and (data.get('source_issue')!=issue['source_issue'] or data.get('issue_policy_sha256')!=issue['policy_sha256']):raise ServiceError('issue_attempt_binding_changed')
             for batch in self.db.execute("SELECT digest,data FROM plan_imports WHERE project_id=? AND state='published'",(data['project_id'],)):
                 if batch['digest'] in self.approved_plans.get(data['project_id'],()) and data['bead_id'] in {t['id'] for t in json.loads(batch['data'])['plan']['tasks']}:approved=True
             if not approved:raise ServiceError('execution_plan_not_approved')
