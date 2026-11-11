@@ -21,11 +21,36 @@ class Handler:
         if self.lost:raise TimeoutError()
         return self.result
     def readback(self,e,request_id):return self.result
+class NativeAPI:
+    def __init__(self):
+        self.admissions=0;self.dispatches=0;self.fail_read=False;self.lose_dispatch=False
+        self.receipt=dict(state='published',bead_id='native-private',base_sha='b'*40)
+        self.attempt=dict(attempt_id='attempt',phase='claimed',managed=False)
+    def request(self,method,path,payload=None):
+        if method=='POST' and path=='/v1/issues/admit':self.admissions+=1;return dict(issue=self.receipt)
+        if method=='GET' and path.startswith('/v1/issues?'):return dict(issue=self.receipt)
+        if method=='GET' and path=='/v1/attempts/attempt':
+            if self.fail_read:raise TimeoutError()
+            return dict(attempt=dict(self.attempt))
+        raise AssertionError((method,path))
+    def dispatch(self,key,base):
+        self.dispatches+=1;self.attempt.update(phase='executing',managed=True)
+        if self.lose_dispatch:raise TimeoutError()
+class NativeConnector:
+    def __init__(self,api):self.api=api;self.available=False
+    def claim(self,project,bead):return dict(self.api.attempt) if self.available else None
 class TransportTests(unittest.TestCase):
     def setUp(self):
         self.db=sqlite3.connect(":memory:");self.addCleanup(self.db.close)
         self.store=SimpleNamespace(db=self.db,lock=threading.RLock());self.remote=Remote();self.handler=Handler()
         self.t=IssueTransport(self.store,self.remote,BINDING,self.handler)
+    def native_handler(self):
+        from task_tower.connector.issue_transport import IssueEventHandler
+        snapshot=dict(repository='Sibiya666/task-tower',repository_id=9,issue_number=12,reporter_id=21,source_revision='a'*64)
+        api=NativeAPI();connector=NativeConnector(api)
+        handler=IssueEventHandler('p',SimpleNamespace(snapshot=lambda number,**kwargs:snapshot),api,connector,lambda s:self.fail('unexpected public effect'))
+        self.t=IssueTransport(self.store,self.remote,BINDING,handler)
+        return api,connector
     def test_duplicate_cloud_delivery_has_one_handler_effect_and_stable_ack(self):
         self.t.tick();self.t.tick()
         self.assertEqual(self.handler.calls,1);self.assertEqual(self.remote.acks[0],self.remote.acks[1])
@@ -59,6 +84,26 @@ class TransportTests(unittest.TestCase):
         self.t.tick()
         self.assertEqual(self.handler.result["state"],"published")
         self.assertNotIn("accepted",self.remote.acks[0])
+    def test_capacity_release_retries_native_claim_by_readback_before_ack(self):
+        api,connector=self.native_handler()
+        with self.assertRaises(ValueError):self.t.tick()
+        self.assertEqual(self.remote.acks,[])
+        connector.available=True;self.t.tick();self.t.tick()
+        self.assertEqual((api.admissions,api.dispatches),(1,1))
+        self.assertEqual(len(self.remote.acks),2)
+    def test_temporary_attempt_api_failure_retries_readback_without_another_admission(self):
+        api,connector=self.native_handler();connector.available=True;api.fail_read=True
+        with self.assertRaises(ValueError):self.t.tick()
+        self.assertEqual(self.remote.acks,[])
+        api.fail_read=False;self.t.tick()
+        self.assertEqual((api.admissions,api.dispatches),(1,1))
+    def test_lost_dispatch_response_does_not_dispatch_managed_attempt_again(self):
+        api,connector=self.native_handler();connector.available=True;api.lose_dispatch=True
+        with self.assertRaises(ValueError):self.t.tick()
+        self.assertEqual(self.remote.acks,[])
+        self.t.tick()
+        self.assertEqual((api.admissions,api.dispatches),(1,1))
+        self.assertEqual(len(self.remote.acks),1)
 
     def test_ineligible_reporter_gets_owner_wait_message_without_native_execution(self):
         from task_tower.connector.issue_transport import IssueEventHandler

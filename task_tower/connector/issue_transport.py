@@ -93,7 +93,7 @@ class IssueEventHandler:
         return result
     def _dispatch(self,receipt):
         attempt=self.connector.claim(self.project,receipt["bead_id"])
-        if attempt is None:return
+        if attempt is None:raise ValueError('issue_native_admission_pending')
         a=self.api.request("GET","/v1/attempts/"+attempt["attempt_id"])["attempt"]
         if a["phase"]=="claimed" and not a.get("managed"):self.api.dispatch(a["attempt_id"],receipt["base_sha"])
     def readback(self,event,request_id):

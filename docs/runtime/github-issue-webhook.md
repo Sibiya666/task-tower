@@ -37,6 +37,8 @@ Changed head/base, edited/deleted verification and a later explicit changes requ
 
 Delayed public closure also requires the admitted request revision to remain unchanged and no reopen event since admission. A changed or reopened request stays open for its owner; an older accepted result cannot close it. Comments on pull requests are acknowledged as ignored and do not enter issue admission.
 
+If native capacity or the host API is temporarily unavailable, the delivery stays unacknowledged. Redelivery reads the existing canonical admission and retries its idempotent claim/dispatch, without creating another task. A managed attempt is never dispatched again after a lost response.
+
 ## Operator setup
 
 Deploy only accepted source after final review, mandatory tests/CI and protected main acceptance. Existing unknown attempts, claims, repository leases, paused automation and user WIP remain untouched. This runbook grants no recovery, capacity change, service restart or account change.
